@@ -109,7 +109,7 @@ if __name__ == '__main__':
                     z_qso = cat_by_survey['Z'] # This is wrong
                     targetid = cat_by_survey['TARGETID']
 
-                    spectra_list.append(Spectrum(z_qso, targetid, wave, flux, ivar, mask, reso, idx)
+                    spectra_list.append(Spectrum(z_qso, targetid, wave, flux, ivar, mask, reso, idx))
 
 
 
