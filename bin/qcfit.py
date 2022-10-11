@@ -31,7 +31,7 @@ if __name__ == '__main__':
     parser.add_argument("--input-dir", help="Input directory to healpix", required=True)
     parser.add_arguemnt("--catalog", help="Catalog filename", required=True)
     parser.add_argument("--mock-analysis", help="Input folder is mock.", action="store_true")
-    parser.add_argument("--arms", help="Arms to read.", default=['B', 'R'], nargs=+)
+    parser.add_argument("--arms", help="Arms to read.", default=['B', 'R'], nargs='+')
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
