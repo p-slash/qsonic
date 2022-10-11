@@ -37,7 +37,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
     if any(arm in args.arms not in ['B', 'R', 'Z']):
-        logging.error("Arms should be 'B', 'R' or 'Z'").
+        logging.error("Arms should be 'B', 'R' or 'Z'.")
         comm.Abort()
 
     # read catalog
