@@ -1,6 +1,5 @@
 import logging
 import argparse
-import sys
 
 import numpy as np
 from mpi4py import MPI
@@ -22,7 +21,7 @@ if __name__ == '__main__':
     parser.add_argument("--arms", help="Arms to read.", default=['B', 'R'], nargs='+')
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+    logging.basicConfig(level=logging.DEBUG)
 
     if any(arm in args.arms not in ['B', 'R', 'Z']):
         logging.error("Arms should be 'B', 'R' or 'Z'.")
