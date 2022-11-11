@@ -77,7 +77,7 @@ class Catalog(object):
             raise Exception("Empty quasar catalogue.")
 
         pixnum = hp.ang2pix(64, self.catalog['RA'], self.catalog['DEC'], lonlat=True, nest=True)
-        self.catalog = append_fields(self.catalog[, 'PIXNUM', pixnum, dtypes=int)
+        self.catalog = append_fields(self.catalog, 'PIXNUM', pixnum, dtypes=int)
         self.catalog.sort(order='PIXNUM')
 
         
