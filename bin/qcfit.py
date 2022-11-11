@@ -4,9 +4,9 @@ import argparse
 import numpy as np
 from mpi4py import MPI
 
-from qcfit.catalog import Catalog
-from qcfit.spectrum import Spectrum, read_spectra
-from qcfit.mpi_utils import balance_load
+from qcfitter.catalog import Catalog
+from qcfitter.spectrum import Spectrum, read_spectra
+from qcfitter.mpi_utils import balance_load
 
 if __name__ == '__main__':
     comm = MPI.COMM_WORLD
