@@ -2,6 +2,28 @@ import numpy as np
 import fitsio
 
 def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
+    """Common function to read a single fits file.
+
+    Arguments
+    ---------
+    cat_by_survey: named np.array
+    catalog. If data, split by survey and contains only one survey.
+
+    fspec: str
+    filename to open
+
+    arms_to_keep: list of str
+    must only contain B, R and Z
+
+    Returns
+    ---------
+    data: dict
+    only quasar spectra are read into keywords wave, flux etc. Resolution is read if present.
+
+    quasar_indices: np.array of int
+    indices of quasars in fits file.
+    """
+    cat_by_survey.sort(order='TARGETID')
     fitsfile = fitsio.FITS(fspec)
 
     fbrmap = fitsfile['FIBERMAP'].read()
@@ -37,18 +59,14 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
     return data, quasar_indices
 
 def read_onehealpix_file_data(cat_by_survey, input_dir, pixnum, arms_to_keep, program="dark"):
-    cat_by_survey.sort(order='TARGETID')
     survey = cat_by_survey['SURVEY'][0]
 
     fspec = f"{input_dir}/{survey}/{program}/{pixnum//100}/{pixnum}/coadd-{survey}-{program}-{pixnum}.fits"
-    
     data, quasar_indices = _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep)
 
     return data, quasar_indices.size
 
 def read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep, nside=16):
-    cat.sort(order='TARGETID')
-
     fspec = f"{input_dir}/{pixnum//100}/{pixnum}/spectra-{nside}-{pixnum}.fits"
     data, quasar_indices = _read_onehealpix_file(cat, fspec, arms_to_keep)
 
@@ -75,6 +93,29 @@ def generate_spectra_list_from_data(cat_by_survey, data, nquasars):
     return spectra_list
 
 def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, program="dark"):
+    """ Returns a list of Spectrum objects for a given catalog.
+
+    Arguments
+    ---------
+    cat: named np.array
+    catalog of quasars in single healpix.
+
+    input_dir: str
+    input directory
+
+    arms_to_keep: list of str
+    must only contain B, R and Z
+
+    mock_analysis: bool
+    reads for mock data if true.
+
+    program: str
+    always use dark program.
+
+    Returns
+    ---------
+    spectra_list: list of Spectrum
+    """
     spectra_list = []
     pixnum = cat['PIXNUM'][0]
 
