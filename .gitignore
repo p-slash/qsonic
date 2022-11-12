@@ -1,0 +1,11 @@
+test
+wiki/
+build/
+dist/
+.ipynb*
+.DS*
+__pycache__
+*.pdf
+*.png
+*.egg-info
+
