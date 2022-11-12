@@ -4,8 +4,8 @@ import fitsio
 def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
     fitsfile = fitsio.FITS(fspec)
 
-    fbrmap = fits_spec['FIBERMAP'].read()
-    isin = np.isin(fibermap['TARGETID'], cat_by_survey['TARGETID'])
+    fbrmap = fitsfile['FIBERMAP'].read()
+    isin = np.isin(fbrmap['TARGETID'], cat_by_survey['TARGETID'])
     quasar_indices = np.nonzero(isin)[0]
     if (quasar_indices.size != cat_by_survey.size):
         logging.error(f"Error not all targets are in file {cat_by_survey.size} vs {quasar_indices.size}")
@@ -74,11 +74,11 @@ def generate_spectra_list_from_data(cat_by_survey, data, nquasars):
 
     return spectra_list
 
-def read_spectra(cat, input_dir, arms_to_keep, program="dark"):
+def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, program="dark"):
     spectra_list = []
     pixnum = cat['PIXNUM'][0]
 
-    if not args.mock_analysis:
+    if not mock_analysis:
         cat.sort(order='SURVEY')
         unique_surveys, s2 = np.unique(cat['SURVEY'], return_index=True)
         survey_split_cat = np.split(cat, s2[1:])
@@ -89,10 +89,12 @@ def read_spectra(cat, input_dir, arms_to_keep, program="dark"):
                 generate_spectra_list_from_data(cat_by_survey, data, nquasars)
             )
     else:
-        data, nquasars = read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep, program)
+        data, nquasars = read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep)
         spectra_list.extend(
             generate_spectra_list_from_data(cat, data, nquasars)
         )
+    
+    return spectra_list
 
 class Spectrum(object):
     """Represents one spectrum.
@@ -121,7 +123,7 @@ class Spectrum(object):
     removePixels(idx_to_remove)
 
     """
-    def __init__(self, z_qso, targetid, wave, flux, ivar, mask, reso idx):
+    def __init__(self, z_qso, targetid, wave, flux, ivar, mask, reso, idx):
         self.z_qso = z_qso
         self.targetid = targetid
         self.arms = wave.keys()
@@ -135,7 +137,7 @@ class Spectrum(object):
             self.flux[arm] = flux[arm][idx]
             self.ivar[arm] = ivar[arm][idx]
             self.mask[arm] = mask[arm][idx]
-            if reso[arm].ndim == 1:
+            if reso[arm].ndim == 2:
                 self.reso[arm] = reso[arm].copy()
             else:
                 self.reso[arm] = reso[arm][idx]

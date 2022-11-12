@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 
 def balance_load(split_catalog, mpi_size, mpi_rank):
@@ -11,3 +12,7 @@ def balance_load(split_catalog, mpi_size, mpi_rank):
             local_queue.append(cat)
 
     return local_queue
+
+def logging_mpi(msg, mpi_rank, fnc="info"):
+    if mpi_rank == 0:
+        getattr(logging, fnc)(msg)
