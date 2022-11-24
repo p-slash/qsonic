@@ -25,24 +25,24 @@ class ContinuumFitter(object):
 
         self.mean_cont = np.ones(self.nbins)
 
-    def get_normalized_flux(self, spectrum):
+    def get_normalized_flux(self, wave_rf, flux):
         norm_flux = {}
 
-        for arm in spectrum.arms:
-            wv = spectrum.forestwave[arm]/(1+spectrum.z_qso)
+        for arm in wave_rf.keys():
+            wv = wave_rf[arm]
             cont_est = np.interp(
                 wv,
                 self.rfwave,
                 self.mean_cont
             )
             # Multiply with resolution
-            norm_flux[arm] = spectrum.forestflux[arm]/cont_est
+            norm_flux[arm] = flux[arm]/cont_est
 
         return norm_flux
 
     def fit_continuum(self, spectrum):
-        wave_rf = spectrum.forestwave
-        norm_flux = self.get_normalized_flux(spectrum)
+        wave_rf = spectrum.forestwave/(1+spectrum.z_qso)
+        norm_flux = self.get_normalized_flux(wave_rf, spectrum.forestflux)
 
         result = minimize(_continuum_chi2, spectrum.cont_params['x'],
             args=(wave_rf, norm_flux, spectrum.forestivar),
