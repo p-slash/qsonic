@@ -209,8 +209,7 @@ class Spectrum(object):
                 self.reso[arm] = reso[arm][idx]
 
         self.cont_params['valid'] = False
-        self.cont_params['a'] = 1
-        self.cont_params['b'] = 0
+        self.cont_params['x'] = np.array([1., 0.])
 
     def set_continuum(self, wave_p, cont_p):
         for arm in self.arms:
@@ -227,7 +226,7 @@ class Spectrum(object):
             a0 += np.sum(self.forestflux[arm]*self.forestivar[arm])
             n0 += np.sum(self.forestivar[arm])
 
-        self.cont_params['a'] = a0/n0
+        self.cont_params['x'][0] = a0/n0
 
     @property
     def wave(self):
@@ -241,28 +240,28 @@ class Spectrum(object):
     def forestwave(self):
         xx = {}
         for arm in self.arms:
-            xx[arm] = self.wave[arm][self._f1:self._f2]
+            xx[arm] = self.wave[arm][self._f1[arm]:self._f2[arm]]
         return xx
 
     @property
     def forestflux(self):
         xx = {}
         for arm in self.arms:
-            xx[arm] = self.flux[arm][self._f1:self._f2]
+            xx[arm] = self.flux[arm][self._f1[arm]:self._f2[arm]]
         return xx
 
     @property
     def forestivar(self):
         xx = {}
         for arm in self.arms:
-            xx[arm] = self.ivar[arm][self._f1:self._f2]
+            xx[arm] = self.ivar[arm][self._f1[arm]:self._f2[arm]]
         return xx
 
     @property
     def forestreso(self):
         xx = {}
         for arm in self.arms:
-            xx[arm] = self.reso[arm][:, self._f1:self._f2]
+            xx[arm] = self.reso[arm][:, self._f1[arm]:self._f2[arm]]
         return xx
 
 
