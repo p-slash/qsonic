@@ -73,21 +73,7 @@ if __name__ == '__main__':
     qcfit = ContinuumFitter(args.forest_w1, args.forest_w2, args.rfdwave)
     logging_mpi("Fitting continuum.", mpi_rank)
 
-    no_valid_fits=0
-    no_invalid_fits=0
-    # For each forest fit continuum
-    for spec in spectra_list:
-        qcfit.fit_continuum(spec)
-        if not spec.cont_params['valid']:
-            no_invalid_fits+=1
-            logging.error(f"mpi:{mpi_rank}:Invalid continuum TARGETID: {spec.targetid}.")
-        else:
-            no_valid_fits += 1
-
-    no_valid_fits = comm.reduce(no_valid_fits, op=MPI.SUM, root=0)
-    no_invalid_fits = comm.reduce(no_invalid_fits, op=MPI.SUM, root=0)
-    logging_mpi(f"Number of valid fits: {no_valid_fits}", mpi_rank)
-    logging_mpi(f"Number of invalid fits: {no_invalid_fits}", mpi_rank)
+    qcfit.fit_continua(self, spectra_list, comm, mpi_rank)
     # Stack all spectra in each process
     # Broadcast and recalculate global functions
     # Iterate
