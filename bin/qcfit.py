@@ -61,7 +61,10 @@ if __name__ == '__main__':
     # Each process reads its own list
     for cat in local_queue:
         spectra_list.extend(read_spectra(cat, args.input_dir, args.arms, args.mock_analysis))
-    logging_mpi("All spectra are read.", mpi_rank)
+
+    nspec_rank = len(spectra_list)
+    comm.reduce(nspec_rank, op=MPI.SUM, root=0)
+    logging_mpi(f"All {nspec_rank} spectra are read.", mpi_rank)
 
     logging_mpi("Setting forest region.", mpi_rank)
     for spec in spectra_list:
@@ -84,10 +87,10 @@ if __name__ == '__main__':
         else:
             no_valid_fits += 1
 
-    comm.reduce(no_valid_fits, root=0)
-    comm.reduce(no_invalid_fits, root=0)
-    logging_mpi(f"Number of valid fits: {no_valid_fits}")
-    logging_mpi(f"Number of invalid fits: {no_invalid_fits}")
+    comm.reduce(no_valid_fits, op=MPI.SUM, root=0)
+    comm.reduce(no_invalid_fits, op=MPI.SUM, root=0)
+    logging_mpi(f"Number of valid fits: {no_valid_fits}", mpi_rank)
+    logging_mpi(f"Number of invalid fits: {no_invalid_fits}", mpi_rank)
     # Stack all spectra in each process
     # Broadcast and recalculate global functions
     # Iterate

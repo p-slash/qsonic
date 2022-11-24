@@ -46,7 +46,7 @@ class ContinuumFitter(object):
 
         result = minimize(_continuum_chi2, spectrum.cont_params['x'],
             args=(wave_rf, norm_flux, spectrum.forestivar),
-            bounds=(np.array([0, -20]), np.array(500, 20)),
+            bounds=[(0, 500), (-20, 20)],
             method=None,
             jac=None
         )
