@@ -4,7 +4,7 @@ from scipy.optimize import minimize
 def _continuum_chi2(x, wave_rf, norm_flux, ivar):
     chi2 = 0
 
-    for arm in spectrum.arms:
+    for arm in wave_rf.keys():
         wv = wave_rf[arm]
         if wv.size == 0:
             continue
@@ -46,6 +46,7 @@ class ContinuumFitter(object):
 
         result = minimize(_continuum_chi2, spectrum.cont_params['x'],
             args=(wave_rf, norm_flux, spectrum.forestivar),
+            bounds=(np.array([0, -20]), np.array(500, 20)),
             method=None,
             jac=None
         )
