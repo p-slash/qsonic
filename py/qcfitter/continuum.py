@@ -41,7 +41,7 @@ class ContinuumFitter(object):
         return norm_flux
 
     def fit_continuum(self, spectrum):
-        wave_rf = spectrum.forestwave/(1+spectrum.z_qso)
+        wave_rf = {arm: wave/(1+spectrum.z_qso) for arm, wave in spectrum.forestwave.items()}
         norm_flux = self.get_normalized_flux(wave_rf, spectrum.forestflux)
 
         result = minimize(_continuum_chi2, spectrum.cont_params['x'],
