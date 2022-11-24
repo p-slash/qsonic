@@ -61,21 +61,26 @@ if __name__ == '__main__':
     # Each process reads its own list
     for cat in local_queue:
         spectra_list.extend(read_spectra(cat, args.input_dir, args.arms, args.mock_analysis))
+    logging_mpi("All spectra are read.", mpi_rank)
+
+    logging_mpi("Setting forest region.", mpi_rank)
     for spec in spectra_list:
         spec.set_forest_region(args.wave1, args.wave2, args.forest_w1, args.forest_w2)
-
-    logging_mpi("All spectra are read.", mpi_rank)
 
     # Continuum fitting
     # -------------------
     # Initialize global functions
     qcfit = ContinuumFitter(args.forest_w1, args.forest_w2, args.rfdwave)
+    logging_mpi("Fitting continuum.", mpi_rank)
     # For each forest fit continuum
     for spec in spectra_list:
         qcfit.fit_continuum(spec)
+        if not spec.cont_params['valid']:
+            logging.error(f"Invalid continuum TARGETID: {spec.targetid} on mpi:{mpi_rank}")
     # Stack all spectra in each process
     # Broadcast and recalculate global functions
     # Iterate
 
+    logging_mpi("All continua are fit.", mpi_rank)
     # Save deltas
 
