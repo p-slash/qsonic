@@ -37,7 +37,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
 
     if any(arm not in ['B', 'R', 'Z'] for arm in args.arms):
-        logging.error("Arms should be 'B', 'R' or 'Z'.")
+        logging_mpi("Arms should be 'B', 'R' or 'Z'.", mpi_rank, "error")
         comm.Abort()
 
     # read catalog
@@ -52,19 +52,16 @@ if __name__ == '__main__':
 
     # Roughly equal number of spectra
     logging_mpi("Load balancing.", mpi_rank)
-
     local_queue = balance_load(split_catalog, mpi_size, mpi_rank)
 
     logging_mpi("Reading spectra.", mpi_rank)
-
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
         spectra_list.extend(read_spectra(cat, args.input_dir, args.arms, args.mock_analysis))
 
-    nspec_rank = len(spectra_list)
-    comm.reduce(nspec_rank, op=MPI.SUM, root=0)
-    logging_mpi(f"All {nspec_rank} spectra are read.", mpi_rank)
+    nspec_all = comm.reduce(len(spectra_list), op=MPI.SUM, root=0)
+    logging_mpi(f"All {nspec_all} spectra are read.", mpi_rank)
 
     logging_mpi("Setting forest region.", mpi_rank)
     for spec in spectra_list:
@@ -83,12 +80,12 @@ if __name__ == '__main__':
         qcfit.fit_continuum(spec)
         if not spec.cont_params['valid']:
             no_invalid_fits+=1
-            logging.error(f"Invalid continuum TARGETID: {spec.targetid} on mpi:{mpi_rank}")
+            logging.error(f"mpi:{mpi_rank}:Invalid continuum TARGETID: {spec.targetid}.")
         else:
             no_valid_fits += 1
 
-    comm.reduce(no_valid_fits, op=MPI.SUM, root=0)
-    comm.reduce(no_invalid_fits, op=MPI.SUM, root=0)
+    no_valid_fits = comm.reduce(no_valid_fits, op=MPI.SUM, root=0)
+    no_invalid_fits = comm.reduce(no_invalid_fits, op=MPI.SUM, root=0)
     logging_mpi(f"Number of valid fits: {no_valid_fits}", mpi_rank)
     logging_mpi(f"Number of invalid fits: {no_invalid_fits}", mpi_rank)
     # Stack all spectra in each process
