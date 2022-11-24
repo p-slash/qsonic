@@ -146,10 +146,8 @@ class Spectrum(object):
         Quasar redshift.
     targetid: int
         Unique TARGETID identifier.
-    arms: list
-        List of characters to id spectrograph like 'B', 'R' and 'Z'.
     wave: dict of numpy array
-        Dictionary of arrays specifying the wavelength grid.
+        Dictionary of arrays specifying the wavelength grid. Static variable!
     flux: dict
         Dictionary of arrays specifying the flux.
     ivar: dict
@@ -159,22 +157,49 @@ class Spectrum(object):
     reso: dict
         Dictionary of 2D arrays specifying the resolution matrix.
 
+    Attributes
+    ----------
+    arms: list
+        List of characters to id spectrograph like 'B', 'R' and 'Z'. Static variable!
+    _f1, _f2: dict of int
+        Forest indices. Set up using set_forest method. Then use property functions
+        to access forest wave, flux, ivar instead.
+    cont_params: dict
+        Initial estimates are constructed.
+
     Methods
     ----------
     removePixels(idx_to_remove)
 
     """
+    _wave = None
+    _arms = None
+    @staticmethod
+    def _set_wave(wave):
+        if not Spectrum._wave:
+            Spectrum._arms = wave.keys()
+            Spectrum._wave = wave.copy()
+        else:
+            for arm in Spectrum._arms:
+                assert (arm in wave.keys())
+                assert (np.allclose(Spectrum._wave[arm], wave[arm]))
+
     def __init__(self, z_qso, targetid, wave, flux, ivar, mask, reso, idx):
         self.z_qso = z_qso
         self.targetid = targetid
-        self.arms = wave.keys()
-        self.wave = wave.copy()
+        Spectrum._set_wave(wave)
+
         self.flux = {}
         self.ivar = {}
         self.mask = {}
         self.reso = {}
+        self.cont_params = {}
+        self._f1 = {}
+        self._f2 = {}
 
         for arm in self.arms:
+            self._f1[arm] = 0
+            self._f2[arm] = self.wave[arm].size
             self.flux[arm] = flux[arm][idx]
             self.ivar[arm] = ivar[arm][idx]
             self.mask[arm] = mask[arm][idx]
@@ -182,6 +207,63 @@ class Spectrum(object):
                 self.reso[arm] = reso[arm].copy()
             else:
                 self.reso[arm] = reso[arm][idx]
+
+        self.cont_params['valid'] = False
+        self.cont_params['a'] = 1
+        self.cont_params['b'] = 0
+
+    def set_continuum(self, wave_p, cont_p):
+        for arm in self.arms:
+            self.cont[arm] = np.interp(self.forestwave[arm], wave_p, cont_p)
+
+    def set_forest_region(self, w1, w2, lya1, lya2):
+        l1 = max(w1, (1+self.z_qso)*lya1)
+        l2 = max(w2, (1+self.z_qso)*lya2)
+
+        a0 = 0
+        n0 = 0
+        for arm in self.arms:
+            self._f1[arm], self._f2[arm] = np.searchsorted(self.wave[arm], [l1, l2])
+            a0 += np.sum(self.forestflux[arm]*self.forestivar[arm])
+            n0 += np.sum(self.forestivar[arm])
+
+        self.cont_params['a'] = a0/n0
+
+    @property
+    def wave(self):
+        return Spectrum._wave
+
+    @property
+    def arms(self):
+        return Spectrum._arms
+
+    @property
+    def forestwave(self):
+        xx = {}
+        for arm in self.arms:
+            xx[arm] = self.wave[arm][self._f1:self._f2]
+        return xx
+
+    @property
+    def forestflux(self):
+        xx = {}
+        for arm in self.arms:
+            xx[arm] = self.flux[arm][self._f1:self._f2]
+        return xx
+
+    @property
+    def forestivar(self):
+        xx = {}
+        for arm in self.arms:
+            xx[arm] = self.ivar[arm][self._f1:self._f2]
+        return xx
+
+    @property
+    def forestreso(self):
+        xx = {}
+        for arm in self.arms:
+            xx[arm] = self.reso[arm][:, self._f1:self._f2]
+        return xx
 
 
     # def removePixels(self, idx_to_remove):

@@ -7,6 +7,7 @@ from mpi4py import MPI
 from qcfitter.catalog import Catalog
 from qcfitter.spectrum import Spectrum, read_spectra
 from qcfitter.mpi_utils import balance_load, logging_mpi
+from qcfitter.continuum import ContinuumFitter
 
 if __name__ == '__main__':
     comm = MPI.COMM_WORLD
@@ -19,6 +20,18 @@ if __name__ == '__main__':
     parser.add_argument("--catalog", help="Catalog filename", required=True)
     parser.add_argument("--mock-analysis", help="Input folder is mock.", action="store_true")
     parser.add_argument("--arms", help="Arms to read.", default=['B', 'R'], nargs='+')
+
+    parser.add_argument("--wave1", help="First analysis wavelength", type=float,
+        default=3600.)
+    parser.add_argument("--wave2", help="Last analysis wavelength", type=float,
+        default=6000.)
+    parser.add_argument("--forest-w1", help="First forest wavelength.", type=float,
+        default=1040.)
+    parser.add_argument("--forest-w2", help="Lasr forest wavelength.", type=float,
+        default=1200.)
+
+    parser.add_argument("--rfdwave", help="Rest-frame wave steps", type=float,
+        default=1.)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG)
@@ -48,15 +61,21 @@ if __name__ == '__main__':
     # Each process reads its own list
     for cat in local_queue:
         spectra_list.extend(read_spectra(cat, args.input_dir, args.arms, args.mock_analysis))
+    for spec in spectra_list:
+        spec.set_forest_region(args.wave1, args.wave2, args.forest_w1, args.forest_w2)
 
     logging_mpi("All spectra are read.", mpi_rank)
 
     # Continuum fitting
-        # Initialize global functions
-        # For each forest fit continuum
-        # Stack all spectra in each process
-        # Broadcast and recalculate global functions
-        # Iterate
+    # -------------------
+    # Initialize global functions
+    qcfit = ContinuumFitter(args.forest_w1, args.forest_w2, args.rfdwave)
+    # For each forest fit continuum
+    for spec in spectra_list:
+        qcfit.fit_continuum(spec)
+    # Stack all spectra in each process
+    # Broadcast and recalculate global functions
+    # Iterate
 
     # Save deltas
 
