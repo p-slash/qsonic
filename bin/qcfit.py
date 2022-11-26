@@ -32,6 +32,8 @@ if __name__ == '__main__':
 
     parser.add_argument("--rfdwave", help="Rest-frame wave steps", type=float,
         default=1.)
+    parser.add_argument("--no-iterations", help="Number of iterations to perform for continuum fitting.",
+        type=int, default=5)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG)
@@ -73,10 +75,11 @@ if __name__ == '__main__':
     qcfit = ContinuumFitter(args.forest_w1, args.forest_w2, args.rfdwave)
     logging_mpi("Fitting continuum.", mpi_rank)
 
-    qcfit.fit_continua(self, spectra_list, comm, mpi_rank)
+    # Fit continua
     # Stack all spectra in each process
     # Broadcast and recalculate global functions
     # Iterate
+    qcfit.iterate(spectra_list, args.no_iterations, comm, mpi_rank)
 
     logging_mpi("All continua are fit.", mpi_rank)
     # Save deltas
