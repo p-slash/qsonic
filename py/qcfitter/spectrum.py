@@ -153,7 +153,7 @@ class Spectrum(object):
     ivar: dict
         Dictionary of arrays specifying the inverse variance.
     mask: dict
-        Dictionary of arrays specifying the bitmask.
+        Dictionary of arrays specifying the bitmask. Not stored
     reso: dict
         Dictionary of 2D arrays specifying the resolution matrix.
 
@@ -191,23 +191,31 @@ class Spectrum(object):
 
         self.flux = {}
         self.ivar = {}
-        self.mask = {}
         self.reso = {}
-        self.cont_params = {}
+
         self._f1 = {}
         self._f2 = {}
+        self._forestwave = {}
+        self._forestflux = {}
+        self._forestivar = {}
+        self._forestreso = {}
 
         for arm in self.arms:
             self._f1[arm] = 0
             self._f2[arm] = self.wave[arm].size
             self.flux[arm] = flux[arm][idx]
             self.ivar[arm] = ivar[arm][idx]
-            self.mask[arm] = mask[arm][idx]
+            _mask = mask[arm][idx]
+            self.flux[arm][_mask] = 0
+            self.ivar[arm][_mask] = 0
+
             if reso[arm].ndim == 2:
                 self.reso[arm] = reso[arm].copy()
             else:
                 self.reso[arm] = reso[arm][idx]
 
+        self.cont_params = {}
+        self.cont_params['method'] = ''
         self.cont_params['valid'] = False
         self.cont_params['x'] = np.array([1., 0.])
 
@@ -223,6 +231,15 @@ class Spectrum(object):
         n0 = 0
         for arm in self.arms:
             self._f1[arm], self._f2[arm] = np.searchsorted(self.wave[arm], [l1, l2])
+
+            # Does this create a view or copy array?
+            self._forestwave[arm] = self.wave[arm][self._f1[arm]:self._f2[arm]]
+            self._forestflux[arm] = self.flux[arm][self._f1[arm]:self._f2[arm]]
+            self._forestivar[arm] = self.ivar[arm][self._f1[arm]:self._f2[arm]]
+            self._forestreso[arm] = self.reso[arm][:, self._f1[arm]:self._f2[arm]]
+
+            # np.shares_memory(self.forestflux, self.flux)
+
             a0 += np.sum(self.forestflux[arm]*self.forestivar[arm])
             n0 += np.sum(self.forestivar[arm])
 
@@ -238,34 +255,29 @@ class Spectrum(object):
 
     @property
     def forestwave(self):
-        xx = {}
-        for arm in self.arms:
-            xx[arm] = self.wave[arm][self._f1[arm]:self._f2[arm]]
-        return xx
+        return self._forestwave
 
     @property
     def forestflux(self):
-        xx = {}
-        for arm in self.arms:
-            xx[arm] = self.flux[arm][self._f1[arm]:self._f2[arm]]
-        return xx
+        return self._forestflux
 
     @property
     def forestivar(self):
-        xx = {}
-        for arm in self.arms:
-            xx[arm] = self.ivar[arm][self._f1[arm]:self._f2[arm]]
-        return xx
+        return self._forestivar
 
     @property
     def forestreso(self):
-        xx = {}
-        for arm in self.arms:
-            xx[arm] = self.reso[arm][:, self._f1[arm]:self._f2[arm]]
-        return xx
+        return self._forestreso
 
+    def remove_nonforest_pixels(self):
+        self.flux = self.forestflux
+        self.ivar = self.forestivar
+        self.reso = self.forestreso
 
-    # def removePixels(self, idx_to_remove):
+        # Is this needed?
+        self._forestflux = self.flux
+        self._forestivar = self.ivar
+        self._forestreso = self.reso
 
 
 
