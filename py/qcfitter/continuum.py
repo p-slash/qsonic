@@ -7,6 +7,7 @@ class ContinuumFitter(object):
     def __init__(self, w1rf, w2rf, dwrf):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
         self.rfwave = w1rf + np.arange(self.nbins)*dwrf
+        self.rfwave_edges = w1rf + (np.arange(self.nbins+1)-0.5)*dwrf
 
         self.mean_cont = np.ones(self.nbins)
 
@@ -64,7 +65,9 @@ class ContinuumFitter(object):
 
         # For each forest fit continuum
         for spectrum in spectra_list:
+            self.cont_params['method'] = 'picca'
             self.fit_continuum(spectrum)
+
             if not spectrum.cont_params['valid']:
                 no_invalid_fits+=1
                 logging_mpi(f"mpi:{mpi_rank}:Invalid continuum TARGETID: {spectrum.targetid}.", 0)
@@ -76,19 +79,56 @@ class ContinuumFitter(object):
         logging_mpi(f"Number of valid fits: {no_valid_fits}", mpi_rank)
         logging_mpi(f"Number of invalid fits: {no_invalid_fits}", mpi_rank)
 
-    def stack_normalized_flux(self, spectra_list):
+    def update_mean_cont(self, spectra_list, comm):
         norm_flux = np.zeros_like(self.mean_cont)
+        counts = np.zeros_like(self.mean_cont)
 
         for spectrum in spectra_list:
+            if not spectrum.cont_params['valid']:
+                continue 
+
             wave_rf = {arm: wave/(1+spectrum.z_qso) for arm, wave in spectrum.forestwave.items()}
             cont = self.get_continuum_model(spectrum.cont_params['x'], wave_rf)
-            norm_flux = {arm: flux/cont[arm] for arm, flux in spectrum.forestflux.items()}
-            #####
 
-    def iterate(self, spectra_list, comm, mpi_rank):
-        self.fit_continua(self, spectra_list, comm, mpi_rank)
-        # Stack all spectra in each process
-        # Broadcast and recalculate global functions
+            for arm in wave_rf.keys():
+                if wave_rf[arm].size == 0:
+                    continue
+
+                bin_idx = np.searchsorted(self.rfwave_edges, wave_rf[arm])
+
+                norm_flux = spectrum.forestflux[arm]/cont[arm]
+                weight = spectrum.forestivar[arm]*cont[arm]**2
+                norm_flux += np.bincount(bin_idx, weights=norm_flux*weight, minlength=self.nbins+2)[1:-1]
+                counts    += np.bincount(bin_idx, weights=weight, minlength=self.nbins+2)[1:-1]
+
+        norm_flux = comm.allreduce(norm_flux)
+        counts = comm.allreduce(counts)
+        norm_flux /= counts
+
+        has_converged = np.all(norm_flux < 1e-4)
+
+        self.mean_cont *= norm_flux
+
+        return has_converged
+
+    def iterate(self, spectra_list, niterations, comm, mpi_rank):
+        has_converged = False
+
+        for it in range(niterations):
+            logging_mpi(f"Fitting iteration {it+1}/{niterations}", mpi_rank)
+            # Fit all continua one by one
+            self.fit_continua(self, spectra_list, comm, mpi_rank)
+            # Stack all spectra in each process
+            # Broadcast and recalculate global functions
+            has_converged = self.update_mean_cont(spectra_list, comm)
+
+            if has_converged:
+                logging_mpi("Iteration has converged.", mpi_rank)
+                break
+
+        if not has_converged:
+            logging_mpi("Iteration has NOT converged.", mpi_rank, "warning")
+
 
 
         
