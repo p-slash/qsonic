@@ -219,9 +219,9 @@ class Spectrum(object):
         self.cont_params['valid'] = False
         self.cont_params['x'] = np.array([1., 0.])
 
-    def set_continuum(self, wave_p, cont_p):
-        for arm in self.arms:
-            self.cont[arm] = np.interp(self.forestwave[arm], wave_p, cont_p)
+    # def set_continuum(self, wave_p, cont_p):
+    #     for arm in self.arms:
+    #         self.cont[arm] = np.interp(self.forestwave[arm], wave_p, cont_p)
 
     def set_forest_region(self, w1, w2, lya1, lya2):
         l1 = max(w1, (1+self.z_qso)*lya1)
