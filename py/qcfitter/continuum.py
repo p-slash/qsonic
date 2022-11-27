@@ -9,7 +9,7 @@ def fast_interp1d(x, xp0, dxp, fp):
     xx = (x - xp0)/dxp
     idx = int(np.clip(xx, 0, fp.size-2))
     d_idx = xx - idx
-    y1, y2 = fp[[idx, idx+1]]
+    y1, y2 = fp[idx], fp[idx+1]
 
     return y1*(1-d_idx) + y2*d_idx
 
@@ -18,17 +18,17 @@ class ContinuumFitter(object):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
         self.dwrf = dwrf
         self.rfwave = w1rf + np.arange(self.nbins)*dwrf
-        # self.rfwave_edges = w1rf + (np.arange(self.nbins+1)-0.5)*dwrf
 
         self.mean_cont = np.ones(self.nbins)
 
-    def _continuum_chi2(x, wave_rf, flux, ivar):
+    def _continuum_chi2(x, wave, flux, ivar, z_qso):
         chi2 = 0
 
-        for arm, wv in wave_rf.items():
-            if wv.size == 0:
+        for arm, wave_arm in wave.items():
+            if wave_arm.size == 0:
                 continue
 
+            wv = wave_arm/(1+z_qso)
             cont_est = self.get_continuum_model(x, wv)
 
             chi2 += np.sum(
@@ -52,12 +52,13 @@ class ContinuumFitter(object):
         return cont
 
     def fit_continuum(self, spectrum):
-        wave_rf = {arm: wave/(1+spectrum.z_qso) for arm, wave in spectrum.forestwave.items()}
-
         result = minimize(
             self._continuum_chi2,
             spectrum.cont_params['x'],
-            args=(wave_rf, norm_flux, spectrum.forestivar),
+            args=(spectrum.forestwave,
+                  spectrum.forestflux,
+                  spectrum.forestivar,
+                  spectrum.z_qso),
             bounds=[(0, 500), (-20, 20)],
             method=None,
             jac=None
@@ -96,16 +97,16 @@ class ContinuumFitter(object):
                 continue 
 
             for arm, wave_arm in spectrum.forestwave.items():
-                wave_rf_arm = wave_arm/(1+spectrum.z_qso)
-                if wave_rf_arm.size == 0:
+                if wave_arm.size == 0:
                     continue
 
-                cont = self.get_continuum_model(spectrum.cont_params['x'], wave_rf_arm)
-                # bin_idx = np.searchsorted(self.rfwave_edges, wave_rf_arm)
+                wave_rf_arm = wave_arm/(1+spectrum.z_qso)
                 bin_idx = ((wave_rf_arm - self.rfwave[0]-self.dwrf/2)/self.dwrf).astype(int)
 
-                norm_flux = spectrum.forestflux[arm]/cont[arm]
-                weight = spectrum.forestivar[arm]*cont[arm]**2
+                cont = self.get_continuum_model(spectrum.cont_params['x'], wave_rf_arm)
+
+                norm_flux  = spectrum.forestflux[arm]/cont
+                weight     = spectrum.forestivar[arm]*cont**2
                 norm_flux += np.bincount(bin_idx, weights=norm_flux*weight, minlength=self.nbins)
                 counts    += np.bincount(bin_idx, weights=weight, minlength=self.nbins)
 
