@@ -1,45 +1,53 @@
 import numpy as np
+from numba import njit
 from scipy.optimize import minimize
 
 from qcfitter.mpi_utils import logging_mpi
 
+@njit
+def fast_interp1d(x, xp0, dxp, fp):
+    xx = (x - xp0)/dxp
+    idx = int(np.clip(xx, 0, fp.size-2))
+    d_idx = xx - idx
+    y1, y2 = fp[[idx, idx+1]]
+
+    return y1*(1-d_idx) + y2*d_idx
+
 class ContinuumFitter(object):
     def __init__(self, w1rf, w2rf, dwrf):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
+        self.dwrf = dwrf
         self.rfwave = w1rf + np.arange(self.nbins)*dwrf
-        self.rfwave_edges = w1rf + (np.arange(self.nbins+1)-0.5)*dwrf
+        # self.rfwave_edges = w1rf + (np.arange(self.nbins+1)-0.5)*dwrf
 
         self.mean_cont = np.ones(self.nbins)
 
     def _continuum_chi2(x, wave_rf, flux, ivar):
         chi2 = 0
-        cont_est = self.get_continuum_model(x, wave_rf)
 
-        for arm in wave_rf.keys():
-            wv = wave_rf[arm]
+        for arm, wv in wave_rf.items():
             if wv.size == 0:
                 continue
 
+            cont_est = self.get_continuum_model(x, wv)
+
             chi2 += np.sum(
-                ivar[arm] * (flux[arm] - cont_est[arm])**2
+                ivar[arm] * (flux[arm] - cont_est)**2
             )
 
         return chi2
 
-    def get_continuum_model(self, x, wave_rf):
-        cont = {}
+    def get_continuum_model(self, x, wave_rf_arm):
+        Slope = np.log(wave_rf_arm)
+        Slope = (Slope-Slope[0])/(Slope[-1]-Slope[0])
 
-        for arm in wave_rf.keys():
-            wv = wave_rf[arm]
-            Slope = np.log(wv)
-            Slope = (Slope-Slope[0])/(Slope[-1]-Slope[0])
-
-            cont[arm] = np.interp(
-                wv,
-                self.rfwave,
-                self.mean_cont
-            ) * (x[0] + x[1]*Slope)
-            # Multiply with resolution
+        cont = fast_interp1d(
+            wave_rf_arm,
+            self.rfwave[0], self.dwrf,
+            self.mean_cont
+        ) * (x[0] + x[1]*Slope)
+        # Multiply with resolution
+        # Edges are difficult though
 
         return cont
 
@@ -87,19 +95,19 @@ class ContinuumFitter(object):
             if not spectrum.cont_params['valid']:
                 continue 
 
-            wave_rf = {arm: wave/(1+spectrum.z_qso) for arm, wave in spectrum.forestwave.items()}
-            cont = self.get_continuum_model(spectrum.cont_params['x'], wave_rf)
-
-            for arm in wave_rf.keys():
-                if wave_rf[arm].size == 0:
+            for arm, wave_arm in spectrum.forestwave.items():
+                wave_rf_arm = wave_arm/(1+spectrum.z_qso)
+                if wave_rf_arm.size == 0:
                     continue
 
-                bin_idx = np.searchsorted(self.rfwave_edges, wave_rf[arm])
+                cont = self.get_continuum_model(spectrum.cont_params['x'], wave_rf_arm)
+                # bin_idx = np.searchsorted(self.rfwave_edges, wave_rf_arm)
+                bin_idx = ((wave_rf_arm - self.rfwave[0]-self.dwrf/2)/self.dwrf).astype(int)
 
                 norm_flux = spectrum.forestflux[arm]/cont[arm]
                 weight = spectrum.forestivar[arm]*cont[arm]**2
-                norm_flux += np.bincount(bin_idx, weights=norm_flux*weight, minlength=self.nbins+2)[1:-1]
-                counts    += np.bincount(bin_idx, weights=weight, minlength=self.nbins+2)[1:-1]
+                norm_flux += np.bincount(bin_idx, weights=norm_flux*weight, minlength=self.nbins)
+                counts    += np.bincount(bin_idx, weights=weight, minlength=self.nbins)
 
         norm_flux = comm.allreduce(norm_flux)
         counts = comm.allreduce(counts)
