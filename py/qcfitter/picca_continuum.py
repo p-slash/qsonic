@@ -13,7 +13,7 @@ def fast_interp1d(x, xp0, dxp, fp):
 
     return y1*(1-d_idx) + y2*d_idx
 
-class ContinuumFitter(object):
+class PiccaContinuumFitter(object):
     def __init__(self, w1rf, w2rf, dwrf):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
         self.dwrf = dwrf
