@@ -106,6 +106,7 @@ class ContinuumFitter(object):
                 cont = self.get_continuum_model(spectrum.cont_params['x'], wave_rf_arm)
 
                 norm_flux  = spectrum.forestflux[arm]/cont
+                # Deconvolve resolution matrix ?
                 weight     = spectrum.forestivar[arm]*cont**2
                 norm_flux += np.bincount(bin_idx, weights=norm_flux*weight, minlength=self.nbins)
                 counts    += np.bincount(bin_idx, weights=weight, minlength=self.nbins)
