@@ -7,7 +7,7 @@ from mpi4py import MPI
 from qcfitter.catalog import Catalog
 from qcfitter.spectrum import Spectrum, read_spectra
 from qcfitter.mpi_utils import balance_load, logging_mpi
-from qcfitter.continuum import ContinuumFitter
+from qcfitter.picca_continuum import PiccaContinuumFitter
 
 if __name__ == '__main__':
     comm = MPI.COMM_WORLD
@@ -72,7 +72,7 @@ if __name__ == '__main__':
     # Continuum fitting
     # -------------------
     # Initialize global functions
-    qcfit = ContinuumFitter(args.forest_w1, args.forest_w2, args.rfdwave)
+    qcfit = PiccaContinuumFitter(args.forest_w1, args.forest_w2, args.rfdwave)
     logging_mpi("Fitting continuum.", mpi_rank)
 
     # Fit continua
