@@ -1,25 +1,46 @@
 import numpy as np
-from numba import njit
+import fitsio
 from scipy.optimize import minimize
 
 from qcfitter.mpi_utils import logging_mpi
-
-@njit
-def fast_interp1d(x, xp0, dxp, fp):
-    xx = (x - xp0)/dxp
-    idx = int(np.clip(xx, 0, fp.size-2))
-    d_idx = xx - idx
-    y1, y2 = fp[idx], fp[idx+1]
-
-    return y1*(1-d_idx) + y2*d_idx
+from qcfitter.mathtools import Fast1DInterpolator
 
 class PiccaContinuumFitter(object):
-    def __init__(self, w1rf, w2rf, dwrf):
+    def _set_fiducials(self, fiducial_fits):
+        try:
+            _fits = fitsio.FITS(fiducial_fits)
+            _data = _fits['STATS'].read()
+            waves = _data['LAMBDA']
+            dwave = waves[1]-waves[0]
+            if not np.allclose(np.diff(waves), dwave):
+                raise Exception("LAMBDA is not equally spaced.")
+
+            meanflux = _data['MEANFLUX']
+            varlss = _data['VAR']
+
+            self.meanflux_interp = Fast1DInterpolator(waves[0], dwave,
+                meanflux)
+            self.varlss_interp = Fast1DInterpolator(waves[0], dwave,
+                varlss)
+
+        except Exception as e:
+            logging_mpi("Failed to construct fiducial mean flux and varlss from "
+                f"{fiducial_fits}::{e.what()}.", 0, "error")
+
+            self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
+            self.varlss_interp   = Fast1DInterpolator(0., 1., np.zeros(3))
+
+    def __init__(self, w1rf, w2rf, dwrf, fiducial_fits=None):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
         self.dwrf = dwrf
         self.rfwave = w1rf + np.arange(self.nbins)*dwrf
 
         self.mean_cont = np.ones(self.nbins)
+        self.meancont_interp = Fast1DInterpolator(w1rf, dwrf,
+            self.mean_cont)
+
+        if fiducial_fits:
+            self._set_fiducials(fiducial_fits)
 
     def _continuum_chi2(x, wave, flux, ivar, z_qso):
         chi2 = 0
@@ -29,11 +50,17 @@ class PiccaContinuumFitter(object):
                 continue
 
             wv = wave_arm/(1+z_qso)
-            cont_est = self.get_continuum_model(x, wv)
+
+            cont_est  = self.get_continuum_model(x, wv)
+            cont_est *= self.meanflux_interp(wave_arm)
+
+            var_lss = self.varlss_interp(wave_arm)*cont_est**2
+            weight  = ivar[arm] / (1+ivar[arm]*var_lss)
+            w = weight > 0
 
             chi2 += np.sum(
-                ivar[arm] * (flux[arm] - cont_est)**2
-            )
+                weight * (flux[arm] - cont_est)**2
+            ) - np.log(weight[w]).sum()
 
         return chi2
 
@@ -41,11 +68,7 @@ class PiccaContinuumFitter(object):
         Slope = np.log(wave_rf_arm)
         Slope = (Slope-Slope[0])/(Slope[-1]-Slope[0])
 
-        cont = fast_interp1d(
-            wave_rf_arm,
-            self.rfwave[0], self.dwrf,
-            self.mean_cont
-        ) * (x[0] + x[1]*Slope)
+        cont = self.meancont_interp(wave_rf_arm) * (x[0] + x[1]*Slope)
         # Multiply with resolution
         # Edges are difficult though
 
@@ -103,11 +126,16 @@ class PiccaContinuumFitter(object):
                 wave_rf_arm = wave_arm/(1+spectrum.z_qso)
                 bin_idx = ((wave_rf_arm - self.rfwave[0]-self.dwrf/2)/self.dwrf).astype(int)
 
-                cont = self.get_continuum_model(spectrum.cont_params['x'], wave_rf_arm)
+                cont  = self.get_continuum_model(spectrum.cont_params['x'], wave_rf_arm)
+                cont *= self.meanflux_interp(wave_arm)
 
                 norm_flux  = spectrum.forestflux[arm]/cont
                 # Deconvolve resolution matrix ?
-                weight     = spectrum.forestivar[arm]*cont**2
+
+                var_lss = self.varlss_interp(wave_arm)
+                weight  = spectrum.forestivar[arm]*cont**2
+                weight  = weight / (1+weight*var_lss)
+
                 norm_flux += np.bincount(bin_idx, weights=norm_flux*weight, minlength=self.nbins)
                 counts    += np.bincount(bin_idx, weights=weight, minlength=self.nbins)
 
@@ -115,7 +143,7 @@ class PiccaContinuumFitter(object):
         counts = comm.allreduce(counts)
         norm_flux /= counts
 
-        has_converged = np.all(norm_flux < 1e-4)
+        has_converged = np.allclose(norm_flux, 1, rtol=1e-4)
 
         self.mean_cont *= norm_flux
 

@@ -27,8 +27,9 @@ if __name__ == '__main__':
         default=6000.)
     parser.add_argument("--forest-w1", help="First forest wavelength.", type=float,
         default=1040.)
-    parser.add_argument("--forest-w2", help="Lasr forest wavelength.", type=float,
+    parser.add_argument("--forest-w2", help="Last forest wavelength.", type=float,
         default=1200.)
+    parser.add_argument("--fiducials", help="Fiducial mean flux and var_lss fits file.")
 
     parser.add_argument("--rfdwave", help="Rest-frame wave steps", type=float,
         default=1.)
