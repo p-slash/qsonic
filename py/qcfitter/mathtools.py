@@ -1,10 +1,14 @@
 import numpy as np
-from numba import njit
+# from numba import njit
 
-@njit
+# @njit
 def _fast_interp1d(x, xp0, dxp, fp):
     xx = (x - xp0)/dxp
-    idx = int(np.clip(xx, 0, fp.size-2))
+    idx = (np.clip(xx, 0, fp.size-2)).astype(int)
+    # idx = xx.astype(np.int32)
+    # idx[idx<0]=0
+    # idx[idx>fp.size-2]=fp.size-2
+
     d_idx = xx - idx
     y1, y2 = fp[idx], fp[idx+1]
 

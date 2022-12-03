@@ -34,6 +34,7 @@ class PiccaContinuumFitter(object):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
         self.dwrf = dwrf
         self.rfwave = w1rf + np.arange(self.nbins)*dwrf
+        self._denom = np.log(self.rfwave[-1]/self.rfwave[0])
 
         self.mean_cont = np.ones(self.nbins)
         self.meancont_interp = Fast1DInterpolator(w1rf, dwrf,
@@ -41,8 +42,11 @@ class PiccaContinuumFitter(object):
 
         if fiducial_fits:
             self._set_fiducials(fiducial_fits)
+        else:
+            self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
+            self.varlss_interp   = Fast1DInterpolator(0., 1., np.zeros(3))
 
-    def _continuum_chi2(x, wave, flux, ivar, z_qso):
+    def _continuum_chi2(self, x, wave, flux, ivar, z_qso):
         chi2 = 0
 
         for arm, wave_arm in wave.items():
@@ -65,8 +69,7 @@ class PiccaContinuumFitter(object):
         return chi2
 
     def get_continuum_model(self, x, wave_rf_arm):
-        Slope = np.log(wave_rf_arm)
-        Slope = (Slope-Slope[0])/(Slope[-1]-Slope[0])
+        Slope = np.log(wave_rf_arm/self.rfwave[0])/self._denom
 
         cont = self.meancont_interp(wave_rf_arm) * (x[0] + x[1]*Slope)
         # Multiply with resolution
@@ -97,7 +100,7 @@ class PiccaContinuumFitter(object):
 
         # For each forest fit continuum
         for spectrum in spectra_list:
-            self.cont_params['method'] = 'picca'
+            spectrum.cont_params['method'] = 'picca'
             self.fit_continuum(spectrum)
 
             if not spectrum.cont_params['valid']:
@@ -106,8 +109,8 @@ class PiccaContinuumFitter(object):
             else:
                 no_valid_fits += 1
 
-        no_valid_fits = comm.reduce(no_valid_fits, op=MPI.SUM, root=0)
-        no_invalid_fits = comm.reduce(no_invalid_fits, op=MPI.SUM, root=0)
+        no_valid_fits = comm.reduce(no_valid_fits, root=0)
+        no_invalid_fits = comm.reduce(no_invalid_fits, root=0)
         logging_mpi(f"Number of valid fits: {no_valid_fits}", mpi_rank)
         logging_mpi(f"Number of invalid fits: {no_invalid_fits}", mpi_rank)
 
@@ -124,19 +127,19 @@ class PiccaContinuumFitter(object):
                     continue
 
                 wave_rf_arm = wave_arm/(1+spectrum.z_qso)
-                bin_idx = ((wave_rf_arm - self.rfwave[0]-self.dwrf/2)/self.dwrf).astype(int)
+                bin_idx = ((wave_rf_arm - self.rfwave[0]+self.dwrf/2)/self.dwrf).astype(int)
 
                 cont  = self.get_continuum_model(spectrum.cont_params['x'], wave_rf_arm)
                 cont *= self.meanflux_interp(wave_arm)
 
-                norm_flux  = spectrum.forestflux[arm]/cont
+                flux_  = spectrum.forestflux[arm]/cont
                 # Deconvolve resolution matrix ?
 
                 var_lss = self.varlss_interp(wave_arm)
                 weight  = spectrum.forestivar[arm]*cont**2
                 weight  = weight / (1+weight*var_lss)
 
-                norm_flux += np.bincount(bin_idx, weights=norm_flux*weight, minlength=self.nbins)
+                norm_flux += np.bincount(bin_idx, weights=flux_*weight, minlength=self.nbins)
                 counts    += np.bincount(bin_idx, weights=weight, minlength=self.nbins)
 
         norm_flux = comm.allreduce(norm_flux)
@@ -155,7 +158,7 @@ class PiccaContinuumFitter(object):
         for it in range(niterations):
             logging_mpi(f"Fitting iteration {it+1}/{niterations}", mpi_rank)
             # Fit all continua one by one
-            self.fit_continua(self, spectra_list, comm, mpi_rank)
+            self.fit_continua(spectra_list, comm, mpi_rank)
             # Stack all spectra in each process
             # Broadcast and recalculate global functions
             has_converged = self.update_mean_cont(spectra_list, comm)

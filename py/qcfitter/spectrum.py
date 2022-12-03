@@ -225,10 +225,10 @@ class Spectrum(object):
 
     def set_forest_region(self, w1, w2, lya1, lya2):
         l1 = max(w1, (1+self.z_qso)*lya1)
-        l2 = max(w2, (1+self.z_qso)*lya2)
+        l2 = min(w2, (1+self.z_qso)*lya2)
 
-        a0 = 0
-        n0 = 0
+        a0 = 1e-6
+        n0 = 1e-6
         for arm in self.arms:
             self._f1[arm], self._f2[arm] = np.searchsorted(self.wave[arm], [l1, l2])
 
