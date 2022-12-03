@@ -44,8 +44,8 @@ class Fast1DInterpolator(object):
 
     """
     def __init__(self, xp0, dxp, fp, copy=False):
-        self.xp0 = xp0
-        self.dxp = dxp
+        self.xp0 = xp0.astype(float)
+        self.dxp = dxp.astype(float)
         if copy:
             self.fp = fp.copy()
         else:
