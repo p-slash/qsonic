@@ -37,6 +37,8 @@ if __name__ == '__main__':
         default=1.)
     parser.add_argument("--no-iterations", help="Number of iterations to perform for continuum fitting.",
         type=int, default=5)
+    parser.add_argument("--keep-nonforest-pixels", help="Keeps non forest wavelengths. Memory intensive!",
+        action="store_true")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG)
@@ -63,15 +65,18 @@ if __name__ == '__main__':
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
-        spectra_list.extend(read_spectra(cat, args.input_dir, args.arms, args.mock_analysis))
+        local_specs = read_spectra(cat, args.input_dir, args.arms, args.mock_analysis)
+        for spec in local_specs:
+            spec.set_forest_region(args.wave1, args.wave2, args.forest_w1, args.forest_w2)
+            if args.keep_nonforest_pixels:
+                spec.remove_nonforest_pixels()
+
+        spectra_list.extend(local_specs)
 
     nspec_all = comm.reduce(len(spectra_list), op=MPI.SUM, root=0)
     logging_mpi(f"All {nspec_all} spectra are read.", mpi_rank)
 
-    logging_mpi("Setting forest region.", mpi_rank)
-    for spec in spectra_list:
-        spec.set_forest_region(args.wave1, args.wave2, args.forest_w1, args.forest_w2)
-        # mask
+    # Mask
 
     # remove from sample if no pixels is small
     if args.skip > 0 and args.skip < 1:
