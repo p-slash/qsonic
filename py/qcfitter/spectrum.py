@@ -239,9 +239,10 @@ class Spectrum(object):
             self._forestreso[arm] = self.reso[arm][:, self._f1[arm]:self._f2[arm]]
 
             # np.shares_memory(self.forestflux, self.flux)
+            w = self.forestflux[arm]>0
 
-            a0 += np.sum(self.forestflux[arm]*self.forestivar[arm])
-            n0 += np.sum(self.forestivar[arm])
+            a0 += np.sum(self.forestflux[arm][w]*self.forestivar[arm][w])
+            n0 += np.sum(self.forestivar[arm][w])
 
         self.cont_params['x'][0] = a0/n0
 

@@ -69,6 +69,8 @@ if __name__ == '__main__':
     logging_mpi("Setting forest region.", mpi_rank)
     for spec in spectra_list:
         spec.set_forest_region(args.wave1, args.wave2, args.forest_w1, args.forest_w2)
+        # mask
+        # remove from sample if no pixels is small
 
     # Continuum fitting
     # -------------------

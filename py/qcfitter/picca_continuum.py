@@ -54,6 +54,11 @@ class PiccaContinuumFitter(object):
                 continue
 
             cont_est  = self.get_continuum_model(x, wave_arm/(1+z_qso))
+            # prior
+            if np.any(cont_est<0):
+                chi2 = np.inf
+                break
+
             cont_est *= self.meanflux_interp(wave_arm)
 
             var_lss = self.varlss_interp(wave_arm)*cont_est**2
