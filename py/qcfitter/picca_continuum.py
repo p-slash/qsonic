@@ -54,6 +54,9 @@ class PiccaContinuumFitter(object):
                 continue
 
             cont_est  = self.get_continuum_model(x, wave_arm/(1+z_qso))
+            no_neg = np.sum(cont_est<0)
+            penalty = wave_arm.size * no_neg**2
+
             cont_est *= self.meanflux_interp(wave_arm)
 
             var_lss = self.varlss_interp(wave_arm)*cont_est**2
@@ -62,7 +65,7 @@ class PiccaContinuumFitter(object):
 
             chi2 += np.sum(
                 weight * (flux[arm] - cont_est)**2
-            ) - np.log(weight[w]).sum()
+            ) - np.log(weight[w]).sum() + penalty
 
         return chi2
 
@@ -76,10 +79,10 @@ class PiccaContinuumFitter(object):
         return cont
 
     def fit_continuum(self, spectrum):
-        constr = ({'type': 'ineq',
-                   'fun': lambda x: self.get_continuum_model(x, wave_arm/(1+spectrum.z_qso))
-                  } for wave_arm in spectrum.forestwave.items() if wave_arm.size>0
-        )
+        # constr = ({'type': 'eq',
+        #            'fun': lambda x: self.get_continuum_model(x, wave_arm/(1+spectrum.z_qso))
+        #           } for wave_arm in spectrum.forestwave.values() if wave_arm.size>0
+        # )
 
         result = minimize(
             self._continuum_chi2,
@@ -88,15 +91,26 @@ class PiccaContinuumFitter(object):
                   spectrum.forestflux,
                   spectrum.forestivar,
                   spectrum.z_qso),
-            constraints=constr,
-            method='trust-constr',
+            # constraints=constr,
+            # method='COBYLA',
             bounds=[(0, None), (None, None)],
-            method=None,
             jac=None
         )
 
         spectrum.cont_params['valid'] = result.success
+
         if result.success:
+            for wave_arm in spectrum.forestwave.values():
+                if wave_arm.size == 0:
+                    continue
+
+                _cont = self.get_continuum_model(result.x, wave_arm/(1+spectrum.z_qso))
+
+                if any(_cont<0):
+                    spectrum.cont_params['valid'] = False
+                    break
+
+        if spectrum.cont_params['valid']:
             spectrum.cont_params['x'] = result.x
 
     def fit_continua(self, spectra_list, comm, mpi_rank):
@@ -110,7 +124,7 @@ class PiccaContinuumFitter(object):
 
             if not spectrum.cont_params['valid']:
                 no_invalid_fits+=1
-                logging_mpi(f"mpi:{mpi_rank}:Invalid continuum TARGETID: {spectrum.targetid}.", 0)
+                # logging_mpi(f"mpi:{mpi_rank}:Invalid continuum TARGETID: {spectrum.targetid}.", 0)
             else:
                 no_valid_fits += 1
 
@@ -151,9 +165,16 @@ class PiccaContinuumFitter(object):
         counts = comm.allreduce(counts)
         norm_flux /= counts
 
-        has_converged = np.allclose(norm_flux, 1, rtol=1e-4)
-
+        old_mean_cont = self.mean_cont.copy()
         self.mean_cont *= norm_flux
+        self.mean_cont /= self.mean_cont.mean()
+
+        norm_flux = self.mean_cont / old_mean_cont - 1
+        logging_mpi("Continuum updates", comm.Get_rank())
+        for _w, _c in zip(self.rfwave, norm_flux):
+            logging_mpi(f"{_w:10.2f}   1+{_c:10.2e}", comm.Get_rank())
+
+        has_converged = np.allclose(self.mean_cont, old_mean_cont, atol=1e-4, rtol=1e-4)
 
         return has_converged
 
