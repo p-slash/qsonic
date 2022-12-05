@@ -174,6 +174,8 @@ class Spectrum(object):
     """
     _wave = None
     _arms = None
+    _dwave = None
+
     @staticmethod
     def _set_wave(wave):
         if not Spectrum._wave:
@@ -183,6 +185,8 @@ class Spectrum(object):
             for arm in Spectrum._arms:
                 assert (arm in wave.keys())
                 assert (np.allclose(Spectrum._wave[arm], wave[arm]))
+
+        _dwave = wave[1] - wave[0]
 
     def __init__(self, z_qso, targetid, wave, flux, ivar, mask, reso, idx):
         self.z_qso = z_qso
@@ -246,9 +250,20 @@ class Spectrum(object):
 
         self.cont_params['x'][0] = a0/n0
 
+    def get_real_size(self):
+        size = 0
+        for arm in self.arms:
+            size += self._f2[arm] - self._f1[arm]
+            size -= np.sum(self.ivar[arm] == 0)
+
+        return size
+
     @property
     def wave(self):
         return Spectrum._wave
+    @property
+    def dwave(self):
+        return Spectrum._dwave
 
     @property
     def arms(self):

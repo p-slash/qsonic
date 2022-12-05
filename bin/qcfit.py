@@ -31,6 +31,8 @@ if __name__ == '__main__':
         default=1200.)
     parser.add_argument("--fiducials", help="Fiducial mean flux and var_lss fits file.")
 
+    parser.add_argument("--skip", help="Skip short spectra lower than given ratio.",
+        type=float)
     parser.add_argument("--rfdwave", help="Rest-frame wave steps", type=float,
         default=1.)
     parser.add_argument("--no-iterations", help="Number of iterations to perform for continuum fitting.",
@@ -70,7 +72,12 @@ if __name__ == '__main__':
     for spec in spectra_list:
         spec.set_forest_region(args.wave1, args.wave2, args.forest_w1, args.forest_w2)
         # mask
-        # remove from sample if no pixels is small
+
+    # remove from sample if no pixels is small
+    if args.skip > 0 and args.skip < 1:
+        dforest_wave = args.forest_w2 - args.forest_w1
+        _npixels = lambda spec: (1+spec.z_qso)*dforest_wave/spec.dwave
+        spectra_list = [spec for spec in spectra_list if spec.get_real_size() > args.skip*_npixels(spec)]
 
     # Continuum fitting
     # -------------------
