@@ -186,7 +186,8 @@ class Spectrum(object):
                 assert (arm in wave.keys())
                 assert (np.allclose(Spectrum._wave[arm], wave[arm]))
 
-        _dwave = wave[1] - wave[0]
+                if Spectrum._dwave is None:
+                    Spectrum._dwave = wave[arm][1] - wave[arm][0]
 
     def __init__(self, z_qso, targetid, wave, flux, ivar, mask, reso, idx):
         self.z_qso = z_qso

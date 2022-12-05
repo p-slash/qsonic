@@ -164,17 +164,17 @@ class PiccaContinuumFitter(object):
         norm_flux = comm.allreduce(norm_flux)
         counts = comm.allreduce(counts)
         norm_flux /= counts
+        std_flux = 1/np.sqrt(counts)
 
         old_mean_cont = self.mean_cont.copy()
         self.mean_cont *= norm_flux
-        self.mean_cont /= self.mean_cont.mean()
 
-        norm_flux = self.mean_cont / old_mean_cont - 1
+        norm_flux -= 1
         logging_mpi("Continuum updates", comm.Get_rank())
-        for _w, _c in zip(self.rfwave, norm_flux):
-            logging_mpi(f"{_w:10.2f}   1+{_c:10.2e}", comm.Get_rank())
+        for _w, _c, _e in zip(self.rfwave, norm_flux, std_flux):
+            logging_mpi(f"{_w:10.2f}: 1+({_c:10.2e}) pm {_e:10.2e}", comm.Get_rank())
 
-        has_converged = np.allclose(self.mean_cont, old_mean_cont, atol=1e-4, rtol=1e-4)
+        has_converged = np.allclose(np.abs(norm_flux), std_flux, rtol=0.5)
 
         return has_converged
 
