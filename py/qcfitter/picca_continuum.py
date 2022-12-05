@@ -54,11 +54,6 @@ class PiccaContinuumFitter(object):
                 continue
 
             cont_est  = self.get_continuum_model(x, wave_arm/(1+z_qso))
-            # prior
-            if np.any(cont_est<0):
-                chi2 = np.inf
-                break
-
             cont_est *= self.meanflux_interp(wave_arm)
 
             var_lss = self.varlss_interp(wave_arm)*cont_est**2
@@ -81,6 +76,11 @@ class PiccaContinuumFitter(object):
         return cont
 
     def fit_continuum(self, spectrum):
+        constr = ({'type': 'ineq',
+                   'fun': lambda x: self.get_continuum_model(x, wave_arm/(1+spectrum.z_qso))
+                  } for wave_arm in spectrum.forestwave.items() if wave_arm.size>0
+        )
+
         result = minimize(
             self._continuum_chi2,
             spectrum.cont_params['x'],
@@ -88,7 +88,9 @@ class PiccaContinuumFitter(object):
                   spectrum.forestflux,
                   spectrum.forestivar,
                   spectrum.z_qso),
-            bounds=[(0, 500), (-20, 20)],
+            constraints=constr,
+            method='trust-constr',
+            bounds=[(0, None), (None, None)],
             method=None,
             jac=None
         )
