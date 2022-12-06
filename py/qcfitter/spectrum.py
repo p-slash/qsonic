@@ -278,7 +278,7 @@ class Spectrum(object):
             self._f2[arm] = self.wave[arm].size
             self.flux[arm] = flux[arm][idx]
             self.ivar[arm] = ivar[arm][idx]
-            _mask = (mask[arm][idx] == 0) | np.isnan(self.flux[arm]) | np.isnan(self.ivar[arm])
+            _mask = mask[arm][idx] | np.isnan(self.flux[arm]) | np.isnan(self.ivar[arm])
             self.flux[arm][_mask] = 0
             self.ivar[arm][_mask] = 0
 
