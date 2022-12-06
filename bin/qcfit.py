@@ -1,11 +1,13 @@
 import logging
 import argparse
 
+from os import makedirs as os_makedirs
+
 import numpy as np
 from mpi4py import MPI
 
 from qcfitter.catalog import Catalog
-from qcfitter.spectrum import Spectrum, read_spectra
+from qcfitter.spectrum import Spectrum, read_spectra, save_deltas
 from qcfitter.mpi_utils import balance_load, logging_mpi
 from qcfitter.picca_continuum import PiccaContinuumFitter
 
@@ -18,6 +20,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--input-dir", help="Input directory to healpix", required=True)
     parser.add_argument("--catalog", help="Catalog filename", required=True)
+    parser.add_argument("--outdir", '-o', help="Output directory to save deltas.")
+
     parser.add_argument("--mock-analysis", help="Input folder is mock.", action="store_true")
     parser.add_argument("--arms", help="Arms to read.", default=['B', 'R'], nargs='+')
 
@@ -39,6 +43,7 @@ if __name__ == '__main__':
         type=int, default=5)
     parser.add_argument("--keep-nonforest-pixels", help="Keeps non forest wavelengths. Memory intensive!",
         action="store_true")
+    parser.add_argument("--out-nside", help="Output healpix nside if you want to reorganize.", type=int)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG)
@@ -96,6 +101,17 @@ if __name__ == '__main__':
     # Iterate
     qcfit.iterate(spectra_list, args.no_iterations, comm, mpi_rank)
 
-    logging_mpi("All continua are fit.", mpi_rank)
+    logging_mpi("All continua are fit. Saving deltas", mpi_rank)
+
     # Save deltas
+    if not args.out_nside or args.out_nside<=0:
+        args.out_nside = n_side
+
+    if args.outdir:
+        os_makedirs(args.outdir, exist_ok=True)
+        save_deltas(spectra_list, args.outdir, args.out_nside, qcfit.varlss_interp)
+
+
+
+
 

@@ -1,4 +1,5 @@
 import numpy as np
+from healpy import ang2pix
 import fitsio
 
 def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
@@ -86,7 +87,7 @@ def generate_spectra_list_from_data(cat_by_survey, data, nquasars):
         targetid = row['TARGETID']
 
         spectra_list.append(
-            Spectrum(z_qso, targetid, data['wave'], data['flux'],
+            Spectrum(z_qso, targetid, row['RA'], row['DEC'], data['wave'], data['flux'],
                 data['ivar'], data['mask'], data['reso'], idx)
         )
 
@@ -136,6 +137,67 @@ def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, program="dark"):
         )
     
     return spectra_list
+
+def save_deltas(spectra_list, outdir, out_nside, varlss_interp):
+    """ Saves given list of spectra as deltas. NO coaddition of arms.
+    Each arm is saved separately
+
+    Arguments
+    ---------
+    spectra_list: list of Spectrum
+    continuum fitted spectra objects
+
+    outdir: str
+    output directory
+
+    out_nside: int
+    output healpix nside
+
+    varlss_interp: Interpolator
+    interpolator for LSS variance
+
+    """
+    pixnos = np.array([ang2pix(out_nside, spec.ra, spec.dec, lonlat=True, nest=True)
+        for spec in spectra_list])
+    sort_idx = np.argsort(pixnos)
+    pixnos = pixnos[sort_idx]
+    unique_pix, s = np.unique(pixnos, return_index=True)
+    split_spectra = np.split(spectra_list[sort_idx], s[1:])
+
+    for healpix, hp_specs in zip(unique_pix, split_spectra):
+        results = fitsio.FITS(f"{outdir}/deltas-{healpix}.fits.gz",'rw', clobber=True)
+
+        for spec in hp_specs:
+            if not spectrum.cont_params['valid']:
+                continue
+
+            header = [
+                { 'name': 'LOS_ID','value': spec.targetid,'comment': 'Picca line-of-sight id' },
+                { 'name': 'TARGETID', 'value': spec.targetid, 'comment': 'Object identification' },
+                { 'name': 'RA', 'value': spec.ra, 'comment': 'Right Ascension [rad]' },
+                { 'name': 'DEC', 'value': spec.dec, 'comment': 'Declination [rad]' },
+                { 'name': 'Z', 'value': spec.z_qso, 'comment': 'Redshift' },
+                # { 'name': 'MEANSNR', 'value': spec.mean_snr, 'comment': 'Mean SNR' },
+                { 'name': 'BLINDING', 'value': "none", 'comment': "String specifying the blinding strategy" },
+                { 'name': 'WAVE_SOLUTION', 'value': "lin", 'comment': "Chosen wavelength solution (linear or logarithmic)" },
+            ]
+            for arm in spec.arms:
+                wave_arm = spec.forestwave[arm]
+                _cont = spectrum.cont_params['cont'][arm]
+                delta = spec.forestflux[arm]/_cont-1
+                ivar  = spec.forestivar[arm]*_cont**2
+                var_lss = varlss_interp(wave_arm)
+                weight = ivar / (1+ivar*var_lss)
+
+                mean_snr = np.mean(np.sqrt(ivar[ivar!=0]))
+                cols = [wave_arm, delta, ivar, weight, _cont, spec.forestreso[arm]]
+                names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT', 'RESOMAT']
+
+                results.write(cols, names=names,
+                    header=header+[{ 'name': 'MEANSNR', 'value': mean_snr, 'comment': 'Mean SNR' }],
+                    extname=str(spec.targetid)+f"{arm}")
+
+        results.close()
 
 class Spectrum(object):
     """Represents one spectrum.
@@ -189,9 +251,11 @@ class Spectrum(object):
                 if Spectrum._dwave is None:
                     Spectrum._dwave = wave[arm][1] - wave[arm][0]
 
-    def __init__(self, z_qso, targetid, wave, flux, ivar, mask, reso, idx):
+    def __init__(self, z_qso, targetid, ra, dec, wave, flux, ivar, mask, reso, idx):
         self.z_qso = z_qso
         self.targetid = targetid
+        self.ra = ra
+        self.dec = dec
         Spectrum._set_wave(wave)
 
         self.flux = {}
@@ -223,6 +287,7 @@ class Spectrum(object):
         self.cont_params['method'] = ''
         self.cont_params['valid'] = False
         self.cont_params['x'] = np.array([1., 0.])
+        self.cont_params['cont'] = None
 
     # def set_continuum(self, wave_p, cont_p):
     #     for arm in self.arms:
