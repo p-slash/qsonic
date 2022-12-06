@@ -153,7 +153,7 @@ class PiccaContinuumFitter(object):
                     continue
 
                 wave_rf_arm = wave_arm/(1+spectrum.z_qso)
-                bin_idx = ((wave_rf_arm - self.rfwave[0]+self.dwrf/2)/self.dwrf).astype(int)
+                bin_idx = ((wave_rf_arm - self.rfwave[0])/self.dwrf + 0.5).astype(int)
 
                 cont  = self.get_continuum_model(spectrum.cont_params['x'], wave_rf_arm)
                 cont *= self.meanflux_interp(wave_arm)

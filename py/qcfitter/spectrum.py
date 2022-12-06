@@ -193,13 +193,13 @@ def save_deltas(spectra_list, outdir, out_nside, varlss_interp):
                 var_lss = varlss_interp(wave_arm)
                 weight = ivar / (1+ivar*var_lss)
 
-                hdr_dict['MEANSNR'] = np.mean(np.sqrt(ivar[ivar!=0]))
+                hdr_dict['MEANSNR'] = np.mean(np.sqrt(ivar[ivar>0]))
 
                 cols = [wave_arm, delta, ivar, weight, _cont, spec.forestreso[arm].T]
                 names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT', 'RESOMAT']
 
                 results.write(cols, names=names, header=hdr_dict,
-                    extname=str(spec.targetid)+f"{arm}")
+                    extname=f"{spec.targetid}-{arm}")
 
         results.close()
 
@@ -324,7 +324,7 @@ class Spectrum(object):
         size = 0
         for arm in self.arms:
             size += self._f2[arm] - self._f1[arm]
-            size -= np.sum(self.ivar[arm] == 0)
+            size -= np.sum(self.ivar[arm] <= 0)
 
         return size
 
