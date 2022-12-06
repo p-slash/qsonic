@@ -61,6 +61,7 @@ if __name__ == '__main__':
     # Group into unique pixels
     unique_pix, s = np.unique(qso_cat.catalog['PIXNUM'], return_index=True)
     split_catalog = np.split(qso_cat.catalog, s[1:])
+    logging_mpi(f"There are {unique_pix.size} healpixels. Using more MPI processes will be unused.", mpi_rank)
 
     # Roughly equal number of spectra
     logging_mpi("Load balancing.", mpi_rank)
