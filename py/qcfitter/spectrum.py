@@ -171,16 +171,17 @@ def save_deltas(spectra_list, outdir, out_nside, varlss_interp):
             if not spec.cont_params['valid']:
                 continue
 
-            header = [
-                { 'name': 'LOS_ID','value': spec.targetid,'comment': 'Picca line-of-sight id' },
-                { 'name': 'TARGETID', 'value': spec.targetid, 'comment': 'Object identification' },
-                { 'name': 'RA', 'value': spec.ra, 'comment': 'Right Ascension [rad]' },
-                { 'name': 'DEC', 'value': spec.dec, 'comment': 'Declination [rad]' },
-                { 'name': 'Z', 'value': spec.z_qso, 'comment': 'Redshift' },
-                # { 'name': 'MEANSNR', 'value': spec.mean_snr, 'comment': 'Mean SNR' },
-                { 'name': 'BLINDING', 'value': "none", 'comment': "String specifying the blinding strategy" },
-                { 'name': 'WAVE_SOLUTION', 'value': "lin", 'comment': "Chosen wavelength solution (linear or logarithmic)" },
-            ]
+            hdr_dict = {
+                'LOS_ID': spec.targetid,
+                'TARGETID': spec.targetid,
+                'RA': spec.ra, 'DEC': spec.dec,
+                'Z': spec.z_qso,
+                'BLINDING': "none",
+                'WAVE_SOLUTION': "lin",
+                'MEANSNR': 0.,
+                'DLAMBDA': spec.dwave
+            }
+
             for arm in spec.arms:
                 wave_arm = spec.forestwave[arm]
                 _cont = spec.cont_params['cont'][arm]
@@ -189,12 +190,12 @@ def save_deltas(spectra_list, outdir, out_nside, varlss_interp):
                 var_lss = varlss_interp(wave_arm)
                 weight = ivar / (1+ivar*var_lss)
 
-                mean_snr = np.mean(np.sqrt(ivar[ivar!=0]))
+                hdr_dict['MEANSNR'] = np.mean(np.sqrt(ivar[ivar!=0]))
+
                 cols = [wave_arm, delta, ivar, weight, _cont, spec.forestreso[arm].T]
                 names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT', 'RESOMAT']
 
-                results.write(cols, names=names,
-                    header=header+[{ 'name': 'MEANSNR', 'value': mean_snr, 'comment': 'Mean SNR' }],
+                results.write(cols, names=names, header=hdr_dict,
                     extname=str(spec.targetid)+f"{arm}")
 
         results.close()
