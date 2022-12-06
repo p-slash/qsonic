@@ -184,6 +184,9 @@ def save_deltas(spectra_list, outdir, out_nside, varlss_interp):
 
             for arm in spec.arms:
                 wave_arm = spec.forestwave[arm]
+                if wave_arm.size == 0:
+                    continue
+
                 _cont = spec.cont_params['cont'][arm]
                 delta = spec.forestflux[arm]/_cont-1
                 ivar  = spec.forestivar[arm]*_cont**2
@@ -275,7 +278,7 @@ class Spectrum(object):
             self._f2[arm] = self.wave[arm].size
             self.flux[arm] = flux[arm][idx]
             self.ivar[arm] = ivar[arm][idx]
-            _mask = mask[arm][idx]
+            _mask = (mask[arm][idx] == 0) | np.isnan(self.flux[arm]) | np.isnan(self.ivar[arm])
             self.flux[arm][_mask] = 0
             self.ivar[arm][_mask] = 0
 
