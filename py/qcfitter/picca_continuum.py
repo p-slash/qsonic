@@ -113,7 +113,7 @@ class PiccaContinuumFitter(object):
         if spectrum.cont_params['valid']:
             spectrum.cont_params['x'] = result.x
             spectrum.cont_params['cont'] = {}
-            for arm, wave_arm in wave.items():
+            for arm, wave_arm in spectrum.forestwave.items():
                 _cont  = self.get_continuum_model(result.x, wave_arm/(1+spectrum.z_qso))
                 _cont *= self.meanflux_interp(wave_arm)
                 spectrum.cont_params['cont'][arm] = _cont

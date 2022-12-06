@@ -162,13 +162,13 @@ def save_deltas(spectra_list, outdir, out_nside, varlss_interp):
     sort_idx = np.argsort(pixnos)
     pixnos = pixnos[sort_idx]
     unique_pix, s = np.unique(pixnos, return_index=True)
-    split_spectra = np.split(spectra_list[sort_idx], s[1:])
+    split_spectra = np.split(np.array(spectra_list)[sort_idx], s[1:])
 
     for healpix, hp_specs in zip(unique_pix, split_spectra):
         results = fitsio.FITS(f"{outdir}/deltas-{healpix}.fits.gz",'rw', clobber=True)
 
         for spec in hp_specs:
-            if not spectrum.cont_params['valid']:
+            if not spec.cont_params['valid']:
                 continue
 
             header = [
@@ -183,14 +183,14 @@ def save_deltas(spectra_list, outdir, out_nside, varlss_interp):
             ]
             for arm in spec.arms:
                 wave_arm = spec.forestwave[arm]
-                _cont = spectrum.cont_params['cont'][arm]
+                _cont = spec.cont_params['cont'][arm]
                 delta = spec.forestflux[arm]/_cont-1
                 ivar  = spec.forestivar[arm]*_cont**2
                 var_lss = varlss_interp(wave_arm)
                 weight = ivar / (1+ivar*var_lss)
 
                 mean_snr = np.mean(np.sqrt(ivar[ivar!=0]))
-                cols = [wave_arm, delta, ivar, weight, _cont, spec.forestreso[arm]]
+                cols = [wave_arm, delta, ivar, weight, _cont, spec.forestreso[arm].T]
                 names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT', 'RESOMAT']
 
                 results.write(cols, names=names,
