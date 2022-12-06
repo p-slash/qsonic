@@ -68,7 +68,7 @@ if __name__ == '__main__':
         local_specs = read_spectra(cat, args.input_dir, args.arms, args.mock_analysis)
         for spec in local_specs:
             spec.set_forest_region(args.wave1, args.wave2, args.forest_w1, args.forest_w2)
-            if args.keep_nonforest_pixels:
+            if not args.keep_nonforest_pixels:
                 spec.remove_nonforest_pixels()
 
         spectra_list.extend(local_specs)
