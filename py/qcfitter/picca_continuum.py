@@ -101,9 +101,6 @@ class PiccaContinuumFitter(object):
 
         if result.success:
             for wave_arm in spectrum.forestwave.values():
-                if wave_arm.size == 0:
-                    continue
-
                 _cont = self.get_continuum_model(result.x, wave_arm/(1+spectrum.z_qso))
 
                 if any(_cont<0):
@@ -149,9 +146,6 @@ class PiccaContinuumFitter(object):
                 continue 
 
             for arm, wave_arm in spectrum.forestwave.items():
-                if wave_arm.size == 0:
-                    continue
-
                 wave_rf_arm = wave_arm/(1+spectrum.z_qso)
                 bin_idx = ((wave_rf_arm - self.rfwave[0])/self.dwrf + 0.5).astype(int)
 

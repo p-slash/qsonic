@@ -182,11 +182,7 @@ def save_deltas(spectra_list, outdir, out_nside, varlss_interp):
                 'DLAMBDA': spec.dwave
             }
 
-            for arm in spec.arms:
-                wave_arm = spec.forestwave[arm]
-                if wave_arm.size == 0:
-                    continue
-
+            for arm, wave_arm in spec.forestwave.items():
                 _cont = spec.cont_params['cont'][arm]
                 delta = spec.forestflux[arm]/_cont-1
                 ivar  = spec.forestivar[arm]*_cont**2
@@ -297,20 +293,43 @@ class Spectrum(object):
     #     for arm in self.arms:
     #         self.cont[arm] = np.interp(self.forestwave[arm], wave_p, cont_p)
 
-    def set_forest_region(self, w1, w2, lya1, lya2):
+    def set_forest_region(self, w1, w2, lya1, lya2, skip_ratio=0):
+        """ Sets slices for the forest region. Arms that have less than
+        skip_ratio pixels will not be added to forest dictionary.
+
+        Arguments
+        ---------
+        w1, w2: floats
+        Observed wavelength range
+
+        lya1, lya2: floats
+        Rest-frame wavelength for the forest
+
+        skip_ratio: float
+        Remove arms if they have less than this ratio of pixels
+
+        """
+        _npixels_expected = skip_ratio*(1+self.z_qso)*(lya2 - lya1)/spec.dwave
+
         l1 = max(w1, (1+self.z_qso)*lya1)
         l2 = min(w2, (1+self.z_qso)*lya2)
 
         a0 = 1e-6
         n0 = 1e-6
         for arm in self.arms:
-            self._f1[arm], self._f2[arm] = np.searchsorted(self.wave[arm], [l1, l2])
+            ii1, ii2 = np.searchsorted(self.wave[arm], [l1, l2])
+            real_size_arm = ii2-ii1 - np.sum(self.ivar[arm][ii1:ii2] == 0)
+            if real_size_arm < _npixels_expected:
+                continue
+
+            # if larger than skip ratio, add to dict
+            self._f1[arm], self._f2[arm] = ii1, ii2
 
             # Does this create a view or copy array?
-            self._forestwave[arm] = self.wave[arm][self._f1[arm]:self._f2[arm]]
-            self._forestflux[arm] = self.flux[arm][self._f1[arm]:self._f2[arm]]
-            self._forestivar[arm] = self.ivar[arm][self._f1[arm]:self._f2[arm]]
-            self._forestreso[arm] = self.reso[arm][:, self._f1[arm]:self._f2[arm]]
+            self._forestwave[arm] = self.wave[arm][ii1, ii2]
+            self._forestflux[arm] = self.flux[arm][ii1, ii2]
+            self._forestivar[arm] = self.ivar[arm][ii1, ii2]
+            self._forestreso[arm] = self.reso[arm][:, ii1, ii2]
 
             # np.shares_memory(self.forestflux, self.flux)
             w = self.forestflux[arm]>0
@@ -322,9 +341,8 @@ class Spectrum(object):
 
     def get_real_size(self):
         size = 0
-        for arm in self.arms:
-            size += self._f2[arm] - self._f1[arm]
-            size -= np.sum(self.ivar[arm] <= 0)
+        for ivar_arm in self.forestivar.values():
+            size += ivar_arm.size - np.sum(ivar_arm == 0)
 
         return size
 
