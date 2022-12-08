@@ -36,7 +36,7 @@ if __name__ == '__main__':
     parser.add_argument("--fiducials", help="Fiducial mean flux and var_lss fits file.")
 
     parser.add_argument("--skip", help="Skip short spectra lower than given ratio.",
-        type=float)
+        type=float, default=0.)
     parser.add_argument("--rfdwave", help="Rest-frame wave steps", type=float,
         default=1.)
     parser.add_argument("--no-iterations", help="Number of iterations to perform for continuum fitting.",
@@ -50,6 +50,10 @@ if __name__ == '__main__':
 
     if any(arm not in ['B', 'R', 'Z'] for arm in args.arms):
         logging_mpi("Arms should be 'B', 'R' or 'Z'.", mpi_rank, "error")
+        comm.Abort()
+
+    if args.skip < 0 or args.skip > 1:
+        logging_mpi("Skip ratio should be between 0 and 1", mpi_rank, "error")
         comm.Abort()
 
     # read catalog
@@ -73,7 +77,12 @@ if __name__ == '__main__':
     for cat in local_queue:
         local_specs = read_spectra(cat, args.input_dir, args.arms, args.mock_analysis)
         for spec in local_specs:
-            spec.set_forest_region(args.wave1, args.wave2, args.forest_w1, args.forest_w2)
+            spec.set_forest_region(
+                args.wave1, args.wave2,
+                args.forest_w1, args.forest_w2,
+                args.skip/2
+            )
+
             if not args.keep_nonforest_pixels:
                 spec.remove_nonforest_pixels()
 
@@ -85,7 +94,7 @@ if __name__ == '__main__':
     # Mask
 
     # remove from sample if no pixels is small
-    if args.skip > 0 and args.skip < 1:
+    if args.skip > 0:
         dforest_wave = args.forest_w2 - args.forest_w1
         _npixels = lambda spec: (1+spec.z_qso)*dforest_wave/spec.dwave
         spectra_list = [spec for spec in spectra_list if spec.get_real_size() > args.skip*_npixels(spec)]
