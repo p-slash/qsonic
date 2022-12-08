@@ -309,7 +309,7 @@ class Spectrum(object):
         Remove arms if they have less than this ratio of pixels
 
         """
-        _npixels_expected = skip_ratio*(1+self.z_qso)*(lya2 - lya1)/spec.dwave
+        _npixels_expected = skip_ratio*(1+self.z_qso)*(lya2 - lya1)/self.dwave
 
         l1 = max(w1, (1+self.z_qso)*lya1)
         l2 = min(w2, (1+self.z_qso)*lya2)
@@ -326,10 +326,10 @@ class Spectrum(object):
             self._f1[arm], self._f2[arm] = ii1, ii2
 
             # Does this create a view or copy array?
-            self._forestwave[arm] = self.wave[arm][ii1, ii2]
-            self._forestflux[arm] = self.flux[arm][ii1, ii2]
-            self._forestivar[arm] = self.ivar[arm][ii1, ii2]
-            self._forestreso[arm] = self.reso[arm][:, ii1, ii2]
+            self._forestwave[arm] = self.wave[arm][ii1:ii2]
+            self._forestflux[arm] = self.flux[arm][ii1:ii2]
+            self._forestivar[arm] = self.ivar[arm][ii1:ii2]
+            self._forestreso[arm] = self.reso[arm][:, ii1:ii2]
 
             # np.shares_memory(self.forestflux, self.flux)
             w = self.forestflux[arm]>0
