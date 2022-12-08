@@ -1,0 +1,5 @@
+numpy
+scipy
+healpy
+fitsio
+mpi4py
