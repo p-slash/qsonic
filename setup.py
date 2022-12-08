@@ -1,6 +1,9 @@
 from setuptools import setup
 import os
+
 binscripts = [os.path.join("bin", f) for f in os.listdir("bin") if f.endswith(".py")]
+with open("requirements.txt") as file_reqs:
+    requirements = file_reqs.read().splitlines()
 
 setup(
     name="qcfitter",
@@ -10,8 +13,7 @@ setup(
     # package_data={"qsotools": ["tables/*"]},
     # include_package_data=True,
     scripts=binscripts,
-
-    # install_requires=["docutils>=0.3"],
+    install_requires=requirements,
 
     # metadata to display on PyPI
     author = "Naim Goksel Karacayli",
