@@ -309,7 +309,7 @@ class Spectrum(object):
         Remove arms if they have less than this ratio of pixels
 
         """
-        _npixels_expected = skip_ratio*(1+self.z_qso)*(lya2 - lya1)/self.dwave
+        _npixels_expected = int(skip_ratio*(1+self.z_qso)*(lya2 - lya1)/self.dwave)+1
 
         l1 = max(w1, (1+self.z_qso)*lya1)
         l2 = min(w2, (1+self.z_qso)*lya2)

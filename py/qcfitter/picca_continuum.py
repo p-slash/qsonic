@@ -50,9 +50,6 @@ class PiccaContinuumFitter(object):
         chi2 = 0
 
         for arm, wave_arm in wave.items():
-            if wave_arm.size == 0:
-                continue
-
             cont_est  = self.get_continuum_model(x, wave_arm/(1+z_qso))
             no_neg = np.sum(cont_est<0)
             penalty = wave_arm.size * no_neg**2
