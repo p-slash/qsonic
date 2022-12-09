@@ -43,7 +43,9 @@ if __name__ == '__main__':
         type=int, default=5)
     parser.add_argument("--keep-nonforest-pixels", help="Keeps non forest wavelengths. Memory intensive!",
         action="store_true")
-    parser.add_argument("--out-nside", help="Output healpix nside if you want to reorganize.", type=int)
+    parser.add_argument("--save-by-hpx", help="Save by healpix. If not, saves by MPI rank.",
+        action="store_true")
+    # parser.add_argument("--out-nside", help="Output healpix nside if you want to reorganize.", type=int)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG)
@@ -113,12 +115,17 @@ if __name__ == '__main__':
     logging_mpi("All continua are fit. Saving deltas", mpi_rank)
 
     # Save deltas
-    if not args.out_nside or args.out_nside<=0:
-        args.out_nside = n_side
-
     if args.outdir:
         os_makedirs(args.outdir, exist_ok=True)
-        save_deltas(spectra_list, args.outdir, args.out_nside, qcfit.varlss_interp)
+        if args.save_by_hpx:
+            out_nside = nside
+            out_by_mpi= None
+        else:
+            out_nside = None
+            out_by_mpi= mpi_rank
+
+        save_deltas(spectra_list, args.outdir, qcfit.varlss_interp,
+            out_nside=out_nside, mpi_rank=out_by_mpi)
 
 
 
