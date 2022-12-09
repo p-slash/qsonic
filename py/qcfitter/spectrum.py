@@ -118,7 +118,7 @@ def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, program="dark"):
     spectra_list: list of Spectrum
     """
     spectra_list = []
-    pixnum = cat['PIXNUM'][0]
+    pixnum = cat['HPXPIXEL'][0]
 
     if not mock_analysis:
         cat.sort(order='SURVEY')
