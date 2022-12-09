@@ -20,9 +20,6 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
     ---------
     data: dict
     only quasar spectra are read into keywords wave, flux etc. Resolution is read if present.
-
-    quasar_indices: np.array of int
-    indices of quasars in fits file.
     """
     cat_by_survey.sort(order='TARGETID')
     fitsfile = fitsio.FITS(fspec)
@@ -31,13 +28,17 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
     isin = np.isin(fbrmap['TARGETID'], cat_by_survey['TARGETID'])
     quasar_indices = np.nonzero(isin)[0]
     if (quasar_indices.size != cat_by_survey.size):
-        logging.error(f"Error not all targets are in file {cat_by_survey.size} vs {quasar_indices.size}")
+        logging.error(
+             "Error not all targets are in file "
+            f"catalog:{cat_by_survey.size} vs healpix:{quasar_indices.size}"
+        )
 
     fbrmap = fbrmap[isin]
-    # sort_idx = fbrmap.argsort(order='TARGETID')
-    # fbrmap = fbrmap[sort_idx]
+    sort_idx = fbrmap.argsort(order='TARGETID')
+    fbrmap = fbrmap[sort_idx]
+    quasar_indices = quasar_indices[sort_idx]
 
-    # assert np.all(cat_by_survey['TARGETID'] == fbrmap['TARGETID'])
+    assert np.all(cat_by_survey['TARGETID'] == fbrmap['TARGETID'])
 
     data = {
         'wave': {},
@@ -49,28 +50,28 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
 
     for arm in arms_to_keep:
         # Cannot read by rows= argument. Slicing doesn't work either. Have to read all
-        data['wave'][arm] = np.array(fitsfile[f'{arm}_WAVELENGTH'].read())
-        data['flux'][arm] = np.array(fitsfile[f'{arm}_FLUX'].read()[quasar_indices])
-        data['ivar'][arm] = np.array(fitsfile[f'{arm}_IVAR'].read()[quasar_indices])
-        data['mask'][arm] = np.array(fitsfile[f'{arm}_MASK'].read()[quasar_indices])
+        data['wave'][arm] = fitsfile[f'{arm}_WAVELENGTH'].read()
+        data['flux'][arm] = fitsfile[f'{arm}_FLUX'].read()[quasar_indices]
+        data['ivar'][arm] = fitsfile[f'{arm}_IVAR'].read()[quasar_indices]
+        data['mask'][arm] = fitsfile[f'{arm}_MASK'].read()[quasar_indices]
         if f'{arm}_RESOLUTION' in fitsfile:
-            data['reso'][arm] = np.array(fitsfile[f'{arm}_RESOLUTION'].read()[quasar_indices])
+            data['reso'][arm] = fitsfile[f'{arm}_RESOLUTION'].read()[quasar_indices]
 
     fitsfile.close()
 
-    return data, quasar_indices.size
+    return data
 
 def read_onehealpix_file_data(cat_by_survey, input_dir, pixnum, arms_to_keep, program="dark"):
     survey = cat_by_survey['SURVEY'][0]
 
     fspec = f"{input_dir}/{survey}/{program}/{pixnum//100}/{pixnum}/coadd-{survey}-{program}-{pixnum}.fits"
-    data, nquasars = _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep)
+    data = _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep)
 
-    return data, nquasars
+    return data
 
 def read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep, nside=16):
     fspec = f"{input_dir}/{pixnum//100}/{pixnum}/spectra-{nside}-{pixnum}.fits"
-    data, nquasars = _read_onehealpix_file(cat, fspec, arms_to_keep)
+    data = _read_onehealpix_file(cat, fspec, arms_to_keep)
 
     fspec = f"{input_dir}/{pixnum//100}/{pixnum}/truth-{nside}-{pixnum}.fits"
     fitsfile = fitsio.FITS(fspec)
@@ -78,11 +79,11 @@ def read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep, nside=16):
         data['reso'][arm] = np.array(fitsfile[f'{arm}_RESOLUTION'].read())
     fitsfile.close()
 
-    return data, nquasars
+    return data
 
-def generate_spectra_list_from_data(cat_by_survey, data, nquasars):
+def generate_spectra_list_from_data(cat_by_survey, data):
     spectra_list = []
-    for idx in range(nquasars):
+    for idx in range(cat_by_survey.size):
         row = cat_by_survey[idx]
         z_qso = row['Z']
         targetid = row['TARGETID']
@@ -127,14 +128,14 @@ def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, program="dark"):
         survey_split_cat = np.split(cat, s2[1:])
 
         for cat_by_survey in survey_split_cat:
-            data, nquasars = read_onehealpix_file_data(cat_by_survey, input_dir, pixnum, arms_to_keep, program)
+            data = read_onehealpix_file_data(cat_by_survey, input_dir, pixnum, arms_to_keep, program)
             spectra_list.extend(
-                generate_spectra_list_from_data(cat_by_survey, data, nquasars)
+                generate_spectra_list_from_data(cat_by_survey, data)
             )
     else:
-        data, nquasars = read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep)
+        data = read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep)
         spectra_list.extend(
-            generate_spectra_list_from_data(cat, data, nquasars)
+            generate_spectra_list_from_data(cat, data)
         )
     
     return spectra_list
