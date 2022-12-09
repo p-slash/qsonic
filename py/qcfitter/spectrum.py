@@ -140,7 +140,7 @@ def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, program="dark"):
     
     return spectra_list
 
-def save_deltas(spectra_list, outdir, out_nside, varlss_interp):
+def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=None):
     """ Saves given list of spectra as deltas. NO coaddition of arms.
     Each arm is saved separately
 
@@ -152,19 +152,28 @@ def save_deltas(spectra_list, outdir, out_nside, varlss_interp):
     outdir: str
     output directory
 
-    out_nside: int
-    output healpix nside
-
     varlss_interp: Interpolator
     interpolator for LSS variance
 
+    out_nside: int
+    output healpix nside. Do not reorganize! Saves by healpix if passed.
+    Has priority.
+
+    mpi_rank: int
+    mpi_rank. Save by mpi_rank if passed. 
     """
-    pixnos = np.array([ang2pix(out_nside, spec.ra, spec.dec, lonlat=True, nest=True)
-        for spec in spectra_list])
-    sort_idx = np.argsort(pixnos)
-    pixnos = pixnos[sort_idx]
-    unique_pix, s = np.unique(pixnos, return_index=True)
-    split_spectra = np.split(np.array(spectra_list)[sort_idx], s[1:])
+    if out_nside is not None:
+        pixnos = np.array([ang2pix(out_nside, spec.ra, spec.dec, lonlat=True, nest=True)
+            for spec in spectra_list])
+        sort_idx = np.argsort(pixnos)
+        pixnos = pixnos[sort_idx]
+        unique_pix, s = np.unique(pixnos, return_index=True)
+        split_spectra = np.split(np.array(spectra_list)[sort_idx], s[1:])
+    elif mpi_rank is not None:
+        unique_pix = mpi_rank
+        split_spectra = spectra_list
+    else:
+        raise Exception("out_nside and mpi_rank can't both be None.")
 
     for healpix, hp_specs in zip(unique_pix, split_spectra):
         results = fitsio.FITS(f"{outdir}/deltas-{healpix}.fits.gz",'rw', clobber=True)
