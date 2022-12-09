@@ -272,8 +272,7 @@ class Spectrum(object):
         self._forestreso = {}
 
         for arm in self.arms:
-            self._f1[arm] = 0
-            self._f2[arm] = self.wave[arm].size
+            self._f1[arm], self._f2[arm] = 0, self.wave[arm].size
             self.flux[arm] = flux[arm][idx]
             self.ivar[arm] = ivar[arm][idx]
             _mask = mask[arm][idx] | np.isnan(self.flux[arm]) | np.isnan(self.ivar[arm])
@@ -290,10 +289,6 @@ class Spectrum(object):
         self.cont_params['valid'] = False
         self.cont_params['x'] = np.array([1., 0.])
         self.cont_params['cont'] = None
-
-    # def set_continuum(self, wave_p, cont_p):
-    #     for arm in self.arms:
-    #         self.cont[arm] = np.interp(self.forestwave[arm], wave_p, cont_p)
 
     def set_forest_region(self, w1, w2, lya1, lya2, skip_ratio=0):
         """ Sets slices for the forest region. Arms that have less than
