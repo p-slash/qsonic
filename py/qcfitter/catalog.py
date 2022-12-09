@@ -54,13 +54,6 @@ class Catalog(object):
 
         colnames = fitsfile[cat_hdu].get_colnames()
         self.catalog = np.array(fitsfile[cat_hdu].read())
-        if 'TARGET_RA' in colnames:
-            rename_fields(self.catalog, {'TARGET_RA':'RA', 'TARGET_DEC':'DEC'} )
-        keep_columns = ['RA', 'DEC', 'Z', 'TARGETID']
-        if 'SURVEY' in colnames:
-            keep_columns += ['SURVEY']
-
-        self.catalog = self.catalog[keep_columns]
 
         logging_mpi(f"There are {self.catalog.size} quasars in the catalog.", self.mpi_rank)
 
@@ -68,6 +61,15 @@ class Catalog(object):
         w = (self.catalog['Z'] >= self.zmin) & (self.catalog['Z'] <= self.zmax)
         logging_mpi(f"There are {w.sum()} quasars in the redshift range.", self.mpi_rank)
         self.catalog = self.catalog[w]
+
+        if 'TARGET_RA' in colnames:
+            self.catalog = rename_fields(self.catalog, {'TARGET_RA':'RA', 'TARGET_DEC':'DEC'} )
+        keep_columns = ['RA', 'DEC', 'Z', 'TARGETID']
+        for _col in ['SURVEY', 'HPXPIXEL']:
+            if _col in colnames:
+                keep_columns.append(_col)
+
+        self.catalog = self.catalog[keep_columns]
 
         # Filter all the objects in the catalogue not belonging to the specified
         # surveys.
@@ -79,9 +81,10 @@ class Catalog(object):
         if self.catalog.size == 0:
             raise Exception("Empty quasar catalogue.")
 
-        pixnum = ang2pix(self.n_side, self.catalog['RA'], self.catalog['DEC'], lonlat=True, nest=True)
-        self.catalog = append_fields(self.catalog, 'PIXNUM', pixnum, dtypes=int)
-        self.catalog.sort(order='PIXNUM')
+        if not 'HPXPIXEL' in keep_columns:
+            pixnum = ang2pix(self.n_side, self.catalog['RA'], self.catalog['DEC'], lonlat=True, nest=True)
+            self.catalog = append_fields(self.catalog, 'HPXPIXEL', pixnum, dtypes=int)
+        self.catalog.sort(order='HPXPIXEL')
 
         
 
