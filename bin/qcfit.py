@@ -59,7 +59,7 @@ if __name__ == '__main__':
     # read catalog
     logging_mpi("Reading catalog", mpi_rank)
     n_side = 16 if args.mock_analysis else 64
-    qso_cat = Catalog(args.catalog, n_side, mpi_rank=mpi_rank)
+    qso_cat = Catalog(args.catalog, comm, n_side=n_side, mpi_rank=mpi_rank)
 
     # We decide forest filename list
     # Group into unique pixels
