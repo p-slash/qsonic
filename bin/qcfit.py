@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     # We decide forest filename list
     # Group into unique pixels
-    unique_pix, s = np.unique(qso_cat.catalog['PIXNUM'], return_index=True)
+    unique_pix, s = np.unique(qso_cat.catalog['HPXPIXEL'], return_index=True)
     split_catalog = np.split(qso_cat.catalog, s[1:])
     logging_mpi(f"There are {unique_pix.size} healpixels. Using more MPI processes will be unused.", mpi_rank)
 
