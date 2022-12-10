@@ -20,9 +20,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--input-dir", help="Input directory to healpix", required=True)
     parser.add_argument("--catalog", help="Catalog filename", required=True)
+    # parser.add_argument("--keep-surveys", help="Surveys to keep.")
     parser.add_argument("--outdir", '-o', help="Output directory to save deltas.")
 
-    parser.add_argument("--mock-analysis", help="Input folder is mock.", action="store_true")
+    parser.add_argument("--mock-analysis", help="Input folder is mock. Uses nside=16",
+        action="store_true")
     parser.add_argument("--arms", help="Arms to read.", default=['B', 'R'], nargs='+')
 
     parser.add_argument("--wave1", help="First analysis wavelength", type=float,
