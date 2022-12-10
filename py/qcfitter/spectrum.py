@@ -147,7 +147,7 @@ def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=No
     Arguments
     ---------
     spectra_list: list of Spectrum
-    continuum fitted spectra objects
+    continuum fitted spectra objects. All must be valid!
 
     outdir: str
     output directory

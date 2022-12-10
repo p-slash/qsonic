@@ -111,6 +111,8 @@ if __name__ == '__main__':
     # Broadcast and recalculate global functions
     # Iterate
     qcfit.iterate(spectra_list, args.no_iterations, comm, mpi_rank)
+    # Keep only valid spectra
+    spectra_list = [spec for spec in spectra_list if spec.cont_params['valid']]
 
     logging_mpi("All continua are fit. Saving deltas", mpi_rank)
 
