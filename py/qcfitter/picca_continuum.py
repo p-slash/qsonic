@@ -57,7 +57,8 @@ class PiccaContinuumFitter(object):
             cont_est *= self.meanflux_interp(wave_arm)
 
             var_lss = self.varlss_interp(wave_arm)*cont_est**2
-            weight  = ivar[arm] / (1+ivar[arm]*var_lss)
+            ivar2 = get_smooth_ivar(ivar[arm])
+            weight  = ivar2 / (1+ivar2*var_lss)
             w = weight > 0
 
             chi2 += np.sum(
@@ -153,7 +154,8 @@ class PiccaContinuumFitter(object):
                 # Deconvolve resolution matrix ?
 
                 var_lss = self.varlss_interp(wave_arm)
-                weight  = spectrum.forestivar[arm]*cont**2
+                ivar2   = get_smooth_ivar(spectrum.forestivar[arm])
+                weight  = ivar2*cont**2
                 weight  = weight / (1+weight*var_lss)
 
                 norm_flux += np.bincount(bin_idx, weights=flux_*weight, minlength=self.nbins)
