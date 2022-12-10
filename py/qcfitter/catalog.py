@@ -14,6 +14,8 @@ class Catalog(object):
     ----------
     filename: str
         Filename to catalog.
+    comm: MPI comm object
+        MPI comm object for bcast
     n_side: int (default: 64)
         Healpix nside.
     keep_surveys: list (default: all)
