@@ -3,7 +3,7 @@ import fitsio
 from scipy.optimize import minimize
 
 from qcfitter.mpi_utils import logging_mpi
-from qcfitter.mathtools import Fast1DInterpolator
+from qcfitter.mathtools import Fast1DInterpolator, get_smooth_ivar
 
 class PiccaContinuumFitter(object):
     def _set_fiducials(self, fiducial_fits):
