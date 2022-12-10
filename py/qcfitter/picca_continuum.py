@@ -1,6 +1,7 @@
 import numpy as np
 import fitsio
 from scipy.optimize import minimize
+from scipy.interpolate import UnivariateSpline
 
 from qcfitter.mpi_utils import logging_mpi
 from qcfitter.mathtools import Fast1DInterpolator, get_smooth_ivar
@@ -167,14 +168,18 @@ class PiccaContinuumFitter(object):
         std_flux = 1/np.sqrt(counts)
 
         old_mean_cont = self.mean_cont.copy()
-        self.mean_cont *= norm_flux
 
-        norm_flux -= 1
+        # Smooth new estimates
+        spl = UnivariateSpline(self.rfwave, self.mean_cont*norm_flux, w=std_flux)
+        self.mean_cont = spl(self.rfwave)
+        norm_flux = self.mean_cont/old_mean_cont-1
+
         logging_mpi("Continuum updates", comm.Get_rank())
         for _w, _c, _e in zip(self.rfwave, norm_flux, std_flux):
             logging_mpi(f"{_w:10.2f}: 1+({_c:10.2e}) pm {_e:10.2e}", comm.Get_rank())
 
-        has_converged = np.allclose(np.abs(norm_flux), std_flux, rtol=0.5)
+        has_converged = np.all(np.abs(norm_flux) < std_flux)
+        # np.allclose(np.abs(norm_flux), std_flux, rtol=0.5)
 
         return has_converged
 
