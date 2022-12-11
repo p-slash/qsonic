@@ -55,7 +55,7 @@ def get_smooth_ivar(ivar, sigma_pix=20, pad_size=25, esigma=3.5):
 
     # Pad the input array to get rid of annoying edge effects
     # Pad values are set to the edge value
-    arrsize    = self.size+2*pad_size
+    arrsize    = ivar.size+2*pad_size
     padded_arr = np.pad(error, pad_size, mode='edge')
 
     kvals     = np.fft.rfftfreq(arrsize)

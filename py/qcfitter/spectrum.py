@@ -2,6 +2,8 @@ import numpy as np
 from healpy import ang2pix
 import fitsio
 
+from qcfitter.mathtools import get_smooth_ivar
+
 def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
     """Common function to read a single fits file.
 
@@ -170,8 +172,8 @@ def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=No
         unique_pix, s = np.unique(pixnos, return_index=True)
         split_spectra = np.split(np.array(spectra_list)[sort_idx], s[1:])
     elif mpi_rank is not None:
-        unique_pix = mpi_rank
-        split_spectra = spectra_list
+        unique_pix = [mpi_rank]
+        split_spectra = [spectra_list]
     else:
         raise Exception("out_nside and mpi_rank can't both be None.")
 
@@ -382,7 +384,7 @@ class Spectrum(object):
         max_wave = np.max([wave[-1] for wave in self.forestwave.values()])
         max_ndia = np.max([reso.shape[0] for reso in self.forestreso.values()])
 
-        nwaves = int((max_wave-min_vave)/self.dwave)+1
+        nwaves = int((max_wave-min_wave)/self.dwave+0.5)+1
         coadd_wave['brz'] = np.arange(nwaves)*self.dwave + min_wave
 
         coadd_flux['brz'] = np.zeros(nwaves)
