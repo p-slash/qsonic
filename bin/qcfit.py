@@ -45,9 +45,12 @@ if __name__ == '__main__':
         type=int, default=5)
     parser.add_argument("--keep-nonforest-pixels", help="Keeps non forest wavelengths. Memory intensive!",
         action="store_true")
+
+    parser.add_argument("--coadd-arms", help="Coadds arms when saving.",
+        action="store_true")
     parser.add_argument("--save-by-hpx", help="Save by healpix. If not, saves by MPI rank.",
         action="store_true")
-    # parser.add_argument("--out-nside", help="Output healpix nside if you want to reorganize.", type=int)
+
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG)
@@ -115,11 +118,16 @@ if __name__ == '__main__':
     qcfit.iterate(spectra_list, args.no_iterations, comm, mpi_rank)
     # Keep only valid spectra
     spectra_list = [spec for spec in spectra_list if spec.cont_params['valid']]
+    logging_mpi("All continua are fit.", mpi_rank)
 
-    logging_mpi("All continua are fit. Saving deltas", mpi_rank)
+    if args.coadd_arms:
+        logging_mpi("Coadding arms.", mpi_rank)
+        for spec in spectra_list:
+            spec.coadd_arms_forest(qcfit.varlss_interp)
 
     # Save deltas
     if args.outdir:
+        logging_mpi("Saving deltas.", mpi_rank)
         os_makedirs(args.outdir, exist_ok=True)
         if args.save_by_hpx:
             out_nside = nside

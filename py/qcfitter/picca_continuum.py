@@ -7,6 +7,10 @@ from qcfitter.mpi_utils import logging_mpi
 from qcfitter.mathtools import Fast1DInterpolator, get_smooth_ivar
 
 class PiccaContinuumFitter(object):
+    """ Picca continuum fitter. Fits spectra without coadding.
+    Pipeline ivar is smoothed before using in weights.
+    Mean continuum is smoothed using inverse weights and cubic spline.
+    """
     def _set_fiducials(self, fiducial_fits):
         try:
             _fits = fitsio.FITS(fiducial_fits)
