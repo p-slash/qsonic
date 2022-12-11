@@ -12,28 +12,23 @@ class PiccaContinuumFitter(object):
     Mean continuum is smoothed using inverse weights and cubic spline.
     """
     def _set_fiducials(self, fiducial_fits):
-        try:
-            _fits = fitsio.FITS(fiducial_fits)
-            _data = _fits['STATS'].read()
-            waves = _data['LAMBDA']
-            dwave = waves[1]-waves[0]
-            if not np.allclose(np.diff(waves), dwave):
-                raise Exception("LAMBDA is not equally spaced.")
+        _fits = fitsio.FITS(fiducial_fits)
+        _data = _fits['STATS'].read()
+        waves = _data['LAMBDA']
+        dwave = waves[1]-waves[0]
+        if not np.allclose(np.diff(waves), dwave):
+            raise Exception(
+                "Failed to construct fiducial mean flux and varlss from "
+                f"{fiducial_fits}::LAMBDA is not equally spaced."
+            )
 
-            meanflux = _data['MEANFLUX']
-            varlss = _data['VAR']
+        meanflux = _data['MEANFLUX']
+        varlss = _data['VAR']
 
-            self.meanflux_interp = Fast1DInterpolator(waves[0], dwave,
-                meanflux)
-            self.varlss_interp = Fast1DInterpolator(waves[0], dwave,
-                varlss)
-
-        except Exception as e:
-            logging_mpi("Failed to construct fiducial mean flux and varlss from "
-                f"{fiducial_fits}::{e}.", 0, "error")
-
-            self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
-            self.varlss_interp   = Fast1DInterpolator(0., 1., np.zeros(3))
+        self.meanflux_interp = Fast1DInterpolator(waves[0], dwave,
+            meanflux)
+        self.varlss_interp = Fast1DInterpolator(waves[0], dwave,
+            varlss)
 
     def __init__(self, w1rf, w2rf, dwrf, fiducial_fits=None):
         self.nbins = int((w2rf-w1rf)/dwrf)+1

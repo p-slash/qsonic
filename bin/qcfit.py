@@ -109,8 +109,14 @@ if __name__ == '__main__':
 
     # Continuum fitting
     # -------------------
-    # Initialize global functions
-    qcfit = PiccaContinuumFitter(args.forest_w1, args.forest_w2, args.rfdwave, fiducial_fits=args.fiducials)
+    # Initialize continuum fitter & global functions
+    try:
+        qcfit = PiccaContinuumFitter(args.forest_w1, args.forest_w2, args.rfdwave,
+            fiducial_fits=args.fiducials)
+    except Exception as e:
+        logging_mpi(f"{e}", 0, "error")
+        comm.Abort()
+
     logging_mpi("Fitting continuum.", mpi_rank)
 
     # Fit continua
