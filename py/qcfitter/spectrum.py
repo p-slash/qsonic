@@ -242,7 +242,10 @@ class Spectrum(object):
 
     Methods
     ----------
-    removePixels(idx_to_remove)
+    set_forest_region
+    remove_nonforest_pixels
+    get_real_size
+    coadd_arms_forest
 
     """
     _wave = None
@@ -345,12 +348,87 @@ class Spectrum(object):
 
         self.cont_params['x'][0] = a0/n0
 
+    def remove_nonforest_pixels(self):
+        self.flux = self.forestflux
+        self.ivar = self.forestivar
+        self.reso = self.forestreso
+
+        # Is this needed?
+        self._forestflux = self.flux
+        self._forestivar = self.ivar
+        self._forestreso = self.reso
+
     def get_real_size(self):
         size = 0
         for ivar_arm in self.forestivar.values():
             size += ivar_arm.size - np.sum(ivar_arm == 0)
 
         return size
+
+    def coadd_arms_forest(self, varlss_interp):
+        """ Coadds different arms using smoothed pipeline ivar and var_lss.
+        Resolution matrix is equally weighted!
+        """
+        if not self.cont_params['valid'] or self.cont_params['cont'] is None:
+            raise Exception("Continuum needed for coadding.")
+
+        coadd_wave = {}
+        coadd_flux = {}
+        coadd_ivar = {}
+        coadd_reso = {}
+        coadd_cont = {}
+
+        min_wave = np.min([wave[0]  for wave in self.forestwave.values()])
+        max_wave = np.max([wave[-1] for wave in self.forestwave.values()])
+        max_ndia = np.max([reso.shape[0] for reso in self.forestreso.values()])
+
+        nwaves = int((max_wave-min_vave)/self.dwave)+1
+        coadd_wave['brz'] = np.arange(nwaves)*self.dwave + min_wave
+
+        coadd_flux['brz'] = np.zeros(nwaves)
+        coadd_ivar['brz'] = np.zeros(nwaves)
+        coadd_reso['brz'] = np.zeros((max_ndia, nwaves))
+        coadd_cont['brz'] = np.zeros(nwaves)
+
+        coadd_norm = np.zeros(nwaves)
+        creso_norm = np.zeros(nwaves)
+
+        for arm, wave_arm in self.forestwave.items():
+            idx = ((wave_arm-min_wave)/self.dwave+0.5).astype(int)
+            var_lss = varlss_interp(wave_arm)*self.cont_params['cont'][arm]**2
+            ivar2   = get_smooth_ivar(self.forestivar[arm])
+            weight  = ivar2 / (1+ivar2*var_lss)
+
+            var = np.zeros_like(ivar2)
+            w = self.forestivar[arm]>0
+            var[w] = 1/self.forestivar[arm][w]
+
+            coadd_flux['brz'][idx] += weight * self.forestflux[arm]
+            coadd_cont['brz'][idx] += weight * self.cont_params['cont'][arm]
+            coadd_ivar['brz'][idx] += weight**2 * var
+            coadd_norm[idx] += weight
+
+            # Resolution matrix
+            reso_arm = self.forestreso[arm]
+            ddia = max_ndia - reso_arm.shape[0]
+            if ddia > 0:
+                reso_arm = np.pad(reso_arm, ((ddia,ddia), (0,0)))
+
+            coadd_reso['brz'][:, idx] += reso_arm
+            creso_norm[idx] += 1
+
+        w = coadd_norm>0
+        coadd_flux['brz'][w] /= coadd_norm[w]
+        coadd_cont['brz'][w] /= coadd_norm[w]
+        coadd_ivar['brz'][w]  = coadd_norm[w]**2/coadd_ivar['brz'][w]
+
+        coadd_reso['brz'] /= creso_norm
+
+        self._forestwave = coadd_wave
+        self._forestflux = coadd_flux
+        self._forestivar = coadd_ivar
+        self._forestreso = coadd_reso
+        self.cont_params['cont'] = coadd_cont
 
     @property
     def wave(self):
@@ -378,16 +456,6 @@ class Spectrum(object):
     @property
     def forestreso(self):
         return self._forestreso
-
-    def remove_nonforest_pixels(self):
-        self.flux = self.forestflux
-        self.ivar = self.forestivar
-        self.reso = self.forestreso
-
-        # Is this needed?
-        self._forestflux = self.flux
-        self._forestivar = self.ivar
-        self._forestreso = self.reso
 
 
 
