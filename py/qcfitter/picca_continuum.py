@@ -4,7 +4,7 @@ from scipy.optimize import minimize
 from scipy.interpolate import UnivariateSpline
 
 from qcfitter.mpi_utils import logging_mpi
-from qcfitter.mathtools import Fast1DInterpolator, get_smooth_ivar
+from qcfitter.mathtools import Fast1DInterpolator
 
 class PiccaContinuumFitter(object):
     """ Picca continuum fitter. Fits spectra without coadding.
@@ -51,7 +51,7 @@ class PiccaContinuumFitter(object):
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
             self.varlss_interp   = Fast1DInterpolator(0., 1., np.zeros(3))
 
-    def _continuum_chi2(self, x, wave, flux, ivar, z_qso):
+    def _continuum_chi2(self, x, wave, flux, ivar_sm, z_qso):
         chi2 = 0
 
         for arm, wave_arm in wave.items():
@@ -62,8 +62,7 @@ class PiccaContinuumFitter(object):
             cont_est *= self.meanflux_interp(wave_arm)
 
             var_lss = self.varlss_interp(wave_arm)*cont_est**2
-            ivar2 = get_smooth_ivar(ivar[arm])
-            weight  = ivar2 / (1+ivar2*var_lss)
+            weight  = ivar_sm[arm] / (1+ivar_sm[arm]*var_lss)
             w = weight > 0
 
             chi2 += np.sum(
@@ -81,57 +80,57 @@ class PiccaContinuumFitter(object):
 
         return cont
 
-    def fit_continuum(self, spectrum):
+    def fit_continuum(self, spec):
         # constr = ({'type': 'eq',
-        #            'fun': lambda x: self.get_continuum_model(x, wave_arm/(1+spectrum.z_qso))
-        #           } for wave_arm in spectrum.forestwave.values() if wave_arm.size>0
+        #            'fun': lambda x: self.get_continuum_model(x, wave_arm/(1+spec.z_qso))
+        #           } for wave_arm in spec.forestwave.values() if wave_arm.size>0
         # )
 
         result = minimize(
             self._continuum_chi2,
-            spectrum.cont_params['x'],
-            args=(spectrum.forestwave,
-                  spectrum.forestflux,
-                  spectrum.forestivar,
-                  spectrum.z_qso),
+            spec.cont_params['x'],
+            args=(spec.forestwave,
+                  spec.forestflux,
+                  spec.forestivar_sm,
+                  spec.z_qso),
             # constraints=constr,
             # method='COBYLA',
             bounds=[(0, None), (None, None)],
             jac=None
         )
 
-        spectrum.cont_params['valid'] = result.success
+        spec.cont_params['valid'] = result.success
 
         if result.success:
-            for wave_arm in spectrum.forestwave.values():
-                _cont = self.get_continuum_model(result.x, wave_arm/(1+spectrum.z_qso))
+            for wave_arm in spec.forestwave.values():
+                _cont = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
 
                 if any(_cont<0):
-                    spectrum.cont_params['valid'] = False
+                    spec.cont_params['valid'] = False
                     break
 
-        if spectrum.cont_params['valid']:
-            spectrum.cont_params['x'] = result.x
-            spectrum.cont_params['cont'] = {}
-            for arm, wave_arm in spectrum.forestwave.items():
-                _cont  = self.get_continuum_model(result.x, wave_arm/(1+spectrum.z_qso))
+        if spec.cont_params['valid']:
+            spec.cont_params['x'] = result.x
+            spec.cont_params['cont'] = {}
+            for arm, wave_arm in spec.forestwave.items():
+                _cont  = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
                 _cont *= self.meanflux_interp(wave_arm)
-                spectrum.cont_params['cont'][arm] = _cont
+                spec.cont_params['cont'][arm] = _cont
         else:
-            spectrum.cont_params['cont'] = None
+            spec.cont_params['cont'] = None
 
     def fit_continua(self, spectra_list, comm, mpi_rank):
         no_valid_fits=0
         no_invalid_fits=0
 
         # For each forest fit continuum
-        for spectrum in spectra_list:
-            spectrum.cont_params['method'] = 'picca'
-            self.fit_continuum(spectrum)
+        for spec in spectra_list:
+            spec.cont_params['method'] = 'picca'
+            self.fit_continuum(spec)
 
-            if not spectrum.cont_params['valid']:
+            if not spec.cont_params['valid']:
                 no_invalid_fits+=1
-                # logging_mpi(f"mpi:{mpi_rank}:Invalid continuum TARGETID: {spectrum.targetid}.", 0)
+                # logging_mpi(f"mpi:{mpi_rank}:Invalid continuum TARGETID: {spec.targetid}.", 0)
             else:
                 no_valid_fits += 1
 
@@ -144,23 +143,22 @@ class PiccaContinuumFitter(object):
         norm_flux = np.zeros_like(self.mean_cont)
         counts = np.zeros_like(self.mean_cont)
 
-        for spectrum in spectra_list:
-            if not spectrum.cont_params['valid']:
+        for spec in spectra_list:
+            if not spec.cont_params['valid']:
                 continue 
 
-            for arm, wave_arm in spectrum.forestwave.items():
-                wave_rf_arm = wave_arm/(1+spectrum.z_qso)
+            for arm, wave_arm in spec.forestwave.items():
+                wave_rf_arm = wave_arm/(1+spec.z_qso)
                 bin_idx = ((wave_rf_arm - self.rfwave[0])/self.dwrf + 0.5).astype(int)
 
-                cont  = self.get_continuum_model(spectrum.cont_params['x'], wave_rf_arm)
+                cont  = self.get_continuum_model(spec.cont_params['x'], wave_rf_arm)
                 cont *= self.meanflux_interp(wave_arm)
 
-                flux_  = spectrum.forestflux[arm]/cont
+                flux_  = spec.forestflux[arm]/cont
                 # Deconvolve resolution matrix ?
 
                 var_lss = self.varlss_interp(wave_arm)
-                ivar2   = get_smooth_ivar(spectrum.forestivar[arm])
-                weight  = ivar2*cont**2
+                weight  = spec.forestivar_sm[arm]*cont**2
                 weight  = weight / (1+weight*var_lss)
 
                 norm_flux += np.bincount(bin_idx, weights=flux_*weight, minlength=self.nbins)
