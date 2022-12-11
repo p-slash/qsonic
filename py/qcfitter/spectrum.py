@@ -7,15 +7,15 @@ from qcfitter.mathtools import get_smooth_ivar
 def _read_resoimage(imhdu, quasar_indices, nwave):
     ndiags = imhdu.read_header()['NAXIS2']
     data = np.empty((quasar_indices.size, ndiags, nwave), dtype=np.float64)
-    for idx in quasar_indices:
-        data[idx, :, :] = imhdu[int(idx), :, :]
+    for idata, iqso in enumerate(quasar_indices):
+        data[idata, :, :] = imhdu[int(iqso), :, :]
 
     return data
 
 def _read_imagehdu(imhdu, quasar_indices, nwave, dtype):
     data = np.empty((quasar_indices.size, nwave), dtype=dtype)
-    for idx in quasar_indices:
-        data[idx, :] = imhdu[int(idx), :]
+    for idata, iqso in enumerate(quasar_indices):
+        data[idata, :] = imhdu[int(iqso), :]
 
     return data
 
@@ -300,6 +300,7 @@ class Spectrum(object):
         self._forestwave = {}
         self._forestflux = {}
         self._forestivar = {}
+        self._forestivar_sm = {}
         self._forestreso = {}
 
         for arm in self.arms:
@@ -366,6 +367,7 @@ class Spectrum(object):
             n0 += np.sum(self.forestivar[arm][w])
 
         self.cont_params['x'][0] = a0/n0
+        self._forestivar_sm = self._forestivar
 
     def remove_nonforest_pixels(self):
         self.flux = self.forestflux
@@ -383,6 +385,11 @@ class Spectrum(object):
             size += ivar_arm.size - np.sum(ivar_arm == 0)
 
         return size
+
+    def set_smooth_ivar(self):
+        self._forestivar_sm = {}
+        for arm, ivar_arm in self.forestivar.items():
+            self._forestivar_sm[arm] = get_smooth_ivar(ivar_arm)
 
     def coadd_arms_forest(self, varlss_interp):
         """ Coadds different arms using smoothed pipeline ivar and var_lss.
@@ -415,7 +422,7 @@ class Spectrum(object):
         for arm, wave_arm in self.forestwave.items():
             idx = ((wave_arm-min_wave)/self.dwave+0.5).astype(int)
             var_lss = varlss_interp(wave_arm)*self.cont_params['cont'][arm]**2
-            ivar2   = get_smooth_ivar(self.forestivar[arm])
+            ivar2   = self.forestivar_sm[arm]
             weight  = ivar2 / (1+ivar2*var_lss)
 
             var = np.zeros_like(ivar2)
@@ -471,6 +478,10 @@ class Spectrum(object):
     @property
     def forestivar(self):
         return self._forestivar
+
+    @property
+    def forestivar_sm(self):
+        return self._forestivar_sm
 
     @property
     def forestreso(self):

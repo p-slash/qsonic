@@ -89,6 +89,8 @@ if __name__ == '__main__':
                 args.skip/2
             )
 
+            spec.set_smooth_ivar()
+
             if not args.keep_nonforest_pixels:
                 spec.remove_nonforest_pixels()
 
