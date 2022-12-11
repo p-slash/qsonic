@@ -30,7 +30,7 @@ class PiccaContinuumFitter(object):
 
         except Exception as e:
             logging_mpi("Failed to construct fiducial mean flux and varlss from "
-                f"{fiducial_fits}::{e.what()}.", 0, "error")
+                f"{fiducial_fits}::{e}.", 0, "error")
 
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
             self.varlss_interp   = Fast1DInterpolator(0., 1., np.zeros(3))
