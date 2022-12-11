@@ -108,7 +108,7 @@ if __name__ == '__main__':
     # Continuum fitting
     # -------------------
     # Initialize global functions
-    qcfit = PiccaContinuumFitter(args.forest_w1, args.forest_w2, args.rfdwave)
+    qcfit = PiccaContinuumFitter(args.forest_w1, args.forest_w2, args.rfdwave, fiducial_fits=args.fiducials)
     logging_mpi("Fitting continuum.", mpi_rank)
 
     # Fit continua
