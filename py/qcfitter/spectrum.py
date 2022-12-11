@@ -4,6 +4,21 @@ import fitsio
 
 from qcfitter.mathtools import get_smooth_ivar
 
+def _read_resoimage(imhdu, quasar_indices, nwave):
+    ndiags = imhdu.read_header()['NAXIS2']
+    data = np.empty((quasar_indices.size, ndiags, nwave), dtype=np.float64)
+    for idx in quasar_indices:
+        data[idx, :, :] = imhdu[int(idx), :, :]
+
+    return data
+
+def _read_imagehdu(imhdu, quasar_indices, nwave, dtype):
+    data = np.empty((quasar_indices.size, nwave), dtype=dtype)
+    for idx in quasar_indices:
+        data[idx, :] = imhdu[int(idx), :]
+
+    return data
+
 def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
     """Common function to read a single fits file.
 
@@ -38,7 +53,6 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
     fbrmap = fbrmap[isin]
     sort_idx = fbrmap.argsort(order='TARGETID')
     fbrmap = fbrmap[sort_idx]
-    quasar_indices = quasar_indices[sort_idx]
 
     assert np.all(cat_by_survey['TARGETID'] == fbrmap['TARGETID'])
 
@@ -53,11 +67,14 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
     for arm in arms_to_keep:
         # Cannot read by rows= argument. Slicing doesn't work either. Have to read all
         data['wave'][arm] = fitsfile[f'{arm}_WAVELENGTH'].read()
-        data['flux'][arm] = fitsfile[f'{arm}_FLUX'].read()[quasar_indices]
-        data['ivar'][arm] = fitsfile[f'{arm}_IVAR'].read()[quasar_indices]
-        data['mask'][arm] = fitsfile[f'{arm}_MASK'].read()[quasar_indices]
+        nwave = data['wave'][arm].size
+
+        data['flux'][arm] = _read_imagehdu(fitsfile[f'{arm}_FLUX'], quasar_indices, nwave, np.float64)[sort_idx]
+        data['ivar'][arm] = _read_imagehdu(fitsfile[f'{arm}_IVAR'], quasar_indices, nwave, np.float64)[sort_idx]
+        data['mask'][arm] = _read_imagehdu(fitsfile[f'{arm}_MASK'], quasar_indices, nwave, np.uint32)[sort_idx]
+
         if f'{arm}_RESOLUTION' in fitsfile:
-            data['reso'][arm] = fitsfile[f'{arm}_RESOLUTION'].read()[quasar_indices]
+            data['reso'][arm] = _read_resoimage(fitsfile[f'{arm}_RESOLUTION'], quasar_indices, nwave)[sort_idx]
 
     fitsfile.close()
 
