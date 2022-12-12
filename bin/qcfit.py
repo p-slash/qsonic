@@ -25,6 +25,8 @@ if __name__ == '__main__':
 
     parser.add_argument("--mock-analysis", help="Input folder is mock. Uses nside=16",
         action="store_true")
+    parser.add_argument("--skip-resomat", help="Skip reading resolution matrix for 3D.",
+        action="store_true")
     parser.add_argument("--arms", help="Arms to read.", default=['B', 'R'], nargs='+')
 
     parser.add_argument("--wave1", help="First analysis wavelength", type=float,
@@ -81,7 +83,10 @@ if __name__ == '__main__':
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
-        local_specs = read_spectra(cat, args.input_dir, args.arms, args.mock_analysis)
+        local_specs = read_spectra(
+            cat, args.input_dir, args.arms,
+            args.mock_analysis, args.skip_resomat
+        )
         for spec in local_specs:
             spec.set_forest_region(
                 args.wave1, args.wave2,
@@ -111,8 +116,10 @@ if __name__ == '__main__':
     # -------------------
     # Initialize continuum fitter & global functions
     try:
-        qcfit = PiccaContinuumFitter(args.forest_w1, args.forest_w2, args.rfdwave,
-            fiducial_fits=args.fiducials)
+        qcfit = PiccaContinuumFitter(
+            args.forest_w1, args.forest_w2, args.rfdwave,
+            fiducial_fits=args.fiducials
+        )
     except Exception as e:
         logging_mpi(f"{e}", 0, "error")
         comm.Abort()
