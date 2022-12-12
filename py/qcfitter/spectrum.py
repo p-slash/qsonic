@@ -19,7 +19,7 @@ def _read_imagehdu(imhdu, quasar_indices, nwave, dtype):
 
     return data
 
-def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
+def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep, skip_resomat):
     """Common function to read a single fits file.
 
     Arguments
@@ -32,6 +32,9 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
 
     arms_to_keep: list of str
     must only contain B, R and Z
+
+    skip_resomat: bool
+    if true, do not read resomat.
 
     Returns
     ---------
@@ -73,24 +76,27 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep):
         data['ivar'][arm] = _read_imagehdu(fitsfile[f'{arm}_IVAR'], quasar_indices, nwave, np.float64)[sort_idx]
         data['mask'][arm] = _read_imagehdu(fitsfile[f'{arm}_MASK'], quasar_indices, nwave, np.uint32)[sort_idx]
 
-        if f'{arm}_RESOLUTION' in fitsfile:
+        if not skip_resomat and f'{arm}_RESOLUTION' in fitsfile:
             data['reso'][arm] = _read_resoimage(fitsfile[f'{arm}_RESOLUTION'], quasar_indices, nwave)[sort_idx]
 
     fitsfile.close()
 
     return data
 
-def read_onehealpix_file_data(cat_by_survey, input_dir, pixnum, arms_to_keep, program="dark"):
+def read_onehealpix_file_data(cat_by_survey, input_dir, pixnum, arms_to_keep, skip_resomat, program="dark"):
     survey = cat_by_survey['SURVEY'][0]
 
     fspec = f"{input_dir}/{survey}/{program}/{pixnum//100}/{pixnum}/coadd-{survey}-{program}-{pixnum}.fits"
-    data = _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep)
+    data = _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep, skip_resomat)
 
     return data
 
-def read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep, nside=16):
+def read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep, skip_resomat, nside=16):
     fspec = f"{input_dir}/{pixnum//100}/{pixnum}/spectra-{nside}-{pixnum}.fits"
-    data = _read_onehealpix_file(cat, fspec, arms_to_keep)
+    data = _read_onehealpix_file(cat, fspec, arms_to_keep, skip_resomat)
+
+    if skip_resomat:
+        return data
 
     fspec = f"{input_dir}/{pixnum//100}/{pixnum}/truth-{nside}-{pixnum}.fits"
     fitsfile = fitsio.FITS(fspec)
@@ -114,7 +120,7 @@ def generate_spectra_list_from_data(cat_by_survey, data):
 
     return spectra_list
 
-def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, program="dark"):
+def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, skip_resomat, program="dark"):
     """ Returns a list of Spectrum objects for a given catalog.
 
     Arguments
@@ -130,6 +136,9 @@ def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, program="dark"):
 
     mock_analysis: bool
     reads for mock data if true.
+
+    skip_resomat: bool
+    if true, do not read resomat.
 
     program: str
     always use dark program.
@@ -147,12 +156,17 @@ def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, program="dark"):
         survey_split_cat = np.split(cat, s2[1:])
 
         for cat_by_survey in survey_split_cat:
-            data = read_onehealpix_file_data(cat_by_survey, input_dir, pixnum, arms_to_keep, program)
+            data = read_onehealpix_file_data(
+                cat_by_survey, input_dir, pixnum, arms_to_keep,
+                skip_resomat, program
+            )
             spectra_list.extend(
                 generate_spectra_list_from_data(cat_by_survey, data)
             )
     else:
-        data = read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep)
+        data = read_onehealpix_file_mock(
+            cat, input_dir, pixnum, arms_to_keep, skip_resomat
+        )
         spectra_list.extend(
             generate_spectra_list_from_data(cat, data)
         )
@@ -221,8 +235,11 @@ def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=No
 
                 hdr_dict['MEANSNR'] = np.mean(np.sqrt(ivar[ivar>0]))
 
-                cols = [wave_arm, delta, ivar, weight, _cont, spec.forestreso[arm].T]
-                names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT', 'RESOMAT']
+                cols = [wave_arm, delta, ivar, weight, _cont]
+                names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT']
+                if spec.forestreso:
+                    cols.append(spec.forestreso[arm].T)
+                    names.append('RESOMAT')
 
                 results.write(cols, names=names, header=hdr_dict,
                     extname=f"{spec.targetid}-{arm}")
@@ -311,7 +328,9 @@ class Spectrum(object):
             self.flux[arm][_mask] = 0
             self.ivar[arm][_mask] = 0
 
-            if reso[arm].ndim == 2:
+            if not reso:
+                pass
+            elif reso[arm].ndim == 2:
                 self.reso[arm] = reso[arm].copy()
             else:
                 self.reso[arm] = reso[arm][idx]
@@ -358,7 +377,8 @@ class Spectrum(object):
             self._forestwave[arm] = self.wave[arm][ii1:ii2]
             self._forestflux[arm] = self.flux[arm][ii1:ii2]
             self._forestivar[arm] = self.ivar[arm][ii1:ii2]
-            self._forestreso[arm] = self.reso[arm][:, ii1:ii2]
+            if self.reso:
+                self._forestreso[arm] = self.reso[arm][:, ii1:ii2]
 
             # np.shares_memory(self.forestflux, self.flux)
             w = self.forestflux[arm]>0
@@ -391,6 +411,24 @@ class Spectrum(object):
         for arm, ivar_arm in self.forestivar.items():
             self._forestivar_sm[arm] = get_smooth_ivar(ivar_arm)
 
+    def _coadd_arms_reso(self, nwaves, idxes):
+        coadd_reso = {}
+        max_ndia = np.max([reso.shape[0] for reso in self.forestreso.values()])
+        coadd_reso['brz'] = np.zeros((max_ndia, nwaves))
+        creso_norm = np.zeros(nwaves)
+
+        for arm, reso_arm in self.forestreso.items():
+            reso_arm = self.forestreso[arm]
+            ddia = max_ndia - reso_arm.shape[0]
+            if ddia > 0:
+                reso_arm = np.pad(reso_arm, ((ddia,ddia), (0,0)))
+
+            coadd_reso['brz'][:, idxes[arm]] += reso_arm
+            creso_norm[idxes[arm]] += 1
+
+        coadd_reso['brz'] /= creso_norm
+        self._forestreso = coadd_reso
+
     def coadd_arms_forest(self, varlss_interp):
         """ Coadds different arms using smoothed pipeline ivar and var_lss.
         Resolution matrix is equally weighted!
@@ -401,26 +439,25 @@ class Spectrum(object):
         coadd_wave = {}
         coadd_flux = {}
         coadd_ivar = {}
-        coadd_reso = {}
         coadd_cont = {}
 
         min_wave = np.min([wave[0]  for wave in self.forestwave.values()])
         max_wave = np.max([wave[-1] for wave in self.forestwave.values()])
-        max_ndia = np.max([reso.shape[0] for reso in self.forestreso.values()])
 
         nwaves = int((max_wave-min_wave)/self.dwave+0.5)+1
         coadd_wave['brz'] = np.arange(nwaves)*self.dwave + min_wave
 
         coadd_flux['brz'] = np.zeros(nwaves)
         coadd_ivar['brz'] = np.zeros(nwaves)
-        coadd_reso['brz'] = np.zeros((max_ndia, nwaves))
         coadd_cont['brz'] = np.zeros(nwaves)
 
         coadd_norm = np.zeros(nwaves)
-        creso_norm = np.zeros(nwaves)
 
+        idxes = {}
         for arm, wave_arm in self.forestwave.items():
             idx = ((wave_arm-min_wave)/self.dwave+0.5).astype(int)
+            idxes[arm] = idx
+
             var_lss = varlss_interp(wave_arm)*self.cont_params['cont'][arm]**2
             ivar2   = self.forestivar_sm[arm]
             weight  = ivar2 / (1+ivar2*var_lss)
@@ -434,27 +471,19 @@ class Spectrum(object):
             coadd_ivar['brz'][idx] += weight**2 * var
             coadd_norm[idx] += weight
 
-            # Resolution matrix
-            reso_arm = self.forestreso[arm]
-            ddia = max_ndia - reso_arm.shape[0]
-            if ddia > 0:
-                reso_arm = np.pad(reso_arm, ((ddia,ddia), (0,0)))
-
-            coadd_reso['brz'][:, idx] += reso_arm
-            creso_norm[idx] += 1
 
         w = coadd_norm>0
         coadd_flux['brz'][w] /= coadd_norm[w]
         coadd_cont['brz'][w] /= coadd_norm[w]
         coadd_ivar['brz'][w]  = coadd_norm[w]**2/coadd_ivar['brz'][w]
 
-        coadd_reso['brz'] /= creso_norm
-
         self._forestwave = coadd_wave
         self._forestflux = coadd_flux
         self._forestivar = coadd_ivar
-        self._forestreso = coadd_reso
         self.cont_params['cont'] = coadd_cont
+
+        if self.reso:
+            self._coadd_arms_reso(nwaves, idxes)
 
     @property
     def wave(self):
