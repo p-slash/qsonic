@@ -27,8 +27,8 @@ class PiccaContinuumFitter(object):
                     f"{fiducial_fits}::LAMBDA is not equally spaced."
                 )
 
-            meanflux = data['MEANFLUX']
-            varlss   = data['VAR']
+            meanflux = np.array(data['MEANFLUX'], dtype='d')
+            varlss   = np.array(data['VAR'], dtype='d')
         else:
             waves_0 = 0.
             dwave   = 0.
@@ -39,8 +39,8 @@ class PiccaContinuumFitter(object):
         dwave    = self.comm.bcast(dwave)
 
         if self.mpi_rank != 0:
-            meanflux = np.empty(nsize, dtype=float)
-            varlss   = np.empty(nsize, dtype=float)
+            meanflux = np.empty(nsize, dtype='d')
+            varlss   = np.empty(nsize, dtype='d')
 
         self.comm.Bcast([meanflux, MPI.DOUBLE])
         self.comm.Bcast([varlss, MPI.DOUBLE])
