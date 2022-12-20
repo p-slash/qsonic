@@ -131,7 +131,7 @@ if __name__ == '__main__':
     try:
         qcfit = PiccaContinuumFitter(
             args.forest_w1, args.forest_w2, args.rfdwave,
-            comm, mpi_rank, fiducial_fits=args.fiducials
+            fiducial_fits=args.fiducials
         )
     except Exception as e:
         logging_mpi(f"{e}", 0, "error")
