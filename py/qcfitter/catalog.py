@@ -33,15 +33,14 @@ class Catalog(object):
     _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
 
     def __init__(self, filename, comm, n_side=64, keep_surveys=None,
-        zmin=2.1, zmax=6.0, mpi_rank=0):
+        zmin=2.1, zmax=6.0):
         self.n_side = n_side
         self.keep_surveys = keep_surveys
         self.zmin = zmin
         self.zmax = zmax
         self.catalog = None
-        # self.mpi_rank = mpi_rank
 
-        if mpi_rank == 0:
+        if comm.Get_rank() == 0:
             self._readCatalogue(filename)
 
         self.catalog = comm.bcast(self.catalog, root=0)
