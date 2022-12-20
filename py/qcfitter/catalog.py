@@ -31,6 +31,10 @@ class Catalog(object):
 
     """
     _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
+    _extra_columns_tokeep = [
+        'SURVEY', 'HPXPIXEL', 'VMIN_CIV_450',
+        'VMAX_CIV_450', 'VMIN_CIV_2000', 'VMAX_CIV_2000'
+    ]
 
     def __init__(self, filename, comm, n_side=64, keep_surveys=None,
         zmin=2.1, zmax=6.0):
@@ -69,9 +73,7 @@ class Catalog(object):
         if 'TARGET_RA' in colnames:
             self.catalog = rename_fields(self.catalog, {'TARGET_RA':'RA', 'TARGET_DEC':'DEC'} )
         keep_columns = ['RA', 'DEC', 'Z', 'TARGETID']
-        for _col in ['SURVEY', 'HPXPIXEL']:
-            if _col in colnames:
-                keep_columns.append(_col)
+        keep_columns.extend([_col for _col in Catalog._extra_columns_tokeep if _col in colnames])
 
         self.catalog = self.catalog[keep_columns]
 
