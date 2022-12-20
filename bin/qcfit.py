@@ -64,20 +64,23 @@ if __name__ == '__main__':
     if mpi_rank == 0:
         try:
             args = parse()
-        except:
-            comm.Abort()
 
-        if any(arm not in ['B', 'R', 'Z'] for arm in args.arms):
-            logging.error("Arms should be 'B', 'R' or 'Z'.")
-            comm.Abort()
+            if any(arm not in ['B', 'R', 'Z'] for arm in args.arms):
+                logging.error("Arms should be 'B', 'R' or 'Z'.")
+                exit(0)
 
-        if args.skip < 0 or args.skip > 1:
-            logging.error("Skip ratio should be between 0 and 1")
-            comm.Abort()
+            if args.skip < 0 or args.skip > 1:
+                logging.error("Skip ratio should be between 0 and 1")
+                exit(0)
+
+        except SystemExit:
+            args = -1
     else:
-        args = None
+        args = -1
 
     args = comm.bcast(args)
+    if args == -1 or args.help:
+        exit(0)
 
     # read catalog
     n_side = 16 if args.mock_analysis else 64
