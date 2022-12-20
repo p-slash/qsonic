@@ -73,6 +73,8 @@ if __name__ == '__main__':
         if args.skip < 0 or args.skip > 1:
             logging.error("Skip ratio should be between 0 and 1")
             comm.Abort()
+    else:
+        args = None
 
     args = comm.bcast(args)
 
