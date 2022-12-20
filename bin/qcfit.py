@@ -36,6 +36,7 @@ def parse():
         default=1200.)
     parser.add_argument("--fiducials", help="Fiducial mean flux and var_lss fits file.")
 
+    parser.add_argument("--sky-mask", help="Sky mask file")
     parser.add_argument("--skip", help="Skip short spectra lower than given ratio.",
         type=float, default=0.)
     parser.add_argument("--rfdwave", help="Rest-frame wave steps", type=float,
@@ -79,7 +80,7 @@ if __name__ == '__main__':
         args = -1
 
     args = comm.bcast(args)
-    if args == -1 or args.help:
+    if args == -1:
         exit(0)
 
     # read catalog
@@ -122,6 +123,15 @@ if __name__ == '__main__':
     logging_mpi(f"All {nspec_all} spectra are read.", mpi_rank)
 
     # Mask
+    if args.sky_mask:
+        try:
+            skymasker = SkyMask(args.sky_mask)
+        except Exception as e:
+            logging_mpi(f"{e}", 0, "error")
+            comm.Abort()
+
+        for spec in spectra_list:
+            skymasker.apply(spec)
 
     # remove from sample if no pixels is small
     if args.skip > 0:
