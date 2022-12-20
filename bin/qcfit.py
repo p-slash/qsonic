@@ -131,7 +131,7 @@ if __name__ == '__main__':
         try:
             skymasker = qcfitter.masks.SkyMask(args.sky_mask)
         except Exception as e:
-            logging_mpi(f"{e}", 0, "error")
+            logging_mpi(f"{e}", mpi_rank, "error")
             comm.Abort()
 
         for spec in spectra_list:
@@ -142,7 +142,7 @@ if __name__ == '__main__':
         try:
             qcfitter.masks.BALMask.check_catalog(qso_cat.catalog)
         except Exception as e:
-            logging_mpi(f"{e}", 0, "error")
+            logging_mpi(f"{e}", mpi_rank, "error")
             comm.Abort()
 
         for spec in spectra_list:
