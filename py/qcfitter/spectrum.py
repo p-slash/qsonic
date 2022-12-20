@@ -212,37 +212,8 @@ def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=No
         results = fitsio.FITS(f"{outdir}/deltas-{healpix}.fits.gz",'rw', clobber=True)
 
         for spec in hp_specs:
-            if not spec.cont_params['valid']:
-                continue
-
-            hdr_dict = {
-                'LOS_ID': spec.targetid,
-                'TARGETID': spec.targetid,
-                'RA': spec.ra, 'DEC': spec.dec,
-                'Z': spec.z_qso,
-                'BLINDING': "none",
-                'WAVE_SOLUTION': "lin",
-                'MEANSNR': 0.,
-                'DLAMBDA': spec.dwave
-            }
-
-            for arm, wave_arm in spec.forestwave.items():
-                _cont = spec.cont_params['cont'][arm]
-                delta = spec.forestflux[arm]/_cont-1
-                ivar  = spec.forestivar[arm]*_cont**2
-                var_lss = varlss_interp(wave_arm)
-                weight = ivar / (1+ivar*var_lss)
-
-                hdr_dict['MEANSNR'] = np.mean(np.sqrt(ivar[ivar>0]))
-
-                cols = [wave_arm, delta, ivar, weight, _cont]
-                names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT']
-                if spec.forestreso:
-                    cols.append(spec.forestreso[arm].T)
-                    names.append('RESOMAT')
-
-                results.write(cols, names=names, header=hdr_dict,
-                    extname=f"{spec.targetid}-{arm}")
+            if spec.cont_params['valid']:
+                spec.write(results, varlss_interp)
 
         results.close()
 
@@ -484,6 +455,36 @@ class Spectrum(object):
 
         if self.reso:
             self._coadd_arms_reso(nwaves, idxes)
+
+    def write(self, fts_file, varlss_interp):
+        hdr_dict = {
+                'LOS_ID': self.targetid,
+                'TARGETID': self.targetid,
+                'RA': self.ra, 'DEC': self.dec,
+                'Z': self.z_qso,
+                'BLINDING': "none",
+                'WAVE_SOLUTION': "lin",
+                'MEANSNR': 0.,
+                'DLAMBDA': self.dwave
+        }
+
+        for arm, wave_arm in self.forestwave.items():
+            _cont = self.cont_params['cont'][arm]
+            delta = self.forestflux[arm]/_cont-1
+            ivar  = self.forestivar[arm]*_cont**2
+            var_lss = varlss_interp(wave_arm)
+            weight = ivar / (1+ivar*var_lss)
+
+            hdr_dict['MEANSNR'] = np.mean(np.sqrt(ivar[ivar>0]))
+
+            cols = [wave_arm, delta, ivar, weight, _cont]
+            names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT']
+            if self.forestreso:
+                cols.append(self.forestreso[arm].T)
+                names.append('RESOMAT')
+
+            fts_file.write(cols, names=names, header=hdr_dict,
+                extname=f"{self.targetid}-{arm}")
 
     @property
     def wave(self):
