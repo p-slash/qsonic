@@ -110,11 +110,9 @@ def generate_spectra_list_from_data(cat_by_survey, data):
     spectra_list = []
     for idx in range(cat_by_survey.size):
         row = cat_by_survey[idx]
-        z_qso = row['Z']
-        targetid = row['TARGETID']
 
         spectra_list.append(
-            Spectrum(z_qso, targetid, row['RA'], row['DEC'], data['wave'], data['flux'],
+            Spectrum(row, data['wave'], data['flux'],
                 data['ivar'], data['mask'], data['reso'], idx)
         )
 
@@ -222,10 +220,8 @@ class Spectrum(object):
 
     Parameters
     ----------
-    z_qso: float
-        Quasar redshift.
-    targetid: int
-        Unique TARGETID identifier.
+    catrow: ndarray
+        Catalog row.
     wave: dict of numpy array
         Dictionary of arrays specifying the wavelength grid. Static variable!
     flux: dict
@@ -241,6 +237,12 @@ class Spectrum(object):
     ----------
     arms: list
         List of characters to id spectrograph like 'B', 'R' and 'Z'. Static variable!
+    z_qso: float
+        Quasar redshift.
+    targetid: int
+        Unique TARGETID identifier.
+    ra, dec: float
+        RA and DEC
     _f1, _f2: dict of int
         Forest indices. Set up using set_forest method. Then use property functions
         to access forest wave, flux, ivar instead.
@@ -272,11 +274,8 @@ class Spectrum(object):
                 if Spectrum._dwave is None:
                     Spectrum._dwave = wave[arm][1] - wave[arm][0]
 
-    def __init__(self, z_qso, targetid, ra, dec, wave, flux, ivar, mask, reso, idx):
-        self.z_qso = z_qso
-        self.targetid = targetid
-        self.ra = ra
-        self.dec = dec
+    def __init__(self, catrow, z_qso, targetid, ra, dec, wave, flux, ivar, mask, reso, idx):
+        self.catrow = catrow
         Spectrum._set_wave(wave)
 
         self.flux = {}
@@ -486,6 +485,18 @@ class Spectrum(object):
             fts_file.write(cols, names=names, header=hdr_dict,
                 extname=f"{self.targetid}-{arm}")
 
+    @property
+    def z_qso(self):
+        return self.catrow['Z']
+    @property
+    def targetid(self):
+        return self.catrow['TARGETID']
+    @property
+    def ra(self):
+        return self.catrow['RA']
+    @property
+    def dec(self):
+        return self.catrow['DEC']
     @property
     def wave(self):
         return Spectrum._wave
