@@ -16,7 +16,8 @@ def parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--input-dir", help="Input directory to healpix", required=True)
     parser.add_argument("--catalog", help="Catalog filename", required=True)
-    # parser.add_argument("--keep-surveys", help="Surveys to keep.")
+    parser.add_argument("--keep-surveys", help="Surveys to keep.", nargs='+',
+        default=['sv3', 'main'])
     parser.add_argument("--outdir", '-o', help="Output directory to save deltas.")
 
     parser.add_argument("--mock-analysis", help="Input folder is mock. Uses nside=16",
@@ -80,7 +81,7 @@ if __name__ == '__main__':
 
     # read catalog
     n_side = 16 if args.mock_analysis else 64
-    qso_cat = Catalog(args.catalog, comm, n_side=n_side, mpi_rank=mpi_rank)
+    qso_cat = Catalog(args.catalog, comm, n_side, args.keep_surveys)
 
     # We decide forest filename list
     # Group into unique pixels
