@@ -12,25 +12,31 @@ class PiccaContinuumFitter(object):
     Mean continuum is smoothed using inverse weights and cubic spline.
     """
     def _set_fiducials(self, fiducial_fits):
-        _fits = fitsio.FITS(fiducial_fits)
-        _data = _fits['STATS'].read()
-        waves = _data['LAMBDA']
-        dwave = waves[1]-waves[0]
-        if not np.allclose(np.diff(waves), dwave):
-            raise Exception(
-                "Failed to construct fiducial mean flux and varlss from "
-                f"{fiducial_fits}::LAMBDA is not equally spaced."
-            )
+        if self.mpi_rank == 0:
+            with fitsio.FITS(fiducial_fits) as fts:
+                data = fts['STATS'].read()
+            waves = data['LAMBDA']
+            dwave = waves[1]-waves[0]
+            if not np.allclose(np.diff(waves), dwave):
+                raise Exception(
+                    "Failed to construct fiducial mean flux and varlss from "
+                    f"{fiducial_fits}::LAMBDA is not equally spaced."
+                )
 
-        meanflux = _data['MEANFLUX']
-        varlss = _data['VAR']
+            meanflux = data['MEANFLUX']
+            varlss   = data['VAR']
 
-        self.meanflux_interp = Fast1DInterpolator(waves[0], dwave,
+        waves_0  = self.comm.bcast(waves[0])
+        dwave    = self.comm.bcast(dwave)
+        meanflux = self.comm.bcast(meanflux)
+        varlss   = self.comm.bcast(varlss)
+
+        self.meanflux_interp = Fast1DInterpolator(waves_0, dwave,
             meanflux)
-        self.varlss_interp = Fast1DInterpolator(waves[0], dwave,
+        self.varlss_interp = Fast1DInterpolator(waves_0, dwave,
             varlss)
 
-    def __init__(self, w1rf, w2rf, dwrf, fiducial_fits=None):
+    def __init__(self, w1rf, w2rf, dwrf, comm, mpi_rank, fiducial_fits=None):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
         self.dwrf = dwrf
         self.rfwave = w1rf + np.arange(self.nbins)*dwrf
@@ -39,6 +45,9 @@ class PiccaContinuumFitter(object):
         self.mean_cont = np.ones(self.nbins)
         self.meancont_interp = Fast1DInterpolator(w1rf, dwrf,
             self.mean_cont)
+
+        self.comm = comm
+        self.mpi_rank = mpi_rank
 
         if fiducial_fits:
             self._set_fiducials(fiducial_fits)
@@ -114,7 +123,7 @@ class PiccaContinuumFitter(object):
         else:
             spec.cont_params['cont'] = None
 
-    def fit_continua(self, spectra_list, comm, mpi_rank):
+    def fit_continua(self, spectra_list):
         no_valid_fits=0
         no_invalid_fits=0
 
@@ -129,12 +138,12 @@ class PiccaContinuumFitter(object):
             else:
                 no_valid_fits += 1
 
-        no_valid_fits = comm.reduce(no_valid_fits, root=0)
-        no_invalid_fits = comm.reduce(no_invalid_fits, root=0)
-        logging_mpi(f"Number of valid fits: {no_valid_fits}", mpi_rank)
-        logging_mpi(f"Number of invalid fits: {no_invalid_fits}", mpi_rank)
+        no_valid_fits = self.comm.reduce(no_valid_fits, root=0)
+        no_invalid_fits = self.comm.reduce(no_invalid_fits, root=0)
+        logging_mpi(f"Number of valid fits: {no_valid_fits}", self.mpi_rank)
+        logging_mpi(f"Number of invalid fits: {no_invalid_fits}", self.mpi_rank)
 
-    def update_mean_cont(self, spectra_list, comm):
+    def update_mean_cont(self, spectra_list):
         norm_flux = np.zeros_like(self.mean_cont)
         counts = np.zeros_like(self.mean_cont)
 
@@ -159,8 +168,8 @@ class PiccaContinuumFitter(object):
                 norm_flux += np.bincount(bin_idx, weights=flux_*weight, minlength=self.nbins)
                 counts    += np.bincount(bin_idx, weights=weight, minlength=self.nbins)
 
-        norm_flux = comm.allreduce(norm_flux)
-        counts = comm.allreduce(counts)
+        norm_flux = self.comm.allreduce(norm_flux)
+        counts = self.comm.allreduce(counts)
         norm_flux /= counts
         std_flux = 1/np.sqrt(counts)
 
@@ -173,32 +182,32 @@ class PiccaContinuumFitter(object):
         norm_flux = spl(self.rfwave)
         self.mean_cont *= 1+norm_flux
 
-        logging_mpi("Continuum updates", comm.Get_rank())
+        logging_mpi("Continuum updates", self.mpi_rank)
         for _w, _c, _e in zip(self.rfwave, norm_flux, std_flux):
-            logging_mpi(f"{_w:10.2f}: 1+({_c:10.2e}) pm {_e:10.2e}", comm.Get_rank())
+            logging_mpi(f"{_w:10.2f}: 1+({_c:10.2e}) pm {_e:10.2e}", self.mpi_rank)
 
         has_converged = np.all(np.abs(norm_flux) < 1.5*std_flux)
         # np.allclose(np.abs(norm_flux), std_flux, rtol=0.5)
 
         return has_converged
 
-    def iterate(self, spectra_list, niterations, comm, mpi_rank):
+    def iterate(self, spectra_list, niterations):
         has_converged = False
 
         for it in range(niterations):
-            logging_mpi(f"Fitting iteration {it+1}/{niterations}", mpi_rank)
+            logging_mpi(f"Fitting iteration {it+1}/{niterations}", self.mpi_rank)
             # Fit all continua one by one
-            self.fit_continua(spectra_list, comm, mpi_rank)
+            self.fit_continua(spectra_list)
             # Stack all spectra in each process
             # Broadcast and recalculate global functions
-            has_converged = self.update_mean_cont(spectra_list, comm)
+            has_converged = self.update_mean_cont(spectra_list)
 
             if has_converged:
-                logging_mpi("Iteration has converged.", mpi_rank)
+                logging_mpi("Iteration has converged.", self.mpi_rank)
                 break
 
         if not has_converged:
-            logging_mpi("Iteration has NOT converged.", mpi_rank, "warning")
+            logging_mpi("Iteration has NOT converged.", self.mpi_rank, "warning")
 
 
 
