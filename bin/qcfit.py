@@ -11,11 +11,7 @@ from qcfitter.spectrum import Spectrum, read_spectra, save_deltas
 from qcfitter.mpi_utils import balance_load, logging_mpi
 from qcfitter.picca_continuum import PiccaContinuumFitter
 
-if __name__ == '__main__':
-    comm = MPI.COMM_WORLD
-    mpi_rank = comm.Get_rank()
-    mpi_size = comm.Get_size()
-
+def parse():
     # Arguments passed to run the script
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--input-dir", help="Input directory to healpix", required=True)
@@ -55,15 +51,30 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    return args
+
+if __name__ == '__main__':
+    comm = MPI.COMM_WORLD
+    mpi_rank = comm.Get_rank()
+    mpi_size = comm.Get_size()
+
     logging.basicConfig(level=logging.DEBUG)
 
-    if any(arm not in ['B', 'R', 'Z'] for arm in args.arms):
-        logging_mpi("Arms should be 'B', 'R' or 'Z'.", mpi_rank, "error")
-        comm.Abort()
+    if mpi_rank == 0:
+        try:
+            args = parse()
+        except:
+            comm.Abort()
 
-    if args.skip < 0 or args.skip > 1:
-        logging_mpi("Skip ratio should be between 0 and 1", mpi_rank, "error")
-        comm.Abort()
+        if any(arm not in ['B', 'R', 'Z'] for arm in args.arms):
+            logging.error("Arms should be 'B', 'R' or 'Z'.")
+            comm.Abort()
+
+        if args.skip < 0 or args.skip > 1:
+            logging.error("Skip ratio should be between 0 and 1")
+            comm.Abort()
+
+    args = comm.bcast(args)
 
     # read catalog
     n_side = 16 if args.mock_analysis else 64
