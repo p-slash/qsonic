@@ -3,6 +3,8 @@ import fitsio
 from scipy.optimize import minimize
 from scipy.interpolate import UnivariateSpline
 
+from mpi4py import MPI
+
 from qcfitter.mpi_utils import logging_mpi
 from qcfitter.mathtools import Fast1DInterpolator
 
@@ -16,7 +18,9 @@ class PiccaContinuumFitter(object):
             with fitsio.FITS(fiducial_fits) as fts:
                 data = fts['STATS'].read()
             waves = data['LAMBDA']
+            waves_0 = waves[0]
             dwave = waves[1]-waves[0]
+            nsize = waves.size
             if not np.allclose(np.diff(waves), dwave):
                 raise Exception(
                     "Failed to construct fiducial mean flux and varlss from "
@@ -25,11 +29,21 @@ class PiccaContinuumFitter(object):
 
             meanflux = data['MEANFLUX']
             varlss   = data['VAR']
+        else:
+            waves_0 = 0.
+            dwave   = 0.
+            nsize   = 0
 
-        waves_0  = self.comm.bcast(waves[0])
+        nsize    = self.comm.bcast(nsize)
+        waves_0  = self.comm.bcast(waves_0)
         dwave    = self.comm.bcast(dwave)
-        meanflux = self.comm.bcast(meanflux)
-        varlss   = self.comm.bcast(varlss)
+
+        if self.mpi_rank != 0:
+            meanflux = np.empty(nsize, dtype=float)
+            varlss   = np.empty(nsize, dtype=float)
+
+        self.comm.Bcast([meanflux, MPI.DOUBLE])
+        self.comm.Bcast([varlss, MPI.DOUBLE])
 
         self.meanflux_interp = Fast1DInterpolator(waves_0, dwave,
             meanflux)
@@ -168,8 +182,8 @@ class PiccaContinuumFitter(object):
                 norm_flux += np.bincount(bin_idx, weights=flux_*weight, minlength=self.nbins)
                 counts    += np.bincount(bin_idx, weights=weight, minlength=self.nbins)
 
-        norm_flux = self.comm.allreduce(norm_flux)
-        counts = self.comm.allreduce(counts)
+        self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
+        self.comm.Allreduce(MPI.IN_PLACE, counts)
         norm_flux /= counts
         std_flux = 1/np.sqrt(counts)
 
