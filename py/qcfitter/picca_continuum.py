@@ -50,7 +50,7 @@ class PiccaContinuumFitter(object):
         self.varlss_interp = Fast1DInterpolator(waves_0, dwave,
             varlss)
 
-    def __init__(self, w1rf, w2rf, dwrf, comm, mpi_rank, fiducial_fits=None):
+    def __init__(self, w1rf, w2rf, dwrf, fiducial_fits=None):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
         self.dwrf = dwrf
         self.rfwave = w1rf + np.arange(self.nbins)*dwrf
@@ -60,8 +60,8 @@ class PiccaContinuumFitter(object):
         self.meancont_interp = Fast1DInterpolator(w1rf, dwrf,
             self.mean_cont)
 
-        self.comm = comm
-        self.mpi_rank = mpi_rank
+        self.comm = MPI.COMM_WORLD
+        self.mpi_rank = self.comm.Get_rank()
 
         if fiducial_fits:
             self._set_fiducials(fiducial_fits)
