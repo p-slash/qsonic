@@ -10,6 +10,7 @@ from qcfitter.catalog import Catalog
 from qcfitter.spectrum import Spectrum, read_spectra, save_deltas
 from qcfitter.mpi_utils import balance_load, logging_mpi
 from qcfitter.picca_continuum import PiccaContinuumFitter
+import qcfitter.masks
 
 def parse():
     # Arguments passed to run the script
@@ -37,6 +38,9 @@ def parse():
     parser.add_argument("--fiducials", help="Fiducial mean flux and var_lss fits file.")
 
     parser.add_argument("--sky-mask", help="Sky mask file")
+    parser.add_argument("--bal-mask", help="Mask BALs (assumes it is in catalog)",
+        action="store_true")
+
     parser.add_argument("--skip", help="Skip short spectra lower than given ratio.",
         type=float, default=0.)
     parser.add_argument("--rfdwave", help="Rest-frame wave steps", type=float,
@@ -125,13 +129,24 @@ if __name__ == '__main__':
     # Mask
     if args.sky_mask:
         try:
-            skymasker = SkyMask(args.sky_mask)
+            skymasker = qcfitter.masks.SkyMask(args.sky_mask)
         except Exception as e:
             logging_mpi(f"{e}", 0, "error")
             comm.Abort()
 
         for spec in spectra_list:
             skymasker.apply(spec)
+
+    # BAL mask
+    if args.bal_mask:
+        try:
+            qcfitter.masks.BALMask.check_catalog(qso_cat.catalog)
+        except Exception as e:
+            logging_mpi(f"{e}", 0, "error")
+            comm.Abort()
+
+        for spec in spectra_list:
+            qcfitter.masks.BALMask.apply(spec)
 
     # remove from sample if no pixels is small
     if args.skip > 0:
