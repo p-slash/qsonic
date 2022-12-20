@@ -129,7 +129,7 @@ if __name__ == '__main__':
     try:
         qcfit = PiccaContinuumFitter(
             args.forest_w1, args.forest_w2, args.rfdwave,
-            fiducial_fits=args.fiducials
+            comm, mpi_rank, fiducial_fits=args.fiducials
         )
     except Exception as e:
         logging_mpi(f"{e}", 0, "error")
@@ -141,7 +141,7 @@ if __name__ == '__main__':
     # Stack all spectra in each process
     # Broadcast and recalculate global functions
     # Iterate
-    qcfit.iterate(spectra_list, args.no_iterations, comm, mpi_rank)
+    qcfit.iterate(spectra_list, args.no_iterations)
     # Keep only valid spectra
     spectra_list = [spec for spec in spectra_list if spec.cont_params['valid']]
     logging_mpi("All continua are fit.", mpi_rank)
