@@ -7,7 +7,7 @@ import numpy as np
 from mpi4py import MPI
 
 from qcfitter.catalog import Catalog
-from qcfitter.spectrum import Spectrum, read_spectra, save_deltas
+import qcfitter.spectrum
 from qcfitter.mpi_utils import balance_load, logging_mpi
 from qcfitter.picca_continuum import PiccaContinuumFitter
 import qcfitter.masks
@@ -105,7 +105,7 @@ if __name__ == '__main__':
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
-        local_specs = read_spectra(
+        local_specs = qcfitter.spectrum.read_spectra(
             cat, args.input_dir, args.arms,
             args.mock_analysis, args.skip_resomat
         )
@@ -128,6 +128,7 @@ if __name__ == '__main__':
 
     # Mask
     if args.sky_mask:
+        logging_mpi("Applying sky mask.", mpi_rank)
         try:
             skymasker = qcfitter.masks.SkyMask(args.sky_mask)
         except Exception as e:
@@ -139,6 +140,7 @@ if __name__ == '__main__':
 
     # BAL mask
     if args.bal_mask:
+        logging_mpi("Applying BAL mask.", mpi_rank)
         try:
             qcfitter.masks.BALMask.check_catalog(qso_cat.catalog)
         except Exception as e:
@@ -150,6 +152,7 @@ if __name__ == '__main__':
 
     # remove from sample if no pixels is small
     if args.skip > 0:
+        logging_mpi("Removing short spectra.", mpi_rank)
         dforest_wave = args.forest_w2 - args.forest_w1
         _npixels = lambda spec: (1+spec.z_qso)*dforest_wave/spec.dwave
         spectra_list = [spec for spec in spectra_list if spec.get_real_size() > args.skip*_npixels(spec)]
@@ -157,6 +160,7 @@ if __name__ == '__main__':
     # Continuum fitting
     # -------------------
     # Initialize continuum fitter & global functions
+    logging_mpi("Initializing continuum fitter.", mpi_rank)
     try:
         qcfit = PiccaContinuumFitter(
             args.forest_w1, args.forest_w2, args.rfdwave,
@@ -193,7 +197,7 @@ if __name__ == '__main__':
             out_nside = None
             out_by_mpi= mpi_rank
 
-        save_deltas(spectra_list, args.outdir, qcfit.varlss_interp,
+        qcfitter.spectrum.save_deltas(spectra_list, args.outdir, qcfit.varlss_interp,
             out_nside=out_nside, mpi_rank=out_by_mpi)
 
 
