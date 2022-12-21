@@ -103,5 +103,47 @@ class BALMask():
 
 
 
+class DLAMask():
+    LIGHT_SPEED = 299792.458
+    qe = 4.803204e-10 # statC, cm^3/2 g^1/2 s^-1
+    me = 9.109384e-28 # g
+    c_cms = DLAMask.LIGHT_SPEED * 1e5 # km to cm
+    aij_coeff = np.pi * DLAMask.qe**2 / DLAMask.me / DLAMask.c_cms # cm^2 s^-1
+    sqrt_pi = 1.77245385091
+    sqrt_2  = 1.41421356237
 
+    f12_lya = 4.1641e-01
+    A12_lya = 6.2648e+08
 
+    wave_lya_A=1215.67
+
+    @staticmethod
+    def H_tepper_garcia(a, u):
+        P = u**2+1e-12
+        Q = 1.5/P
+        R = np.exp(-P)
+        corr = (R**2*(4*P**2 + 7*P + 4 +Q) - Q - 1)*a/P/DLAMask.sqrt_pi
+        return R - corr
+
+    @staticmethod
+    def voigt_tepper_garcia(x, sigma, gamma):
+        a = gamma/sigma
+        u = x/sigma
+        return DLAMask.H_tepper_garcia(a, u)
+
+    @staticmethod
+    def getOpticalDepth(wave_A, lambda12_A, log10N, b, f12, A12):
+        a12 = DLAMask.aij_coeff * f12
+        gamma = A12 * lambda12_A*1e-8 / 4 / np.pi / DLAMask.c_cms
+
+        sigma_gauss = b / DLAMask.LIGHT_SPEED
+
+        vfnc = DLAMask.voigt_tepper_garcia(wave_A/lambda12_A - 1, sigma_gauss, gamma)
+        tau = a12 * 10**(log10N-13) * (lambda12_A/b) * vfnc / DLAMask.sqrt_pi
+
+        return tau
+
+    @staticmethod
+    def getDLAFlux(wave, z_abs, nhi, b=10.):
+        wave_rf = wave/(1+z_abs)
+        return np.exp(-getOpticalDepth(wave_rf, DLAMask.wave_lya_A, nhi, b, DLAMask.f12_lya, DLAMask.A12_lya))
