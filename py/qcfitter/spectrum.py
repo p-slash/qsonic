@@ -274,7 +274,7 @@ class Spectrum(object):
                 if Spectrum._dwave is None:
                     Spectrum._dwave = wave[arm][1] - wave[arm][0]
 
-    def __init__(self, catrow, z_qso, targetid, ra, dec, wave, flux, ivar, mask, reso, idx):
+    def __init__(self, catrow, wave, flux, ivar, mask, reso, idx):
         self.catrow = catrow
         Spectrum._set_wave(wave)
 
@@ -372,7 +372,7 @@ class Spectrum(object):
     def get_real_size(self):
         size = 0
         for ivar_arm in self.forestivar.values():
-            size += ivar_arm.size - np.sum(ivar_arm == 0)
+            size += np.sum(ivar_arm>0)
 
         return size
 
