@@ -372,7 +372,7 @@ class Spectrum(object):
     def get_real_size(self):
         size = 0
         for ivar_arm in self.forestivar.values():
-            size += ivar_arm.size - np.sum(ivar_arm == 0)
+            size += np.sum(ivar_arm>0)
 
         return size
 
