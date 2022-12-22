@@ -1,5 +1,7 @@
 from astropy.io.ascii import read as asread
 import numpy as np
+from numpy.lib.recfunctions import rename_fields
+import fitsio
 
 class SkyMask():
     def __init__(self, fname):
@@ -101,21 +103,23 @@ class BALMask():
 
             spec.forestivar[arm][~w] = 0
 
-
-
 class DLAMask():
     LIGHT_SPEED = 299792.458
     qe = 4.803204e-10 # statC, cm^3/2 g^1/2 s^-1
     me = 9.109384e-28 # g
-    c_cms = DLAMask.LIGHT_SPEED * 1e5 # km to cm
-    aij_coeff = np.pi * DLAMask.qe**2 / DLAMask.me / DLAMask.c_cms # cm^2 s^-1
+    c_cms = LIGHT_SPEED * 1e5 # km to cm
+    aij_coeff = np.pi * qe**2 / me / c_cms # cm^2 s^-1
     sqrt_pi = 1.77245385091
     sqrt_2  = 1.41421356237
 
+    wave_lya_A = 1215.67
+    # I suppose we are to pick maximum for each from NIST?
     f12_lya = 4.1641e-01
     A12_lya = 6.2648e+08
 
-    wave_lya_A=1215.67
+    wave_lyb_A = 1025.7220
+    f12_lyb = 7.9142e-02
+    A12_lyb = 1.6725e+08
 
     @staticmethod
     def H_tepper_garcia(a, u):
@@ -132,7 +136,7 @@ class DLAMask():
         return DLAMask.H_tepper_garcia(a, u)
 
     @staticmethod
-    def getOpticalDepth(wave_A, lambda12_A, log10N, b, f12, A12):
+    def get_optical_depth(wave_A, lambda12_A, log10N, b, f12, A12):
         a12 = DLAMask.aij_coeff * f12
         gamma = A12 * lambda12_A*1e-8 / 4 / np.pi / DLAMask.c_cms
 
@@ -144,6 +148,69 @@ class DLAMask():
         return tau
 
     @staticmethod
-    def getDLAFlux(wave, z_abs, nhi, b=10.):
-        wave_rf = wave/(1+z_abs)
-        return np.exp(-getOpticalDepth(wave_rf, DLAMask.wave_lya_A, nhi, b, DLAMask.f12_lya, DLAMask.A12_lya))
+    def get_dla_flux(wave, z_dla, nhi, b=10.):
+        wave_rf = wave/(1+z_dla)
+        tau  = DLAMask.get_optical_depth(wave_rf, DLAMask.wave_lya_A, nhi, b, DLAMask.f12_lya, DLAMask.A12_lya)
+        tau += DLAMask.get_optical_depth(wave_rf, DLAMask.wave_lyb_A, nhi, b, DLAMask.f12_lyb, DLAMask.A12_lyb)
+        return np.exp(-tau)
+
+    @staticmethod
+    def get_all_dlas(wave, spec_dlas):
+        transmission = np.ones(wave.size)
+        for z_dla, nhi in spec_dlas['Z_DLA', 'NHI']:
+            transmission *= DLAMask.get_dla_flux(wave, z_dla, nhi)
+
+        return transmission
+
+    def __init__(self, fname, local_targetids, comm, mpi_rank, dla_mask_limit=0.8):
+        catalog = None
+        self.dla_mask_limit = dla_mask_limit
+
+        if mpi_rank == 0:
+            accepted_zcolnames = ["Z_DLA", "Z"]
+            z_colname = accepted_zcolnames[0]
+            fts = fitsio.FITS(fname)
+
+            fts_colnames = set(fts["DLACAT"].get_colnames())
+            z_colname = fts_colnames.intersection(accepted_zcolnames)
+            if not z_colname:
+                raise ValueError(f"Z colname has to be one of {', '.join(accepted_zcolnames)}")
+            z_colname = z_colname.pop()
+            columns_list = ["TARGETID", z_colname, "NHI"]
+            catalog = fts['DLACAT'].read(columns=columns_list)
+            catalog = rename_fields(catalog, {z_colname:'Z_DLA'})
+
+            fts.close()
+
+        catalog = comm.bcast(catalog)
+        w = np.isin(catalog['TARGETID'], local_targetids)
+        catalog = catalog[w]
+        catalog.sort(order='TARGETID')
+
+        # Group DLA catalog into targetids
+        self.unique_targetids, s = np.unique(catalog['TARGETID'], return_index=True)
+        self.split_catalog = np.split(catalog, s[1:])
+
+    def apply(self, spec):
+        w = np.isin(self.unique_targetids, spec.targetid)
+        if not any(w):
+            return
+
+        idx = np.nonzero(w)[0][0]
+        spec_dlas = self.split_catalog[idx]
+        for arm, wave_arm in spec.forestwave.items():
+            transmission = DLAMask.get_all_dlas(wave_arm, spec_dlas)
+            w = transmission < self.dla_mask_limit
+            transmission[w] = 1
+
+            spec.forestivar[arm][w] = 0
+            spec.forestflux[arm][w] = 0
+            spec.forestflux[arm] /= transmission
+            spec.forestivar[arm] *= transmission**2
+
+        
+
+
+
+            
+

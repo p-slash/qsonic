@@ -37,13 +37,14 @@ def parse():
         default=1200.)
     parser.add_argument("--fiducials", help="Fiducial mean flux and var_lss fits file.")
 
-    parser.add_argument("--sky-mask", help="Sky mask file")
-    parser.add_argument("--bal-mask", help="Mask BALs (assumes it is in catalog)",
+    parser.add_argument("--sky-mask", help="Sky mask file.")
+    parser.add_argument("--bal-mask", help="Mask BALs (assumes it is in catalog).",
         action="store_true")
+    parser.add_argument("--dla-mask", help="DLA catalog to mask.")
 
     parser.add_argument("--skip", help="Skip short spectra lower than given ratio.",
         type=float, default=0.)
-    parser.add_argument("--rfdwave", help="Rest-frame wave steps", type=float,
+    parser.add_argument("--rfdwave", help="Rest-frame wave steps.", type=float,
         default=1.)
     parser.add_argument("--no-iterations", help="Number of iterations to perform for continuum fitting.",
         type=int, default=5)
@@ -116,8 +117,6 @@ if __name__ == '__main__':
                 args.skip/2
             )
 
-            spec.set_smooth_ivar()
-
             if not args.keep_nonforest_pixels:
                 spec.remove_nonforest_pixels()
 
@@ -150,12 +149,31 @@ if __name__ == '__main__':
         for spec in spectra_list:
             qcfitter.masks.BALMask.apply(spec)
 
+    # DLA mask
+    if args.dla_mask:
+        logging_mpi("Applying DLA mask.", mpi_rank)
+        local_targetids = [spec.targetid for spec in spectra_list]
+        # Read catalog
+        try:
+            dlamasker = qcfitter.masks.DLAMask(args.dla_mask, local_targetids,
+                comm, mpi_rank, dla_mask_limit=0.8)
+        except Exception as e:
+            logging_mpi(f"{e}", mpi_rank, "error")
+            comm.Abort()
+
+        for spec in spectra_list:
+            dlamasker.apply(spec)
+
     # remove from sample if no pixels is small
     if args.skip > 0:
         logging_mpi("Removing short spectra.", mpi_rank)
         dforest_wave = args.forest_w2 - args.forest_w1
         _npixels = lambda spec: (1+spec.z_qso)*dforest_wave/spec.dwave
         spectra_list = [spec for spec in spectra_list if spec.get_real_size() > args.skip*_npixels(spec)]
+
+    # Create smoothed ivar as intermediate variable
+    for spec in spectra_list:
+        spec.set_smooth_ivar()
 
     # Continuum fitting
     # -------------------
