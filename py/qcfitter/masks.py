@@ -82,7 +82,7 @@ class BALMask():
         min_velocities = 1 - min_velocities / BALMask.LIGHT_SPEED
         max_velocities = 1 - max_velocities / BALMask.LIGHT_SPEED
 
-        mask = np.empty(num_velocities * lines.size,
+        mask = np.empty(num_velocities * BALMask.lines.size,
             dtype=[('wave_min', 'f8'), ('wave_max', 'f8')]
         )
         mask['wave_min'] = np.outer(BALMask.lines['value'], max_velocities).ravel()
@@ -156,7 +156,7 @@ class DLAMask():
     @staticmethod
     def get_all_dlas(wave, spec_dlas):
         transmission = np.ones(wave.size)
-        for z_dla, nhi in spec_dlas['Z_DLA', 'NHI']:
+        for z_dla, nhi in spec_dlas[['Z_DLA', 'NHI']]:
             transmission *= DLAMask.get_dla_flux(wave, z_dla, nhi)
 
         return transmission
