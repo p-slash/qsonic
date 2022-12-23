@@ -150,8 +150,7 @@ if __name__ == '__main__':
         for spec in local_specs:
             spec.set_forest_region(
                 args.wave1, args.wave2,
-                args.forest_w1, args.forest_w2,
-                args.skip/2
+                args.forest_w1, args.forest_w2
             )
 
             if not args.keep_nonforest_pixels:
@@ -167,6 +166,7 @@ if __name__ == '__main__':
         for spec in spectra_list:
             for masker in maskers:
                 masker.apply(spec)
+            spec.drop_short_arms()
 
     # remove from sample if no pixels is small
     if args.skip > 0:
@@ -207,6 +207,10 @@ if __name__ == '__main__':
         logging_mpi("Coadding arms.", mpi_rank)
         for spec in spectra_list:
             spec.coadd_arms_forest(qcfit.varlss_interp)
+
+    # Final cleaning. Especially important if not coadding arms.
+    for spec in spectra_list:
+        spec.drop_short_arms(args.forest_w1, args.forest_w2, args.skip)
 
     # Save deltas
     if args.outdir:

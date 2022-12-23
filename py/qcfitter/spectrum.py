@@ -309,11 +309,10 @@ class Spectrum(object):
         self.cont_params['method'] = ''
         self.cont_params['valid'] = False
         self.cont_params['x'] = np.array([1., 0.])
-        self.cont_params['cont'] = None
+        self.cont_params['cont'] = {}
 
-    def set_forest_region(self, w1, w2, lya1, lya2, skip_ratio=0):
-        """ Sets slices for the forest region. Arms that have less than
-        skip_ratio pixels will not be added to forest dictionary.
+    def set_forest_region(self, w1, w2, lya1, lya2):
+        """ Sets slices for the forest region.
 
         Arguments
         ---------
@@ -322,13 +321,7 @@ class Spectrum(object):
 
         lya1, lya2: floats
         Rest-frame wavelength for the forest
-
-        skip_ratio: float
-        Remove arms if they have less than this ratio of pixels
-
         """
-        _npixels_expected = int(skip_ratio*(1+self.z_qso)*(lya2 - lya1)/self.dwave)+1
-
         l1 = max(w1, (1+self.z_qso)*lya1)
         l2 = min(w2, (1+self.z_qso)*lya2)
 
@@ -336,8 +329,8 @@ class Spectrum(object):
         n0 = 1e-6
         for arm in self.arms:
             ii1, ii2 = np.searchsorted(self.wave[arm], [l1, l2])
-            real_size_arm = ii2-ii1 - np.sum(self.ivar[arm][ii1:ii2] == 0)
-            if real_size_arm < _npixels_expected:
+            real_size_arm = np.sum(self.ivar[arm][ii1:ii2] > 0)
+            if real_size_arm == 0:
                 continue
 
             # if larger than skip ratio, add to dict
@@ -358,6 +351,28 @@ class Spectrum(object):
 
         self.cont_params['x'][0] = a0/n0
         self._forestivar_sm = self._forestivar
+
+    def drop_short_arms(self, lya1=0, lya2=0, skip_ratio=0):
+        """Arms that have less than skip_ratio pixels are removed 
+        from forest dictionary.
+
+        Arguments
+        ---------
+        lya1, lya2: floats
+        Rest-frame wavelength for the forest
+
+        skip_ratio: float
+        Remove arms if they have less than this ratio of pixels
+        """
+        npixels_expected = int(skip_ratio*(1+self.z_qso)*(lya2 - lya1)/self.dwave)+1
+        short_arms = [arm for arm, ivar in self.forestivar.items() if np.sum(ivar>0)<npixels_expected]
+        for arm in short_arms:
+            self._forestwave.pop(arm, None)
+            self._forestflux.pop(arm, None)
+            self._forestivar.pop(arm, None)
+            self._forestreso.pop(arm, None)
+            self._forestivar_sm.pop(arm, None)
+            self.cont_params['cont'].pop(arm, None)
 
     def remove_nonforest_pixels(self):
         self.flux = self.forestflux
@@ -403,7 +418,7 @@ class Spectrum(object):
         """ Coadds different arms using smoothed pipeline ivar and var_lss.
         Resolution matrix is equally weighted!
         """
-        if not self.cont_params['valid'] or self.cont_params['cont'] is None:
+        if not self.cont_params['valid'] or not self.cont_params['cont']:
             raise Exception("Continuum needed for coadding.")
 
         coadd_wave = {}
