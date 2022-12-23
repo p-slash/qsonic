@@ -96,10 +96,11 @@ if __name__ == '__main__':
     # Group into unique pixels
     unique_pix, s = np.unique(qso_cat.catalog['HPXPIXEL'], return_index=True)
     split_catalog = np.split(qso_cat.catalog, s[1:])
-    logging_mpi(f"There are {unique_pix.size} healpixels. Using more MPI processes will be unused.", mpi_rank)
+    logging_mpi(f"There are {unique_pix.size} healpixels. Don't use more MPI processes.", mpi_rank)
 
     # Roughly equal number of spectra
     logging_mpi("Load balancing.", mpi_rank)
+    # Returns a list of catalog (ndarray)
     local_queue = balance_load(split_catalog, mpi_size, mpi_rank)
 
     # Read masks before data
@@ -115,7 +116,7 @@ if __name__ == '__main__':
 
     # BAL mask
     if args.bal_mask:
-        logging_mpi("Chaking BAL mask.", mpi_rank)
+        logging_mpi("Checking BAL mask.", mpi_rank)
         try:
             qcfitter.masks.BALMask.check_catalog(qso_cat.catalog)
         except Exception as e:
