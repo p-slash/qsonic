@@ -2,6 +2,24 @@ import logging
 import numpy as np
 
 def balance_load(split_catalog, mpi_size, mpi_rank):
+    """Load balancing function.
+
+    Arguments
+    ---------
+    split_catalog: list of named ndarray
+    list of catalog. Each element is a ndarray with the same healpix
+
+    mpi_size: int
+    number of mpi tasks running
+
+    mpi_rank: int
+    rank of current mpi taks
+
+    Returns
+    ---------
+    local_queue: list of named ndarray
+    spectra that current rank is reponsible for. same format as split_catalog
+    """
     number_of_spectra = np.zeros(mpi_size, dtype=int)
     local_queue = []
     split_catalog.sort(key=lambda x: x.size, reverse=True) # Descending order
