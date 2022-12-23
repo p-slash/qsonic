@@ -62,7 +62,7 @@ class BALMask():
 
     @staticmethod
     def check_catalog(catalog):
-        if not all(col in catalog.dtype.names for col in expected_columns):
+        if not all(col in catalog.dtype.names for col in BALMask.expected_columns):
             raise Exception("Input catalog is missing BAL columns.")
 
     @staticmethod
