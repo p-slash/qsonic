@@ -102,6 +102,42 @@ if __name__ == '__main__':
     logging_mpi("Load balancing.", mpi_rank)
     local_queue = balance_load(split_catalog, mpi_size, mpi_rank)
 
+    # Read masks before data
+    maskers = []
+    if args.sky_mask:
+        logging_mpi("Reading sky mask.", mpi_rank)
+        try:
+            skymasker = qcfitter.masks.SkyMask(args.sky_mask)
+        except Exception as e:
+            logging_mpi(f"{e}", mpi_rank, "error")
+            comm.Abort()
+        maskers.append(skymasker)
+
+    # BAL mask
+    if args.bal_mask:
+        logging_mpi("Chaking BAL mask.", mpi_rank)
+        try:
+            qcfitter.masks.BALMask.check_catalog(qso_cat.catalog)
+        except Exception as e:
+            logging_mpi(f"{e}", mpi_rank, "error")
+            comm.Abort()
+
+        maskers.append(qcfitter.masks.BALMask)
+
+    # DLA mask
+    if args.dla_mask:
+        logging_mpi("Reading DLA mask.", mpi_rank)
+        local_targetids = np.concatenate([cat['TARGETID'] for cat in local_queue])
+        # Read catalog
+        try:
+            dlamasker = qcfitter.masks.DLAMask(args.dla_mask, local_targetids,
+                comm, mpi_rank, dla_mask_limit=0.8)
+        except Exception as e:
+            logging_mpi(f"{e}", mpi_rank, "error")
+            comm.Abort()
+
+        maskers.append(dlamasker)
+
     logging_mpi("Reading spectra.", mpi_rank)
     spectra_list = []
     # Each process reads its own list
@@ -125,44 +161,11 @@ if __name__ == '__main__':
     nspec_all = comm.reduce(len(spectra_list), op=MPI.SUM, root=0)
     logging_mpi(f"All {nspec_all} spectra are read.", mpi_rank)
 
-    # Mask
-    if args.sky_mask:
-        logging_mpi("Applying sky mask.", mpi_rank)
-        try:
-            skymasker = qcfitter.masks.SkyMask(args.sky_mask)
-        except Exception as e:
-            logging_mpi(f"{e}", mpi_rank, "error")
-            comm.Abort()
-
+    if maskers:
+        logging_mpi("Applying masks")
         for spec in spectra_list:
-            skymasker.apply(spec)
-
-    # BAL mask
-    if args.bal_mask:
-        logging_mpi("Applying BAL mask.", mpi_rank)
-        try:
-            qcfitter.masks.BALMask.check_catalog(qso_cat.catalog)
-        except Exception as e:
-            logging_mpi(f"{e}", mpi_rank, "error")
-            comm.Abort()
-
-        for spec in spectra_list:
-            qcfitter.masks.BALMask.apply(spec)
-
-    # DLA mask
-    if args.dla_mask:
-        logging_mpi("Applying DLA mask.", mpi_rank)
-        local_targetids = [spec.targetid for spec in spectra_list]
-        # Read catalog
-        try:
-            dlamasker = qcfitter.masks.DLAMask(args.dla_mask, local_targetids,
-                comm, mpi_rank, dla_mask_limit=0.8)
-        except Exception as e:
-            logging_mpi(f"{e}", mpi_rank, "error")
-            comm.Abort()
-
-        for spec in spectra_list:
-            dlamasker.apply(spec)
+            for masker in maskers:
+                masker.apply(spec)
 
     # remove from sample if no pixels is small
     if args.skip > 0:
