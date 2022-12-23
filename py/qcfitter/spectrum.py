@@ -483,9 +483,13 @@ class Spectrum(object):
         }
 
         for arm, wave_arm in self.forestwave.items():
+            ivar  = self.forestivar[arm]
+            if np.sum(ivar>0) == 0:
+                continue
+
             _cont = self.cont_params['cont'][arm]
             delta = self.forestflux[arm]/_cont-1
-            ivar  = self.forestivar[arm]*_cont**2
+            ivar *=_cont**2
             var_lss = varlss_interp(wave_arm)
             weight = ivar / (1+ivar*var_lss)
 
