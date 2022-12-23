@@ -93,7 +93,7 @@ class BALMask():
 
             mask_idx_ranges = np.searchsorted(
                 wave_arm/(1.0 + spec.z_qso),
-                [self.mask['wave_min'], self.mask['wave_max']]
+                [mask['wave_min'], mask['wave_max']]
             ).T
             # Make sure first index comes before the second
             mask_idx_ranges.sort(axis=1)
