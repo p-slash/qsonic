@@ -67,11 +67,10 @@ class BALMask():
 
     @staticmethod
     def apply(spec):
-        # vmin_ai, vmax_ai = spec.catrow['VMIN_CIV_450', 'VMAX_CIV_450']
-        # vmin_bi, vmax_bi = spec.catrow['VMIN_CIV_2000', 'VMAX_CIV_2000']
-
-        min_velocities = spec.catrow['VMIN_CIV_450', 'VMIN_CIV_2000']
-        max_velocities = spec.catrow['VMAX_CIV_450', 'VMAX_CIV_2000']
+        min_velocities = np.concatenate((spec.catrow['VMIN_CIV_450'],
+            spec.catrow['VMIN_CIV_2000']))
+        max_velocities = np.concatenate((spec.catrow['VMAX_CIV_450'],
+            spec.catrow['VMAX_CIV_2000']))
         w = (min_velocities>0) & (max_velocities>0)
         min_velocities = min_velocities[w]
         max_velocities = max_velocities[w]
