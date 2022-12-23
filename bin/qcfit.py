@@ -163,7 +163,7 @@ if __name__ == '__main__':
     logging_mpi(f"All {nspec_all} spectra are read.", mpi_rank)
 
     if maskers:
-        logging_mpi("Applying masks")
+        logging_mpi("Applying masks", mpi_rank)
         for spec in spectra_list:
             for masker in maskers:
                 masker.apply(spec)
