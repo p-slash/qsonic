@@ -95,6 +95,13 @@ if __name__ == '__main__':
     n_side = 16 if args.mock_analysis else 64
     qso_catalog = qcfitter.catalog.read_qso_catalog(args.catalog, comm, n_side, args.keep_surveys)
 
+    # Blinding
+    try:
+        qcfitter.spectrum.Spectrum.set_blinding(catalog, args)
+    except Exception as e:
+        logging_mpi(f"{e}", mpi_rank, "error")
+        exit(0)
+
     # We decide forest filename list
     # Group into unique pixels
     unique_pix, s = np.unique(qso_catalog['HPXPIXEL'], return_index=True)
