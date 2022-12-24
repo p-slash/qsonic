@@ -191,11 +191,11 @@ class DLAMask():
         self.split_catalog = np.split(catalog, s[1:])
 
     def apply(self, spec):
-        w = np.isin(self.unique_targetids, spec.targetid)
-        if not any(w):
+        w = np.nonzero(self.unique_targetids==spec.targetid)[0]
+        if w.size == 0:
             return
 
-        idx = np.nonzero(w)[0][0]
+        idx = w[0]
         spec_dlas = self.split_catalog[idx]
         for arm, wave_arm in spec.forestwave.items():
             transmission = DLAMask.get_all_dlas(wave_arm, spec_dlas)
