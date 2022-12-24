@@ -197,8 +197,10 @@ class PiccaContinuumFitter(object):
         self.mean_cont *= 1+norm_flux
 
         logging_mpi("Continuum updates", self.mpi_rank)
-        for _w, _c, _e in zip(self.rfwave, norm_flux, std_flux):
-            logging_mpi(f"{_w:10.2f}: 1+({_c:10.2e}) pm {_e:10.2e}", self.mpi_rank)
+        _step = int(self.nbins/10)
+        logging_mpi("wave_rf \t| update \t| error", self.mpi_rank)
+        for w, n, e in zip(self.rfwave[::_step], norm_flux[::_step], std_flux[::_step]):
+            logging_mpi(f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}", self.mpi_rank)
 
         has_converged = np.all(np.abs(norm_flux) < 1.5*std_flux)
         # np.allclose(np.abs(norm_flux), std_flux, rtol=0.5)
