@@ -27,13 +27,13 @@ def parse():
         action="store_true")
     parser.add_argument("--arms", help="Arms to read.", default=['B', 'R'], nargs='+')
 
-    parser.add_argument("--wave1", help="First analysis wavelength", type=float,
+    parser.add_argument("--wave1", help="First observed wavelength edge.", type=float,
         default=3600.)
-    parser.add_argument("--wave2", help="Last analysis wavelength", type=float,
+    parser.add_argument("--wave2", help="Last observed wavelength edge.", type=float,
         default=6000.)
-    parser.add_argument("--forest-w1", help="First forest wavelength.", type=float,
+    parser.add_argument("--forest-w1", help="First forest wavelength edge.", type=float,
         default=1040.)
-    parser.add_argument("--forest-w2", help="Last forest wavelength.", type=float,
+    parser.add_argument("--forest-w2", help="Last forest wavelength edge.", type=float,
         default=1200.)
     parser.add_argument("--fiducials", help="Fiducial mean flux and var_lss fits file.")
 
@@ -44,8 +44,8 @@ def parse():
 
     parser.add_argument("--skip", help="Skip short spectra lower than given ratio.",
         type=float, default=0.)
-    parser.add_argument("--rfdwave", help="Rest-frame wave steps.", type=float,
-        default=1.)
+    parser.add_argument("--rfdwave", help="Rest-frame wave steps. Can be adjusted to comply with forest limits",
+        type=float, default=2.5)
     parser.add_argument("--no-iterations", help="Number of iterations to perform for continuum fitting.",
         type=int, default=5)
     parser.add_argument("--keep-nonforest-pixels", help="Keeps non forest wavelengths. Memory intensive!",

@@ -52,12 +52,11 @@ class PiccaContinuumFitter(object):
 
     def __init__(self, w1rf, w2rf, dwrf, fiducial_fits=None):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
-        self.dwrf = dwrf
-        self.rfwave = w1rf + np.arange(self.nbins)*dwrf
+        self.rfwave, self.dwrf = np.linspace(w1rf, w2rf, self.nbins, retstep=True)
         self._denom = np.log(self.rfwave[-1]/self.rfwave[0])
 
         self.mean_cont = np.ones(self.nbins)
-        self.meancont_interp = Fast1DInterpolator(w1rf, dwrf,
+        self.meancont_interp = Fast1DInterpolator(w1rf, self.dwrf,
             self.mean_cont)
 
         self.comm = MPI.COMM_WORLD
