@@ -45,7 +45,7 @@ def read_qso_catalog(filename, comm, n_side=64, keep_surveys=None, zmin=2.1, zma
 
     catalog = comm.bcast(catalog, root=0)
     if catalog is None:
-        logging_mpi("Empty quasar catalogue.", comm.Get_rank(), "error")
+        logging_mpi("Error while reading catalog.", comm.Get_rank(), "error")
         exit(0)
 
     return catalog
@@ -68,6 +68,10 @@ def _read_catalog_on_master(filename, n_side, keep_surveys, zmin, zmax):
 
     logging_mpi(f"There are {catalog.size} quasars in the catalog.", 0)
 
+    if catalog.size != np.unique(catalog['TARGETID']).size:
+        logging_mpi("There are duplicate TARGETIDs in catalog!", 0, "error")
+        return None
+
     # Redshift cuts
     w = (catalog['Z'] >= zmin) & (catalog['Z'] <= zmax)
     logging_mpi(f"There are {w.sum()} quasars in the redshift range.", 0)
@@ -87,6 +91,7 @@ def _read_catalog_on_master(filename, n_side, keep_surveys, zmin, zmax):
         logging_mpi(f"There are {w.sum()} quasars in given surveys {keep_surveys}.", 0)
 
     if catalog.size == 0:
+        logging_mpi("Empty quasar catalogue.", 0, "error")
         return None
 
     if not 'HPXPIXEL' in keep_columns:
