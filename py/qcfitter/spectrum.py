@@ -5,19 +5,28 @@ import fitsio
 from qcfitter.mathtools import get_smooth_ivar
 
 def _read_resoimage(imhdu, quasar_indices, nwave):
-    ndiags = imhdu.read_header()['NAXIS2']
-    data = np.empty((quasar_indices.size, ndiags, nwave), dtype=np.float64)
+    ndiags = imhdu.get_dims()[1]
+    dtype = imhdu._get_image_numpy_dtype()
+    data = np.empty((quasar_indices.size, ndiags, nwave), dtype=dtype)
     for idata, iqso in enumerate(quasar_indices):
         data[idata, :, :] = imhdu[int(iqso), :, :]
 
     return data
 
-def _read_imagehdu(imhdu, quasar_indices, nwave, dtype):
+def _read_imagehdu(imhdu, quasar_indices, nwave):
+    dtype = imhdu._get_image_numpy_dtype()
     data = np.empty((quasar_indices.size, nwave), dtype=dtype)
     for idata, iqso in enumerate(quasar_indices):
         data[idata, :] = imhdu[int(iqso), :]
 
     return data
+
+# Timing showed this is slower
+# def _read_imagehdu_2(imhdu, quasar_indices):
+#     ndims = imhdu.get_info()['ndims']
+#     if ndims == 2:
+#         return np.vstack([imhdu[int(idx), :] for idx in quasar_indices])
+#     return np.vstack([imhdu[int(idx), :, :] for idx in quasar_indices])
 
 def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep, skip_resomat):
     """Common function to read a single fits file.
@@ -72,9 +81,9 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep, skip_resomat):
         data['wave'][arm] = fitsfile[f'{arm}_WAVELENGTH'].read()
         nwave = data['wave'][arm].size
 
-        data['flux'][arm] = _read_imagehdu(fitsfile[f'{arm}_FLUX'], quasar_indices, nwave, np.float64)[sort_idx]
-        data['ivar'][arm] = _read_imagehdu(fitsfile[f'{arm}_IVAR'], quasar_indices, nwave, np.float64)[sort_idx]
-        data['mask'][arm] = _read_imagehdu(fitsfile[f'{arm}_MASK'], quasar_indices, nwave, np.uint32)[sort_idx]
+        data['flux'][arm] = _read_imagehdu(fitsfile[f'{arm}_FLUX'], quasar_indices, nwave)[sort_idx]
+        data['ivar'][arm] = _read_imagehdu(fitsfile[f'{arm}_IVAR'], quasar_indices, nwave)[sort_idx]
+        data['mask'][arm] = _read_imagehdu(fitsfile[f'{arm}_MASK'], quasar_indices, nwave)[sort_idx]
 
         if not skip_resomat and f'{arm}_RESOLUTION' in fitsfile:
             data['reso'][arm] = _read_resoimage(fitsfile[f'{arm}_RESOLUTION'], quasar_indices, nwave)[sort_idx]
