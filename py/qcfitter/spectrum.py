@@ -218,7 +218,7 @@ def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=No
         raise Exception("out_nside and mpi_rank can't both be None.")
 
     for healpix, hp_specs in zip(unique_pix, split_spectra):
-        results = fitsio.FITS(f"{outdir}/deltas-{healpix}.fits.gz",'rw', clobber=True)
+        results = fitsio.FITS(f"{outdir}/deltas-{healpix}.fits",'rw', clobber=True)
 
         for spec in hp_specs:
             if spec.cont_params['valid']:
