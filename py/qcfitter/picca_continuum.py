@@ -74,7 +74,7 @@ class PiccaContinuumFitter(object):
 
         for arm, wave_arm in wave.items():
             cont_est  = self.get_continuum_model(x, wave_arm/(1+z_qso))
-            no_neg = np.sum(cont_est<0)
+            # no_neg = np.sum(cont_est<0)
             # penalty = wave_arm.size * no_neg**2
 
             cont_est *= self.meanflux_interp(wave_arm)
