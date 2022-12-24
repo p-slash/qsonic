@@ -79,20 +79,21 @@ class BALMask():
         if num_velocities == 0:
             return
 
+        bal_obs_lines  = BALMask.lines['value'] * (1+spec.z_qso)
         min_velocities = 1 - min_velocities / BALMask.LIGHT_SPEED
         max_velocities = 1 - max_velocities / BALMask.LIGHT_SPEED
 
         mask = np.empty(num_velocities * BALMask.lines.size,
             dtype=[('wave_min', 'f8'), ('wave_max', 'f8')]
         )
-        mask['wave_min'] = np.outer(BALMask.lines['value'], max_velocities).ravel()
-        mask['wave_max'] = np.outer(BALMask.lines['value'], min_velocities).ravel()
+        mask['wave_min'] = np.outer(bal_obs_lines, max_velocities).ravel()
+        mask['wave_max'] = np.outer(bal_obs_lines, min_velocities).ravel()
 
         for arm, wave_arm in spec.forestwave.items():
             w = np.ones(wave_arm.size, dtype=bool)
 
             mask_idx_ranges = np.searchsorted(
-                wave_arm/(1.0 + spec.z_qso),
+                wave_arm,
                 [mask['wave_min'], mask['wave_max']]
             ).T
             # Make sure first index comes before the second
