@@ -67,7 +67,7 @@ def _read_onehealpix_file(targetids_by_survey, fspec, arms_to_keep, skip_resomat
         raise Exception("Error reading one healpix file.")
 
     fbrmap = fbrmap[isin]
-    sort_idx = fbrmap.argsort()
+    sort_idx = np.argsort(fbrmap.argsort())
     # fbrmap = fbrmap[sort_idx]
     # assert np.all(cat_by_survey['TARGETID'] == fbrmap)
 
@@ -158,7 +158,14 @@ def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, skip_resomat, prog
     spectra_list = []
     pixnum = cat['HPXPIXEL'][0]
 
-    if not mock_analysis:
+    if mock_analysis:
+        data = read_onehealpix_file_mock(
+            cat, input_dir, pixnum, arms_to_keep, skip_resomat
+        )
+        spectra_list.extend(
+            generate_spectra_list_from_data(cat, data)
+        )
+    else:
         # Assume sorted by survey
         # cat.sort(order='SURVEY')
         unique_surveys, s2 = np.unique(cat['SURVEY'], return_index=True)
@@ -172,14 +179,7 @@ def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, skip_resomat, prog
             spectra_list.extend(
                 generate_spectra_list_from_data(cat_by_survey, data)
             )
-    else:
-        data = read_onehealpix_file_mock(
-            cat, input_dir, pixnum, arms_to_keep, skip_resomat
-        )
-        spectra_list.extend(
-            generate_spectra_list_from_data(cat, data)
-        )
-    
+
     return spectra_list
 
 def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=None):
