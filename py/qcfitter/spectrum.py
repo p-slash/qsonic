@@ -408,9 +408,8 @@ class Spectrum(object):
             self._forestivar_sm[arm] = get_smooth_ivar(ivar_arm)
 
     def _coadd_arms_reso(self, nwaves, idxes):
-        coadd_reso = {}
         max_ndia = np.max([reso.shape[0] for reso in self.forestreso.values()])
-        coadd_reso['brz'] = np.zeros((max_ndia, nwaves))
+        coadd_reso = np.zeros((max_ndia, nwaves))
         creso_norm = np.zeros(nwaves)
 
         for arm, reso_arm in self.forestreso.items():
@@ -419,11 +418,11 @@ class Spectrum(object):
             if ddia > 0:
                 reso_arm = np.pad(reso_arm, ((ddia,ddia), (0,0)))
 
-            coadd_reso['brz'][:, idxes[arm]] += reso_arm
+            coadd_reso[:, idxes[arm]] += reso_arm
             creso_norm[idxes[arm]] += 1
 
-        coadd_reso['brz'] /= creso_norm
-        self._forestreso = coadd_reso
+        coadd_reso /= creso_norm
+        self._forestreso = { 'brz': coadd_reso }
 
     def coadd_arms_forest(self, varlss_interp):
         """ Coadds different arms using smoothed pipeline ivar and var_lss.
@@ -432,21 +431,14 @@ class Spectrum(object):
         if not self.cont_params['valid'] or not self.cont_params['cont']:
             raise Exception("Continuum needed for coadding.")
 
-        coadd_wave = {}
-        coadd_flux = {}
-        coadd_ivar = {}
-        coadd_cont = {}
-
         min_wave = np.min([wave[0]  for wave in self.forestwave.values()])
         max_wave = np.max([wave[-1] for wave in self.forestwave.values()])
 
         nwaves = int((max_wave-min_wave)/self.dwave+0.5)+1
-        coadd_wave['brz'] = np.arange(nwaves)*self.dwave + min_wave
-
-        coadd_flux['brz'] = np.zeros(nwaves)
-        coadd_ivar['brz'] = np.zeros(nwaves)
-        coadd_cont['brz'] = np.zeros(nwaves)
-
+        coadd_wave = np.arange(nwaves)*self.dwave + min_wave
+        coadd_flux = np.zeros(nwaves)
+        coadd_ivar = np.zeros(nwaves)
+        coadd_cont = np.empty(nwaves)
         coadd_norm = np.zeros(nwaves)
 
         idxes = {}
@@ -462,21 +454,21 @@ class Spectrum(object):
             w = self.forestivar[arm]>0
             var[w] = 1/self.forestivar[arm][w]
 
-            coadd_flux['brz'][idx] += weight * self.forestflux[arm]
-            coadd_cont['brz'][idx] += weight * self.cont_params['cont'][arm]
-            coadd_ivar['brz'][idx] += weight**2 * var
+            coadd_flux[idx] += weight * self.forestflux[arm]
+            coadd_ivar[idx] += weight**2 * var
             coadd_norm[idx] += weight
 
+            # continuum needs not weighting
+            coadd_cont[idx]  = self.cont_params['cont'][arm]
 
         w = coadd_norm>0
-        coadd_flux['brz'][w] /= coadd_norm[w]
-        coadd_cont['brz'][w] /= coadd_norm[w]
-        coadd_ivar['brz'][w]  = coadd_norm[w]**2/coadd_ivar['brz'][w]
+        coadd_flux[w] /= coadd_norm[w]
+        coadd_ivar[w]  = coadd_norm[w]**2/coadd_ivar['brz'][w]
 
-        self._forestwave = coadd_wave
-        self._forestflux = coadd_flux
-        self._forestivar = coadd_ivar
-        self.cont_params['cont'] = coadd_cont
+        self._forestwave = { 'brz': coadd_wave }
+        self._forestflux = { 'brz': coadd_flux }
+        self._forestivar = { 'brz': coadd_ivar }
+        self.cont_params['cont'] = { 'brz': coadd_cont }
 
         if self.reso:
             self._coadd_arms_reso(nwaves, idxes)
