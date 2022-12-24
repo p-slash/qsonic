@@ -8,9 +8,9 @@ from mpi4py import MPI
 
 import qcfitter.catalog
 import qcfitter.spectrum
+import qcfitter.masks
 from qcfitter.mpi_utils import balance_load, logging_mpi
 from qcfitter.picca_continuum import PiccaContinuumFitter
-import qcfitter.masks
 
 def parse():
     # Arguments passed to run the script
