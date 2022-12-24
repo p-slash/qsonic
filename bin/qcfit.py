@@ -97,7 +97,7 @@ if __name__ == '__main__':
 
     # Blinding
     try:
-        qcfitter.spectrum.Spectrum.set_blinding(catalog, args)
+        qcfitter.spectrum.Spectrum.set_blinding(qso_catalog, args)
     except Exception as e:
         logging_mpi(f"{e}", mpi_rank, "error")
         exit(0)
