@@ -463,7 +463,7 @@ class Spectrum(object):
 
         w = coadd_norm>0
         coadd_flux[w] /= coadd_norm[w]
-        coadd_ivar[w]  = coadd_norm[w]**2/coadd_ivar['brz'][w]
+        coadd_ivar[w]  = coadd_norm[w]**2/coadd_ivar[w]
 
         self._forestwave = { 'brz': coadd_wave }
         self._forestflux = { 'brz': coadd_flux }
