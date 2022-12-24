@@ -52,12 +52,11 @@ class PiccaContinuumFitter(object):
 
     def __init__(self, w1rf, w2rf, dwrf, fiducial_fits=None):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
-        self.dwrf = dwrf
-        self.rfwave = w1rf + np.arange(self.nbins)*dwrf
+        self.rfwave, self.dwrf = np.linspace(w1rf, w2rf, self.nbins, retstep=True)
         self._denom = np.log(self.rfwave[-1]/self.rfwave[0])
 
         self.mean_cont = np.ones(self.nbins)
-        self.meancont_interp = Fast1DInterpolator(w1rf, dwrf,
+        self.meancont_interp = Fast1DInterpolator(w1rf, self.dwrf,
             self.mean_cont)
 
         self.comm = MPI.COMM_WORLD
@@ -74,8 +73,8 @@ class PiccaContinuumFitter(object):
 
         for arm, wave_arm in wave.items():
             cont_est  = self.get_continuum_model(x, wave_arm/(1+z_qso))
-            no_neg = np.sum(cont_est<0)
-            penalty = wave_arm.size * no_neg**2
+            # no_neg = np.sum(cont_est<0)
+            # penalty = wave_arm.size * no_neg**2
 
             cont_est *= self.meanflux_interp(wave_arm)
 
@@ -85,7 +84,7 @@ class PiccaContinuumFitter(object):
 
             chi2 += np.sum(
                 weight * (flux[arm] - cont_est)**2
-            ) - np.log(weight[w]).sum() + penalty
+            ) - np.log(weight[w]).sum()# + penalty
 
         return chi2
 
@@ -197,8 +196,10 @@ class PiccaContinuumFitter(object):
         self.mean_cont *= 1+norm_flux
 
         logging_mpi("Continuum updates", self.mpi_rank)
-        for _w, _c, _e in zip(self.rfwave, norm_flux, std_flux):
-            logging_mpi(f"{_w:10.2f}: 1+({_c:10.2e}) pm {_e:10.2e}", self.mpi_rank)
+        _step = int(self.nbins/10)
+        logging_mpi("wave_rf \t| update \t| error", self.mpi_rank)
+        for w, n, e in zip(self.rfwave[::_step], norm_flux[::_step], std_flux[::_step]):
+            logging_mpi(f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}", self.mpi_rank)
 
         has_converged = np.all(np.abs(norm_flux) < 1.5*std_flux)
         # np.allclose(np.abs(norm_flux), std_flux, rtol=0.5)
