@@ -6,11 +6,11 @@ from os import makedirs as os_makedirs
 import numpy as np
 from mpi4py import MPI
 
-from qcfitter.catalog import Catalog
+import qcfitter.catalog
 import qcfitter.spectrum
+import qcfitter.masks
 from qcfitter.mpi_utils import balance_load, logging_mpi
 from qcfitter.picca_continuum import PiccaContinuumFitter
-import qcfitter.masks
 
 def parse():
     # Arguments passed to run the script
@@ -90,12 +90,12 @@ if __name__ == '__main__':
 
     # read catalog
     n_side = 16 if args.mock_analysis else 64
-    qso_cat = Catalog(args.catalog, comm, n_side, args.keep_surveys)
+    qso_catalog = qcfitter.catalog.read_qso_catalog(args.catalog, comm, n_side, args.keep_surveys)
 
     # We decide forest filename list
     # Group into unique pixels
-    unique_pix, s = np.unique(qso_cat.catalog['HPXPIXEL'], return_index=True)
-    split_catalog = np.split(qso_cat.catalog, s[1:])
+    unique_pix, s = np.unique(qso_catalog['HPXPIXEL'], return_index=True)
+    split_catalog = np.split(qso_catalog, s[1:])
     logging_mpi(f"There are {unique_pix.size} healpixels. Don't use more MPI processes.", mpi_rank)
 
     # Roughly equal number of spectra
@@ -112,6 +112,7 @@ if __name__ == '__main__':
         except Exception as e:
             logging_mpi(f"{e}", mpi_rank, "error")
             comm.Abort()
+
         maskers.append(skymasker)
 
     # BAL mask
