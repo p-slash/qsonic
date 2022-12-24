@@ -19,6 +19,8 @@ def parse():
     parser.add_argument("--catalog", help="Catalog filename", required=True)
     parser.add_argument("--keep-surveys", help="Surveys to keep.", nargs='+',
         default=['sv3', 'main'])
+    parser.add_argument("--min-rsnr", help="Minium SNR <F/sigma> above Lya.",
+        default=0., type=float)
     parser.add_argument("--outdir", '-o', help="Output directory to save deltas.")
 
     parser.add_argument("--mock-analysis", help="Input folder is mock. Uses nside=16",
@@ -157,7 +159,7 @@ if __name__ == '__main__':
             if not args.keep_nonforest_pixels:
                 spec.remove_nonforest_pixels()
 
-        spectra_list.extend(local_specs)
+        spectra_list.extend([spec for spec in local_specs if spec.rsnr>args.min_rsnr])
 
     nspec_all = comm.reduce(len(spectra_list), op=MPI.SUM, root=0)
     logging_mpi(f"All {nspec_all} spectra are read.", mpi_rank)
