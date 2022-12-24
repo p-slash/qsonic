@@ -250,6 +250,8 @@ class Spectrum(object):
         List of characters to id spectrograph like 'B', 'R' and 'Z'. Static variable!
     z_qso: float
         Quasar redshift.
+    rsnr: float
+        Average SNR above Lya. Calculated in set_forest_region.
     targetid: int
         Unique TARGETID identifier.
     ra, dec: float
@@ -268,22 +270,21 @@ class Spectrum(object):
     coadd_arms_forest
 
     """
-    _wave = None
-    _arms = None
-    _dwave = None
+    WAVE_LYA_A = 1215.67
+    _wave  = None  # Dictionary of ndarrays
+    _dwave = None  # Float
 
     @staticmethod
-    def _set_wave(wave):
+    def _set_wave(wave, check_consistency=False):
         if not Spectrum._wave:
-            Spectrum._arms = wave.keys()
             Spectrum._wave = wave.copy()
-        else:
-            for arm in Spectrum._arms:
+            arm = list(wave.keys())[0]
+            wave_arm = wave[arm]
+            Spectrum._dwave = wave_arm[1]-wave_arm[0]
+        elif check_consistency:
+            for arm, wave_arm in Spectrum._wave,items():
                 assert (arm in wave.keys())
-                assert (np.allclose(Spectrum._wave[arm], wave[arm]))
-
-                if Spectrum._dwave is None:
-                    Spectrum._dwave = wave[arm][1] - wave[arm][0]
+                assert (np.allclose(Spectrum._wave[arm], wave_arm))
 
     def __init__(self, catrow, wave, flux, ivar, mask, reso, idx):
         self.catrow = catrow
@@ -293,6 +294,7 @@ class Spectrum(object):
         self.ivar = {}
         self.reso = {}
 
+        self.rsnr = 0
         self._f1 = {}
         self._f2 = {}
         self._forestwave = {}
@@ -301,8 +303,8 @@ class Spectrum(object):
         self._forestivar_sm = {}
         self._forestreso = {}
 
-        for arm in self.arms:
-            self._f1[arm], self._f2[arm] = 0, self.wave[arm].size
+        for arm, wave_arm in self.wave.items():
+            self._f1[arm], self._f2[arm] = 0, wave_arm.size
             self.flux[arm] = flux[arm][idx]
             self.ivar[arm] = ivar[arm][idx]
             _mask = mask[arm][idx] | np.isnan(self.flux[arm]) | np.isnan(self.ivar[arm])
@@ -323,7 +325,8 @@ class Spectrum(object):
         self.cont_params['cont'] = {}
 
     def set_forest_region(self, w1, w2, lya1, lya2):
-        """ Sets slices for the forest region.
+        """ Sets slices for the forest region. Also calculates
+        average SNR above Lya
 
         Arguments
         ---------
@@ -335,11 +338,19 @@ class Spectrum(object):
         """
         l1 = max(w1, (1+self.z_qso)*lya1)
         l2 = min(w2, (1+self.z_qso)*lya2)
+        rsnr_weight = 1e-6
 
         a0 = 1e-6
         n0 = 1e-6
-        for arm in self.arms:
-            ii1, ii2 = np.searchsorted(self.wave[arm], [l1, l2])
+        for arm, wave_arm in self.wave.items():
+            # Calculate SNR above Lya
+            ii1 = np.searchsorted(wave_arm, (1+self.z_qso)*Spectrum.WAVE_LYA_A)
+            weight       = np.sqrt(self.ivar[arm][ii1:])
+            self.rsnr   += np.sum(self.flux[arm][ii1:] * weight)
+            rsnr_weight += np.sum(weight)
+
+            # Slice to forest limits
+            ii1, ii2 = np.searchsorted(wave_arm, [l1, l2])
             real_size_arm = np.sum(self.ivar[arm][ii1:ii2] > 0)
             if real_size_arm == 0:
                 continue
@@ -348,7 +359,7 @@ class Spectrum(object):
             self._f1[arm], self._f2[arm] = ii1, ii2
 
             # Does this create a view or copy array?
-            self._forestwave[arm] = self.wave[arm][ii1:ii2]
+            self._forestwave[arm] = wave_arm[ii1:ii2]
             self._forestflux[arm] = self.flux[arm][ii1:ii2]
             self._forestivar[arm] = self.ivar[arm][ii1:ii2]
             if self.reso:
@@ -360,6 +371,7 @@ class Spectrum(object):
             a0 += np.sum(self.forestflux[arm][w]*self.forestivar[arm][w])
             n0 += np.sum(self.forestivar[arm][w])
 
+        self.rsnr /= rsnr_weight
         self.cont_params['x'][0] = a0/n0
         self._forestivar_sm = self._forestivar
 
@@ -482,6 +494,7 @@ class Spectrum(object):
                 'BLINDING': "none",
                 'WAVE_SOLUTION': "lin",
                 'MEANSNR': 0.,
+                'RSNR': self.rsnr,
                 'DLAMBDA': self.dwave
         }
 
@@ -524,10 +537,6 @@ class Spectrum(object):
     @property
     def dwave(self):
         return Spectrum._dwave
-
-    @property
-    def arms(self):
-        return Spectrum._arms
 
     @property
     def forestwave(self):
