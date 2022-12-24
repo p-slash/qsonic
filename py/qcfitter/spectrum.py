@@ -50,11 +50,12 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep, skip_resomat):
     data: dict
     only quasar spectra are read into keywords wave, flux etc. Resolution is read if present.
     """
-    cat_by_survey.sort(order='TARGETID')
+    # Assume it is sorted
+    # cat_by_survey.sort(order='TARGETID')
     fitsfile = fitsio.FITS(fspec)
 
-    fbrmap = fitsfile['FIBERMAP'].read()
-    isin = np.isin(fbrmap['TARGETID'], cat_by_survey['TARGETID'])
+    fbrmap = fitsfile['FIBERMAP'].read(columns='TARGETID')
+    isin = np.isin(fbrmap, cat_by_survey['TARGETID'], assume_unique=True)
     quasar_indices = np.nonzero(isin)[0]
     if (quasar_indices.size != cat_by_survey.size):
         logging.error(
@@ -63,10 +64,9 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep, skip_resomat):
         )
 
     fbrmap = fbrmap[isin]
-    sort_idx = fbrmap.argsort(order='TARGETID')
-    fbrmap = fbrmap[sort_idx]
-
-    assert np.all(cat_by_survey['TARGETID'] == fbrmap['TARGETID'])
+    sort_idx = fbrmap.argsort()
+    # fbrmap = fbrmap[sort_idx]
+    # assert np.all(cat_by_survey['TARGETID'] == fbrmap)
 
     data = {
         'wave': {},
@@ -158,7 +158,8 @@ def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, skip_resomat, prog
     pixnum = cat['HPXPIXEL'][0]
 
     if not mock_analysis:
-        cat.sort(order='SURVEY')
+        # Assume sorted by survey
+        # cat.sort(order='SURVEY')
         unique_surveys, s2 = np.unique(cat['SURVEY'], return_index=True)
         survey_split_cat = np.split(cat, s2[1:])
 
