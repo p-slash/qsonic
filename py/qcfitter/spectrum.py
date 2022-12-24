@@ -4,19 +4,20 @@ import fitsio
 
 from qcfitter.mathtools import get_smooth_ivar
 
-def _read_resoimage(imhdu, quasar_indices, nwave):
+# Reading into sorted order is faster
+def _read_resoimage(imhdu, quasar_indices, sort_idx, nwave):
     ndiags = imhdu.get_dims()[1]
     dtype = imhdu._get_image_numpy_dtype()
     data = np.empty((quasar_indices.size, ndiags, nwave), dtype=dtype)
-    for idata, iqso in enumerate(quasar_indices):
+    for idata, iqso in zip(sort_idx, quasar_indices):
         data[idata, :, :] = imhdu[int(iqso), :, :]
 
     return data
 
-def _read_imagehdu(imhdu, quasar_indices, nwave):
+def _read_imagehdu(imhdu, quasar_indices, sort_idx, nwave):
     dtype = imhdu._get_image_numpy_dtype()
     data = np.empty((quasar_indices.size, nwave), dtype=dtype)
-    for idata, iqso in enumerate(quasar_indices):
+    for idata, iqso in zip(sort_idx, quasar_indices):
         data[idata, :] = imhdu[int(iqso), :]
 
     return data
@@ -28,13 +29,14 @@ def _read_imagehdu(imhdu, quasar_indices, nwave):
 #         return np.vstack([imhdu[int(idx), :] for idx in quasar_indices])
 #     return np.vstack([imhdu[int(idx), :, :] for idx in quasar_indices])
 
-def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep, skip_resomat):
+def _read_onehealpix_file(targetids_by_survey, fspec, arms_to_keep, skip_resomat):
     """Common function to read a single fits file.
 
     Arguments
     ---------
-    cat_by_survey: named np.array
-    catalog. If data, split by survey and contains only one survey.
+    targetids_by_survey: ndarray
+    targetids_by_survey (used to be catalog). If data, split by
+    survey and contains only one survey.
 
     fspec: str
     filename to open
@@ -55,13 +57,14 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep, skip_resomat):
     fitsfile = fitsio.FITS(fspec)
 
     fbrmap = fitsfile['FIBERMAP'].read(columns='TARGETID')
-    isin = np.isin(fbrmap, cat_by_survey['TARGETID'], assume_unique=True)
+    isin = np.isin(fbrmap, targetids_by_survey, assume_unique=True)
     quasar_indices = np.nonzero(isin)[0]
-    if (quasar_indices.size != cat_by_survey.size):
+    if (quasar_indices.size != targetids_by_survey.size):
         logging.error(
-             "Error not all targets are in file "
-            f"catalog:{cat_by_survey.size} vs healpix:{quasar_indices.size}"
+             "Error number of quasars in healpix does not match the catalog "
+            f"catalog:{targetids_by_survey.size} vs healpix:{quasar_indices.size}"
         )
+        raise Exception("Error reading one healpix file.")
 
     fbrmap = fbrmap[isin]
     sort_idx = fbrmap.argsort()
@@ -81,12 +84,12 @@ def _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep, skip_resomat):
         data['wave'][arm] = fitsfile[f'{arm}_WAVELENGTH'].read()
         nwave = data['wave'][arm].size
 
-        data['flux'][arm] = _read_imagehdu(fitsfile[f'{arm}_FLUX'], quasar_indices, nwave)[sort_idx]
-        data['ivar'][arm] = _read_imagehdu(fitsfile[f'{arm}_IVAR'], quasar_indices, nwave)[sort_idx]
-        data['mask'][arm] = _read_imagehdu(fitsfile[f'{arm}_MASK'], quasar_indices, nwave)[sort_idx]
+        data['flux'][arm] = _read_imagehdu(fitsfile[f'{arm}_FLUX'], quasar_indices, sort_idx, nwave)
+        data['ivar'][arm] = _read_imagehdu(fitsfile[f'{arm}_IVAR'], quasar_indices, sort_idx, nwave)
+        data['mask'][arm] = _read_imagehdu(fitsfile[f'{arm}_MASK'], quasar_indices, sort_idx, nwave)
 
         if not skip_resomat and f'{arm}_RESOLUTION' in fitsfile:
-            data['reso'][arm] = _read_resoimage(fitsfile[f'{arm}_RESOLUTION'], quasar_indices, nwave)[sort_idx]
+            data['reso'][arm] = _read_resoimage(fitsfile[f'{arm}_RESOLUTION'], quasar_indices, sort_idx, nwave)
 
     fitsfile.close()
 
@@ -96,13 +99,13 @@ def read_onehealpix_file_data(cat_by_survey, input_dir, pixnum, arms_to_keep, sk
     survey = cat_by_survey['SURVEY'][0]
 
     fspec = f"{input_dir}/{survey}/{program}/{pixnum//100}/{pixnum}/coadd-{survey}-{program}-{pixnum}.fits"
-    data = _read_onehealpix_file(cat_by_survey, fspec, arms_to_keep, skip_resomat)
+    data = _read_onehealpix_file(cat_by_survey['TARGETID'], fspec, arms_to_keep, skip_resomat)
 
     return data
 
 def read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep, skip_resomat, nside=16):
     fspec = f"{input_dir}/{pixnum//100}/{pixnum}/spectra-{nside}-{pixnum}.fits"
-    data = _read_onehealpix_file(cat, fspec, arms_to_keep, skip_resomat)
+    data = _read_onehealpix_file(cat['TARGETID'], fspec, arms_to_keep, skip_resomat)
 
     if skip_resomat:
         return data
@@ -117,11 +120,9 @@ def read_onehealpix_file_mock(cat, input_dir, pixnum, arms_to_keep, skip_resomat
 
 def generate_spectra_list_from_data(cat_by_survey, data):
     spectra_list = []
-    for idx in range(cat_by_survey.size):
-        row = cat_by_survey[idx]
-
+    for idx, catrow in enumerate(cat_by_survey):
         spectra_list.append(
-            Spectrum(row, data['wave'], data['flux'],
+            Spectrum(catrow, data['wave'], data['flux'],
                 data['ivar'], data['mask'], data['reso'], idx)
         )
 
