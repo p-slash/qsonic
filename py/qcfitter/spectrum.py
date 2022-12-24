@@ -508,7 +508,7 @@ class Spectrum(object):
             cols = [wave_arm, delta, ivar, weight, _cont]
             names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT']
             if self.forestreso:
-                cols.append(self.forestreso[arm].T)
+                cols.append(self.forestreso[arm].T.astype('f8'))
                 names.append('RESOMAT')
 
             fts_file.write(cols, names=names, header=hdr_dict,
