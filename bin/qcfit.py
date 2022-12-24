@@ -119,7 +119,7 @@ if __name__ == '__main__':
     if args.bal_mask:
         logging_mpi("Checking BAL mask.", mpi_rank)
         try:
-            qcfitter.masks.BALMask.check_catalog(qso_cat.catalog)
+            qcfitter.masks.BALMask.check_catalog(qso_catalog)
         except Exception as e:
             logging_mpi(f"{e}", mpi_rank, "error")
             comm.Abort()
