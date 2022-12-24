@@ -8,16 +8,17 @@ from numpy.lib.recfunctions import rename_fields, append_fields
 from qcfitter.mpi_utils import logging_mpi
 
 _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
-_extra_columns_tokeep = [
-    'SURVEY', 'HPXPIXEL', 'VMIN_CIV_450',
-    'VMAX_CIV_450', 'VMIN_CIV_2000', 'VMAX_CIV_2000'
+_accepted_columns = [
+    'TARGETID', 'Z', 'TARGET_RA', 'RA', 'TARGET_DEC', 'DEC',
+    'SURVEY', 'HPXPIXEL', 'VMIN_CIV_450', 'VMAX_CIV_450',
+    'VMIN_CIV_2000', 'VMAX_CIV_2000'
 ]
 
 def read_qso_catalog(filename, comm, n_side=64, keep_surveys=None, zmin=2.1, zmax=6.0):
     """Returns quasar catalog object. It is sorted in the following order:
     HPXPIXEL, SURVEY (if applicable), TARGETID
 
-    Parameters
+    Arguments
     ----------
     filename: str
         Filename to catalog.
@@ -31,15 +32,25 @@ def read_qso_catalog(filename, comm, n_side=64, keep_surveys=None, zmin=2.1, zma
         Minimum quasar redshift
     zmax: float (default: 6.0)
         Maximum quasar redshift
+
+    Returns
+    ----------
+    catalog: ndarray
+        Sorted catalog. BAL info included if available (required for BAL masking)
     """
     catalog = None
 
     if comm.Get_rank() == 0:
-        catalog = _readCatalogue(filename, n_side, keep_surveys, zmin, zmax)
+        catalog = _read_catalog_on_master(filename, n_side, keep_surveys, zmin, zmax)
 
     catalog = comm.bcast(catalog, root=0)
+    if catalog is None:
+        logging_mpi("Empty quasar catalogue.", comm.Get_rank(), "error")
+        exit(0)
 
-def _readCatalogue(filename, n_side, keep_surveys, zmin, zmax):
+    return catalog
+
+def _read_catalog_on_master(filename, n_side, keep_surveys, zmin, zmax):
     logging_mpi(f'Reading catalogue from {filename}', 0)
     fitsfile = fitsio.FITS(filename)
     extnames = [hdu.get_extname() for hdu in fitsfile]
@@ -51,7 +62,9 @@ def _readCatalogue(filename, n_side, keep_surveys, zmin, zmax):
         cat_hdu = cat_hdu.pop()
 
     colnames = fitsfile[cat_hdu].get_colnames()
-    catalog = np.array(fitsfile[cat_hdu].read())
+    keep_columns = [col for col in colnames if col in _accepted_columns]
+    catalog = np.array(fitsfile[cat_hdu].read(columns=keep_columns))
+    fitsfile.close()
 
     logging_mpi(f"There are {catalog.size} quasars in the catalog.", 0)
 
@@ -60,12 +73,8 @@ def _readCatalogue(filename, n_side, keep_surveys, zmin, zmax):
     logging_mpi(f"There are {w.sum()} quasars in the redshift range.", 0)
     catalog = catalog[w]
 
-    if 'TARGET_RA' in colnames:
+    if 'TARGET_RA' in keep_columns and not 'RA' in keep_columns:
         catalog = rename_fields(catalog, {'TARGET_RA':'RA', 'TARGET_DEC':'DEC'} )
-    keep_columns = ['RA', 'DEC', 'Z', 'TARGETID']
-    keep_columns.extend([_col for _col in _extra_columns_tokeep if _col in colnames])
-
-    catalog = catalog[keep_columns]
 
     sort_order = ['HPXPIXEL', 'TARGETID']
     # Filter all the objects in the catalogue not belonging to the specified
@@ -78,7 +87,7 @@ def _readCatalogue(filename, n_side, keep_surveys, zmin, zmax):
         logging_mpi(f"There are {w.sum()} quasars in given surveys {keep_surveys}.", 0)
 
     if catalog.size == 0:
-        raise Exception("Empty quasar catalogue.")
+        return None
 
     if not 'HPXPIXEL' in keep_columns:
         pixnum = ang2pix(n_side, catalog['RA'], catalog['DEC'], lonlat=True, nest=True)
@@ -90,4 +99,3 @@ def _readCatalogue(filename, n_side, keep_surveys, zmin, zmax):
 
 
 
-        
