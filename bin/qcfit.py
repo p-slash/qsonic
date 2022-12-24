@@ -1,5 +1,6 @@
 import logging
 import argparse
+import time
 
 from os import makedirs as os_makedirs
 
@@ -19,6 +20,8 @@ def parse():
     parser.add_argument("--catalog", help="Catalog filename", required=True)
     parser.add_argument("--keep-surveys", help="Surveys to keep.", nargs='+',
         default=['sv3', 'main'])
+    parser.add_argument("--min-rsnr", help="Minium SNR <F/sigma> above Lya.",
+        default=0., type=float)
     parser.add_argument("--outdir", '-o', help="Output directory to save deltas.")
 
     parser.add_argument("--mock-analysis", help="Input folder is mock. Uses nside=16",
@@ -140,6 +143,7 @@ if __name__ == '__main__':
 
         maskers.append(dlamasker)
 
+    start_time = time.time()
     logging_mpi("Reading spectra.", mpi_rank)
     spectra_list = []
     # Each process reads its own list
@@ -157,17 +161,21 @@ if __name__ == '__main__':
             if not args.keep_nonforest_pixels:
                 spec.remove_nonforest_pixels()
 
-        spectra_list.extend(local_specs)
+        spectra_list.extend([spec for spec in local_specs if spec.rsnr>args.min_rsnr])
 
     nspec_all = comm.reduce(len(spectra_list), op=MPI.SUM, root=0)
-    logging_mpi(f"All {nspec_all} spectra are read.", mpi_rank)
+    etime = (time.time()-start_time)/60 # min
+    logging_mpi(f"All {nspec_all} spectra are read in {etime:.1f} mins.", mpi_rank)
 
     if maskers:
-        logging_mpi("Applying masks", mpi_rank)
+        start_time = time.time()
+        logging_mpi("Applying masks.", mpi_rank)
         for spec in spectra_list:
             for masker in maskers:
                 masker.apply(spec)
             spec.drop_short_arms()
+        etime = (time.time()-start_time)/60 # min
+        logging_mpi(f"Masks are applied in {etime:.1f} mins.", mpi_rank)
 
     # remove from sample if no pixels is small
     if args.skip > 0:
@@ -184,6 +192,7 @@ if __name__ == '__main__':
     # -------------------
     # Initialize continuum fitter & global functions
     logging_mpi("Initializing continuum fitter.", mpi_rank)
+    start_time = time.time()
     try:
         qcfit = PiccaContinuumFitter(
             args.forest_w1, args.forest_w2, args.rfdwave,
@@ -212,6 +221,9 @@ if __name__ == '__main__':
     # Final cleaning. Especially important if not coadding arms.
     for spec in spectra_list:
         spec.drop_short_arms(args.forest_w1, args.forest_w2, args.skip)
+
+    etime = (time.time()-start_time)/60 # min
+    logging_mpi(f"Continuum fitting and tweaking took {etime:.1f} mins.", mpi_rank)
 
     # Save deltas
     if args.outdir:
