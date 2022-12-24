@@ -6,11 +6,11 @@ from os import makedirs as os_makedirs
 import numpy as np
 from mpi4py import MPI
 
-from qcfitter.catalog import Catalog
+import qcfitter.catalog
 import qcfitter.spectrum
+import qcfitter.masks
 from qcfitter.mpi_utils import balance_load, logging_mpi
 from qcfitter.picca_continuum import PiccaContinuumFitter
-import qcfitter.masks
 
 def parse():
     # Arguments passed to run the script
@@ -27,24 +27,25 @@ def parse():
         action="store_true")
     parser.add_argument("--arms", help="Arms to read.", default=['B', 'R'], nargs='+')
 
-    parser.add_argument("--wave1", help="First analysis wavelength", type=float,
+    parser.add_argument("--wave1", help="First observed wavelength edge.", type=float,
         default=3600.)
-    parser.add_argument("--wave2", help="Last analysis wavelength", type=float,
+    parser.add_argument("--wave2", help="Last observed wavelength edge.", type=float,
         default=6000.)
-    parser.add_argument("--forest-w1", help="First forest wavelength.", type=float,
+    parser.add_argument("--forest-w1", help="First forest wavelength edge.", type=float,
         default=1040.)
-    parser.add_argument("--forest-w2", help="Last forest wavelength.", type=float,
+    parser.add_argument("--forest-w2", help="Last forest wavelength edge.", type=float,
         default=1200.)
     parser.add_argument("--fiducials", help="Fiducial mean flux and var_lss fits file.")
 
-    parser.add_argument("--sky-mask", help="Sky mask file")
-    parser.add_argument("--bal-mask", help="Mask BALs (assumes it is in catalog)",
+    parser.add_argument("--sky-mask", help="Sky mask file.")
+    parser.add_argument("--bal-mask", help="Mask BALs (assumes it is in catalog).",
         action="store_true")
+    parser.add_argument("--dla-mask", help="DLA catalog to mask.")
 
     parser.add_argument("--skip", help="Skip short spectra lower than given ratio.",
         type=float, default=0.)
-    parser.add_argument("--rfdwave", help="Rest-frame wave steps", type=float,
-        default=1.)
+    parser.add_argument("--rfdwave", help="Rest-frame wave steps. Can be adjusted to comply with forest limits",
+        type=float, default=2.5)
     parser.add_argument("--no-iterations", help="Number of iterations to perform for continuum fitting.",
         type=int, default=5)
     parser.add_argument("--keep-nonforest-pixels", help="Keeps non forest wavelengths. Memory intensive!",
@@ -89,17 +90,55 @@ if __name__ == '__main__':
 
     # read catalog
     n_side = 16 if args.mock_analysis else 64
-    qso_cat = Catalog(args.catalog, comm, n_side, args.keep_surveys)
+    qso_catalog = qcfitter.catalog.read_qso_catalog(args.catalog, comm, n_side, args.keep_surveys)
 
     # We decide forest filename list
     # Group into unique pixels
-    unique_pix, s = np.unique(qso_cat.catalog['HPXPIXEL'], return_index=True)
-    split_catalog = np.split(qso_cat.catalog, s[1:])
-    logging_mpi(f"There are {unique_pix.size} healpixels. Using more MPI processes will be unused.", mpi_rank)
+    unique_pix, s = np.unique(qso_catalog['HPXPIXEL'], return_index=True)
+    split_catalog = np.split(qso_catalog, s[1:])
+    logging_mpi(f"There are {unique_pix.size} healpixels. Don't use more MPI processes.", mpi_rank)
 
     # Roughly equal number of spectra
     logging_mpi("Load balancing.", mpi_rank)
+    # Returns a list of catalog (ndarray)
     local_queue = balance_load(split_catalog, mpi_size, mpi_rank)
+
+    # Read masks before data
+    maskers = []
+    if args.sky_mask:
+        logging_mpi("Reading sky mask.", mpi_rank)
+        try:
+            skymasker = qcfitter.masks.SkyMask(args.sky_mask)
+        except Exception as e:
+            logging_mpi(f"{e}", mpi_rank, "error")
+            comm.Abort()
+
+        maskers.append(skymasker)
+
+    # BAL mask
+    if args.bal_mask:
+        logging_mpi("Checking BAL mask.", mpi_rank)
+        try:
+            qcfitter.masks.BALMask.check_catalog(qso_catalog)
+        except Exception as e:
+            logging_mpi(f"{e}", mpi_rank, "error")
+            comm.Abort()
+
+        maskers.append(qcfitter.masks.BALMask)
+
+    # DLA mask
+    if args.dla_mask:
+        logging_mpi("Reading DLA mask.", mpi_rank)
+        local_targetids = np.concatenate([cat['TARGETID'] for cat in local_queue])
+        # Read catalog
+        try:
+            dlamasker = qcfitter.masks.DLAMask(args.dla_mask, local_targetids,
+                comm, mpi_rank, dla_mask_limit=0.8)
+        except Exception as e:
+            logging_mpi(f"{e}", mpi_rank, "error")
+            comm.Abort()
+
+        maskers.append(dlamasker)
 
     logging_mpi("Reading spectra.", mpi_rank)
     spectra_list = []
@@ -112,11 +151,8 @@ if __name__ == '__main__':
         for spec in local_specs:
             spec.set_forest_region(
                 args.wave1, args.wave2,
-                args.forest_w1, args.forest_w2,
-                args.skip/2
+                args.forest_w1, args.forest_w2
             )
-
-            spec.set_smooth_ivar()
 
             if not args.keep_nonforest_pixels:
                 spec.remove_nonforest_pixels()
@@ -126,29 +162,12 @@ if __name__ == '__main__':
     nspec_all = comm.reduce(len(spectra_list), op=MPI.SUM, root=0)
     logging_mpi(f"All {nspec_all} spectra are read.", mpi_rank)
 
-    # Mask
-    if args.sky_mask:
-        logging_mpi("Applying sky mask.", mpi_rank)
-        try:
-            skymasker = qcfitter.masks.SkyMask(args.sky_mask)
-        except Exception as e:
-            logging_mpi(f"{e}", mpi_rank, "error")
-            comm.Abort()
-
+    if maskers:
+        logging_mpi("Applying masks", mpi_rank)
         for spec in spectra_list:
-            skymasker.apply(spec)
-
-    # BAL mask
-    if args.bal_mask:
-        logging_mpi("Applying BAL mask.", mpi_rank)
-        try:
-            qcfitter.masks.BALMask.check_catalog(qso_cat.catalog)
-        except Exception as e:
-            logging_mpi(f"{e}", mpi_rank, "error")
-            comm.Abort()
-
-        for spec in spectra_list:
-            qcfitter.masks.BALMask.apply(spec)
+            for masker in maskers:
+                masker.apply(spec)
+            spec.drop_short_arms()
 
     # remove from sample if no pixels is small
     if args.skip > 0:
@@ -156,6 +175,10 @@ if __name__ == '__main__':
         dforest_wave = args.forest_w2 - args.forest_w1
         _npixels = lambda spec: (1+spec.z_qso)*dforest_wave/spec.dwave
         spectra_list = [spec for spec in spectra_list if spec.get_real_size() > args.skip*_npixels(spec)]
+
+    # Create smoothed ivar as intermediate variable
+    for spec in spectra_list:
+        spec.set_smooth_ivar()
 
     # Continuum fitting
     # -------------------
@@ -185,6 +208,10 @@ if __name__ == '__main__':
         logging_mpi("Coadding arms.", mpi_rank)
         for spec in spectra_list:
             spec.coadd_arms_forest(qcfit.varlss_interp)
+
+    # Final cleaning. Especially important if not coadding arms.
+    for spec in spectra_list:
+        spec.drop_short_arms(args.forest_w1, args.forest_w2, args.skip)
 
     # Save deltas
     if args.outdir:
