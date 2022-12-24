@@ -11,7 +11,7 @@ _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
 _accepted_columns = [
     'TARGETID', 'Z', 'TARGET_RA', 'RA', 'TARGET_DEC', 'DEC',
     'SURVEY', 'HPXPIXEL', 'VMIN_CIV_450', 'VMAX_CIV_450',
-    'VMIN_CIV_2000', 'VMAX_CIV_2000'
+    'VMIN_CIV_2000', 'VMAX_CIV_2000', 'LAST_NIGHT', 'LASTNIGHT'
 ]
 
 def read_qso_catalog(filename, comm, n_side=64, keep_surveys=None, zmin=2.1, zmax=6.0):
@@ -77,8 +77,14 @@ def _read_catalog_on_master(filename, n_side, keep_surveys, zmin, zmax):
     logging_mpi(f"There are {w.sum()} quasars in the redshift range.", 0)
     catalog = catalog[w]
 
+    # Adjust column names
+    colname_map = {}
     if 'TARGET_RA' in keep_columns and not 'RA' in keep_columns:
-        catalog = rename_fields(catalog, {'TARGET_RA':'RA', 'TARGET_DEC':'DEC'} )
+        colname_map = {'TARGET_RA':'RA', 'TARGET_DEC':'DEC'}
+    if 'LAST_NIGHT' in keep_columns:
+        colname_map['LAST_NIGHT'] = 'LASTNIGHT'
+    if colname_map:
+        catalog = rename_fields(catalog,  colname_map)
 
     sort_order = ['HPXPIXEL', 'TARGETID']
     # Filter all the objects in the catalogue not belonging to the specified
