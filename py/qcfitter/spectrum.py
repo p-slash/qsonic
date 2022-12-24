@@ -288,7 +288,7 @@ class Spectrum(object):
                 assert (arm in wave.keys())
                 assert (np.allclose(Spectrum._wave[arm], wave_arm))
 
-    @staticmethod()
+    @staticmethod
     def set_blinding(catalog, args):
         # do not blind mocks or metal forests
         if args.mock_analysis or args.forest_w1 > Spectrum.WAVE_LYA_A:
