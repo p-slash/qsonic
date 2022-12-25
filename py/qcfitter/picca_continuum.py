@@ -1,6 +1,6 @@
 import numpy as np
 import fitsio
-from scipy.optimize import minimize
+from scipy.optimize import minimize, curve_fit
 from scipy.interpolate import UnivariateSpline
 
 from mpi4py import MPI
@@ -50,23 +50,24 @@ class PiccaContinuumFitter(object):
         self.varlss_interp = Fast1DInterpolator(waves_0, dwave,
             varlss)
 
-    def __init__(self, w1rf, w2rf, dwrf, fiducial_fits=None):
+    def __init__(self, w1rf, w2rf, dwrf, w1obs, w2obs, nwbins=20, fiducial_fits=None):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
         self.rfwave, self.dwrf = np.linspace(w1rf, w2rf, self.nbins, retstep=True)
         self._denom = np.log(self.rfwave[-1]/self.rfwave[0])
 
-        self.mean_cont = np.ones(self.nbins)
         self.meancont_interp = Fast1DInterpolator(w1rf, self.dwrf,
-            self.mean_cont)
+            np.ones(self.nbins))
 
         self.comm = MPI.COMM_WORLD
         self.mpi_rank = self.comm.Get_rank()
 
         if fiducial_fits:
             self._set_fiducials(fiducial_fits)
+            self.varlss_fitter = None
         else:
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
-            self.varlss_interp   = Fast1DInterpolator(0., 1., np.zeros(3))
+            self.varlss_fitter = VarLSSFitter(w1obs, w2obs, nwbins)
+            self.varlss_interp = Fast1DInterpolator(w1obs, self.varlss_fitter.dwobs, np.zeros(nwbins))
 
     def _continuum_chi2(self, x, wave, flux, ivar_sm, z_qso):
         chi2 = 0
@@ -157,8 +158,10 @@ class PiccaContinuumFitter(object):
         logging_mpi(f"Number of invalid fits: {no_invalid_fits}", self.mpi_rank)
 
     def update_mean_cont(self, spectra_list):
-        norm_flux = np.zeros_like(self.mean_cont)
-        counts = np.zeros_like(self.mean_cont)
+        norm_flux = np.zeros(self.nbins)
+        counts = np.zeros(self.nbins)
+        if self.varlss_fitter is not None:
+            self.varlss_fitter.reset()
 
         for spec in spectra_list:
             if not spec.cont_params['valid']:
@@ -181,6 +184,9 @@ class PiccaContinuumFitter(object):
                 norm_flux += np.bincount(bin_idx, weights=flux_*weight, minlength=self.nbins)
                 counts    += np.bincount(bin_idx, weights=weight, minlength=self.nbins)
 
+                if self.varlss_fitter is not None:
+                    self.varlss_fitter.add(wave_arm, flux_-1, spec.forestivar[arm]*cont**2)
+
         self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
         self.comm.Allreduce(MPI.IN_PLACE, counts)
         norm_flux /= counts
@@ -193,7 +199,7 @@ class PiccaContinuumFitter(object):
         # Smooth new estimates
         spl = UnivariateSpline(self.rfwave, norm_flux-1, w=1/std_flux)
         norm_flux = spl(self.rfwave)
-        self.mean_cont *= 1+norm_flux
+        self.meancont_interp.fp *= 1+norm_flux
 
         logging_mpi("Continuum updates", self.mpi_rank)
         _step = int(self.nbins/10)
@@ -203,6 +209,14 @@ class PiccaContinuumFitter(object):
 
         has_converged = np.all(np.abs(norm_flux) < 1.5*std_flux)
         # np.allclose(np.abs(norm_flux), std_flux, rtol=0.5)
+
+        if self.varlss_fitter is not None:
+            logging_mpi("Fitting var_lss", self.mpi_rank)
+            y = self.varlss_fitter.fit(self.varlss_interp.fp)
+            self.varlss_interp.fp = y
+            logging_mpi("wave_obs \t| var_lss", self.mpi_rank)
+            for w, v in zip(self.varlss_fitter.waveobs[::_step], y[::_step]):
+                logging_mpi(f"{w:7.2f}\t| {v:7.2e}", self.mpi_rank)
 
         return has_converged
 
@@ -225,6 +239,99 @@ class PiccaContinuumFitter(object):
             logging_mpi("Iteration has NOT converged.", self.mpi_rank, "warning")
 
 
+class VarLSSFitter(object):
+    min_no_pix = 500
+    min_no_qso = 50
 
-        
+    @staticmethod
+    def variance_function(var_pipe, var_lss, eta=1):
+        return eta*var_pipe + var_lss
+
+    def __init__(self, w1obs, w2obs, nwbins, var1=1e-5, var2=2., nvarbins=100):
+        self.nwbins = nwbins
+        self.nvarbins = nvarbins
+        self.waveobs, self.dwobs = np.linspace(w1obs, w2obs, nwbins, retstep=True)
+        self.ivar_edges   = np.logspace(-np.log10(var2), -np.log10(var1), nvarbins+1)
+        self.ivar_centers = (self.ivar_edges[1:]+self.ivar_edges[:-1])/2
+
+        self.minlength = (self.nvarbins+2) * (self.nwbins+2)
+        self.var_delta = np.zeros(self.minlength)
+        self.mean_delta = np.zeros_like(self.var_delta)
+        self.var2_delta = np.zeros_like(self.var_delta)
+        self.num_pixels = np.zeros_like(self.var_delta, dtype=int)
+        self.num_qso = np.zeros_like(self.var_delta, dtype=int)
+
+    # def _get_stats(self, all_indx, weights=None):
+    #     binned = np.bincount(all_indx, weights=weights, minlength=self.minlength)
+    #     binned = binned.reshape(self.nwbins+2, self.nvarbins+2)
+    #     return binned[1:-1, 1:-1]
+
+    def reset(self):
+        self.var_delta = 0.
+        self.mean_delta = 0.
+        self.var2_delta = 0.
+        self.num_pixels = 0
+        self.num_qso = 0
+
+    def add(self, wave, delta, ivar):
+        # add 1 to match searchsorted/bincount output/input
+        wave_indx = ((wave - self.waveobs[0])/self.dwobs + 0.5).astype(int) + 1
+        ivar_indx = np.searchsorted(self.ivar_edges, ivar)
+        all_indx = ivar_indx + wave_indx * (self.nvarbins+2)
+
+        self.mean_delta += np.bincount(all_indx, weights=delta, minlength=self.minlength)
+        self.var_delta  += np.bincount(all_indx, weights=delta**2, minlength=self.minlength)
+        self.var2_delta += np.bincount(all_indx, weights=delta**4, minlength=self.minlength)
+        rebin = np.bincount(all_indx, minlength=self.minlength)
+        self.num_pixels += rebin
+        rebin[rebin>0] = 1
+        self.num_qso += rebin
+
+    def _allreduce(self):
+        comm = MPI.COMM_WORLD
+        comm.Allreduce(MPI.IN_PLACE, self.mean_delta)
+        comm.Allreduce(MPI.IN_PLACE, self.var_delta)
+        comm.Allreduce(MPI.IN_PLACE, self.var2_delta)
+        comm.Allreduce(MPI.IN_PLACE, self.num_pixels)
+        comm.Allreduce(MPI.IN_PLACE, self.num_qso)
+
+        w = self.num_pixels > 0
+        self.var_delta[w] /= self.num_pixels[w]
+        self.mean_delta[w] /= self.num_pixels[w]
+        self.var_delta -= self.mean_delta**2
+        self.var2_delta[w] /= self.num_pixels[w]
+        self.var2_delta -= self.var_delta**2
+        self.var2_delta[w] /= self.num_pixels[w]
+
+    def fit(self, current_varlss):
+        self._allreduce()
+        var_lss = np.zeros(self.nwbins)
+        std_var_lss = np.zeros(self.nwbins)
+
+        for iwave in range(self.nwbins):
+            i1 = (iwave+1)*(self.nvarbins+2)
+            i2 = i1 + self.nvarbins
+            wbinslice = np.s_[i1:i2]
+
+            w  = num_pixels[wbinslice] > VarLSSFitter.min_no_pix
+            w &= num_qso[wbinslice] > VarLSSFitter.min_no_qso
+
+            pfit, pcov = curve_fit(
+                VarLSSFitter.variance_function,
+                1/self.ivar_centers[w],
+                self.var_delta[wbinslice][w],
+                p0=current_varlss[iwave],
+                sigma=np.sqrt(self.var2_delta[wbinslice][w]),
+                absolute_sigma=True,
+                check_finite=True,
+                bounds=(0, 2)
+            )
+
+            var_lss[iwave] = pfit[0]
+            std_var_lss[iwave] = np.sqrt(pcov[0, 0])
+
+        # Smooth new estimates
+        w = var_lss > 0
+        spl = UnivariateSpline(self.waveobs[w], var_lss[w], w=1/std_var_lss[w])
+        return spl(self.waveobs)
 

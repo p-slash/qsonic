@@ -196,6 +196,7 @@ if __name__ == '__main__':
     try:
         qcfit = PiccaContinuumFitter(
             args.forest_w1, args.forest_w2, args.rfdwave,
+            args.wave1, args.wave2,
             fiducial_fits=args.fiducials
         )
     except Exception as e:
