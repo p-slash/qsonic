@@ -169,10 +169,8 @@ class PiccaContinuumFitter(object):
                 wave_rf_arm = wave_arm/(1+spec.z_qso)
                 bin_idx = ((wave_rf_arm - self.rfwave[0])/self.dwrf + 0.5).astype(int)
 
-                cont  = self.get_continuum_model(spec.cont_params['x'], wave_rf_arm)
-                cont *= self.meanflux_interp(wave_arm)
-
-                flux_  = spec.forestflux[arm]/cont
+                cont  = spec.cont_params['cont'][arm]
+                flux_ = spec.forestflux[arm]/cont
                 # Deconvolve resolution matrix ?
 
                 var_lss = self.varlss_interp(wave_arm)
