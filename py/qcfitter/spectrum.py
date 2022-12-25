@@ -322,6 +322,9 @@ class Spectrum(object):
         self.cont_params['method'] = ''
         self.cont_params['valid'] = False
         self.cont_params['x'] = np.array([1., 0.])
+        self.cont_params['xcov'] = np.array([[1., 0.], [0., 1.]])
+        self.cont_params['chi2'] = 0.
+        self.cont_params['dof']  = 0
         self.cont_params['cont'] = {}
 
     def set_forest_region(self, w1, w2, lya1, lya2):
@@ -487,15 +490,21 @@ class Spectrum(object):
 
     def write(self, fts_file, varlss_interp):
         hdr_dict = {
-                'LOS_ID': self.targetid,
-                'TARGETID': self.targetid,
-                'RA': self.ra, 'DEC': self.dec,
-                'Z': self.z_qso,
-                'BLINDING': "none",
-                'WAVE_SOLUTION': "lin",
-                'MEANSNR': 0.,
-                'RSNR': self.rsnr,
-                'DLAMBDA': self.dwave
+            'LOS_ID': self.targetid,
+            'TARGETID': self.targetid,
+            'RA': self.ra, 'DEC': self.dec,
+            'Z': self.z_qso,
+            'BLINDING': "none",
+            'WAVE_SOLUTION': "lin",
+            'MEANSNR': 0.,
+            'RSNR': self.rsnr,
+            'DLAMBDA': self.dwave,
+            'CONT_A': self.cont_params['x'][0],
+            'CONT_eA': np.sqrt(self.cont_params['xcov'][0, 0]),
+            'CONT_B': self.cont_params['x'][1],
+            'CONT_eB': np.sqrt(self.cont_params['xcov'][1, 1]),
+            'CONTCHI2': self.cont_params['chi2'],
+            'CONTDOF': self.cont_params['dof'],
         }
 
         for arm, wave_arm in self.forestwave.items():

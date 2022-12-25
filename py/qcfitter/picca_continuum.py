@@ -126,7 +126,10 @@ class PiccaContinuumFitter(object):
                     break
 
         if spec.cont_params['valid']:
-            spec.cont_params['x'] = result.x
+            spec.cont_params['x']    = result.x
+            spec.cont_params['xcov'] = result.hess_inv
+            spec.cont_params['chi2'] = result.fun
+            spec.cont_params['dof']  = spec.get_real_size()
             spec.cont_params['cont'] = {}
             for arm, wave_arm in spec.forestwave.items():
                 _cont  = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
