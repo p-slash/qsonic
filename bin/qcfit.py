@@ -38,6 +38,8 @@ def parse():
         default=1040.)
     parser.add_argument("--forest-w2", help="Last forest wavelength edge.", type=float,
         default=1200.)
+    parser.add_argument("--rfdwave", help="Rest-frame wave steps. Can be adjusted to comply with forest limits",
+        type=float, default=0.8)
     parser.add_argument("--fiducials", help="Fiducial mean flux and var_lss fits file.")
 
     parser.add_argument("--sky-mask", help="Sky mask file.")
@@ -47,8 +49,6 @@ def parse():
 
     parser.add_argument("--skip", help="Skip short spectra lower than given ratio.",
         type=float, default=0.)
-    parser.add_argument("--rfdwave", help="Rest-frame wave steps. Can be adjusted to comply with forest limits",
-        type=float, default=2.5)
     parser.add_argument("--no-iterations", help="Number of iterations to perform for continuum fitting.",
         type=int, default=5)
     parser.add_argument("--keep-nonforest-pixels", help="Keeps non forest wavelengths. Memory intensive!",
