@@ -34,9 +34,7 @@ class PiccaContinuumFitter(object):
             dwave   = 0.
             nsize   = 0
 
-        nsize    = self.comm.bcast(nsize)
-        waves_0  = self.comm.bcast(waves_0)
-        dwave    = self.comm.bcast(dwave)
+        nsize, waves_0, dwave = self.comm.bcast([nsize, waves_0, dwave])
 
         if self.mpi_rank != 0:
             meanflux = np.empty(nsize, dtype='d')
