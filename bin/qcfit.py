@@ -209,7 +209,7 @@ if __name__ == '__main__':
     # Stack all spectra in each process
     # Broadcast and recalculate global functions
     # Iterate
-    qcfit.iterate(spectra_list, args.no_iterations)
+    qcfit.iterate(spectra_list, args.no_iterations, args.outdir)
     # Keep only valid spectra
     spectra_list = [spec for spec in spectra_list if spec.cont_params['valid']]
     logging_mpi("All continua are fit.", mpi_rank)
