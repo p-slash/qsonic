@@ -188,17 +188,19 @@ class PiccaContinuumFitter(object):
         norm_flux /= counts
         std_flux = 1/np.sqrt(counts)
 
-        # Raw update
-        # self.mean_cont *= norm_flux
-        # norm_flux -= 1
-
         # Smooth new estimates
-        spl = UnivariateSpline(self.rfwave, norm_flux-1, w=1/std_flux)
+        spl = UnivariateSpline(self.rfwave, norm_flux, w=1/std_flux)
         norm_flux = spl(self.rfwave)
-        self.meancont_interp.fp *= 1+norm_flux
+        self.meancont_interp.fp *= norm_flux
+
+        # normalize
+        _mean = self.meancont_interp.fp.mean()
+        self.meancont_interp.fp /= _mean
+        norm_flux = norm_flux/_mean - 1
+        std_flux /= _mean
 
         logging_mpi("Continuum updates", self.mpi_rank)
-        _step = int(self.nbins/10)
+        _step = max(1, int(self.nbins/10))
         logging_mpi("wave_rf \t| update \t| error", self.mpi_rank)
         for w, n, e in zip(self.rfwave[::_step], norm_flux[::_step], std_flux[::_step]):
             logging_mpi(f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}", self.mpi_rank)
@@ -210,7 +212,7 @@ class PiccaContinuumFitter(object):
             logging_mpi("Fitting var_lss", self.mpi_rank)
             y = self.varlss_fitter.fit(self.varlss_interp.fp)
             self.varlss_interp.fp = y
-            _step = int(y.size/10)
+            _step = max(1, int(y.size/10))
             logging_mpi("wave_obs \t| var_lss", self.mpi_rank)
             for w, v in zip(self.varlss_fitter.waveobs[::_step], y[::_step]):
                 logging_mpi(f"{w:7.2f}\t| {v:7.2e}", self.mpi_rank)
