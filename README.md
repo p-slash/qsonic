@@ -4,7 +4,8 @@
 ## The key differences
 + Coadding of spectrograph arms is optional and performed after continuum fitting.
 + Continuum is multiplied by a fiducial mean flux when provided.
-+ No variance fitting (currently), but var_lss can be passed along with fiducial mean flux file.
++ You can pass fiducial var_lss (column `VAR`) and mean flux (column `MEANFLUX`) for observed wavelength `LAMBDA` in `STATS` extention of a FITS file. Wavelength should be linearly and equally spaced. This is the same format as rawio output from picca.
++ If no fiducial is passed, we fit only for var_lss (no eta fitting currently).
 + Internal weights for continuum fitting and coadding are based on smoothed `IVAR`, but output `WEIGHT` is *not* smoothed.
 
 ## Programs
