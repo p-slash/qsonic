@@ -243,16 +243,10 @@ class PiccaContinuumFitter(object):
 
     def save(self, outdir, it):
         fts = fitsio.FITS(f"{outdir}/attributes-{it}.fits", 'rw', clobber=True)
-        data = np.empty(self.nbins, dtype=[('lambda_rf', 'f8'), ('mean_cont', 'f8')])
-        data['lambda_rf'] = self.rfwave
-        data['mean_cont'] = self.meancont_interp.fp
-        fts.write(data, extname='CONT')
-
-        data = np.empty(self.varlss_interp.fp.size,
-            dtype=[('lambda', 'f8'), ('var_lss', 'f8')])
-        data['lambda'] = self.varlss_fitter.waveobs
-        data['var_lss'] = self.varlss_interp.fp
-        fts.write(data, extname='VAR_FUNC')
+        fts.write([self.rfwave, self.meancont_interp.fp],
+            names=['lambda_rf', 'mean_cont'], extname='CONT')
+        fts.write([self.varlss_fitter.waveobs, self.varlss_interp.fp],
+            names=['lambda', 'var_lss'], extname='VAR_FUNC')
         fts.close()
 
 
