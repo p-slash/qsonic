@@ -67,7 +67,7 @@ class PiccaContinuumFitter(object):
         else:
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
             self.varlss_fitter = VarLSSFitter(w1obs, w2obs, nwbins)
-            self.varlss_interp = Fast1DInterpolator(w1obs, self.varlss_fitter.dwobs, np.zeros(nwbins))
+            self.varlss_interp = Fast1DInterpolator(w1obs, self.varlss_fitter.dwobs, 0.1*np.ones(nwbins))
 
     def _continuum_chi2(self, x, wave, flux, ivar_sm, z_qso):
         chi2 = 0
@@ -157,7 +157,7 @@ class PiccaContinuumFitter(object):
         logging_mpi(f"Number of valid fits: {no_valid_fits}", self.mpi_rank)
         logging_mpi(f"Number of invalid fits: {no_invalid_fits}", self.mpi_rank)
 
-    def update_mean_cont(self, spectra_list):
+    def update(self, spectra_list):
         norm_flux = np.zeros(self.nbins)
         counts = np.zeros(self.nbins)
         if self.varlss_fitter is not None:
@@ -214,22 +214,27 @@ class PiccaContinuumFitter(object):
             logging_mpi("Fitting var_lss", self.mpi_rank)
             y = self.varlss_fitter.fit(self.varlss_interp.fp)
             self.varlss_interp.fp = y
+            _step = int(y.size/10)
             logging_mpi("wave_obs \t| var_lss", self.mpi_rank)
             for w, v in zip(self.varlss_fitter.waveobs[::_step], y[::_step]):
                 logging_mpi(f"{w:7.2f}\t| {v:7.2e}", self.mpi_rank)
 
         return has_converged
 
-    def iterate(self, spectra_list, niterations):
+    def iterate(self, spectra_list, niterations, outdir=None):
         has_converged = False
 
         for it in range(niterations):
             logging_mpi(f"Fitting iteration {it+1}/{niterations}", self.mpi_rank)
+
+            if self.mpi_rank == 0 and outdir:
+                self.save(outdir, it+1)
+
             # Fit all continua one by one
             self.fit_continua(spectra_list)
             # Stack all spectra in each process
             # Broadcast and recalculate global functions
-            has_converged = self.update_mean_cont(spectra_list)
+            has_converged = self.update(spectra_list)
 
             if has_converged:
                 logging_mpi("Iteration has converged.", self.mpi_rank)
@@ -237,6 +242,20 @@ class PiccaContinuumFitter(object):
 
         if not has_converged:
             logging_mpi("Iteration has NOT converged.", self.mpi_rank, "warning")
+
+    def save(self, outdir, it):
+        fts = fitsio.FITS(f"{outdir}/attributes-{it}.fits", 'rw', clobber=True)
+        data = np.empty(self.nbins, dtype=[('lambda_rf', 'f8'), ('mean_cont', 'f8')])
+        data['lambda_rf'] = self.rfwave
+        data['mean_cont'] = self.meancont_interp.fp
+        fts.write(data, extname='CONT')
+
+        data = np.empty(self.varlss_interp.fp.size,
+            dtype=[('lambda', 'f8'), ('var_lss', 'f8')])
+        data['lambda'] = self.varlss_fitter.waveobs
+        data['var_lss'] = self.varlss_interp.fp
+        fts.write(data, extname='VAR_FUNC')
+        fts.close()
 
 
 class VarLSSFitter(object):
@@ -313,8 +332,8 @@ class VarLSSFitter(object):
             i2 = i1 + self.nvarbins
             wbinslice = np.s_[i1:i2]
 
-            w  = num_pixels[wbinslice] > VarLSSFitter.min_no_pix
-            w &= num_qso[wbinslice] > VarLSSFitter.min_no_qso
+            w  = self.num_pixels[wbinslice] > VarLSSFitter.min_no_pix
+            w &= self.num_qso[wbinslice] > VarLSSFitter.min_no_qso
 
             pfit, pcov = curve_fit(
                 VarLSSFitter.variance_function,
