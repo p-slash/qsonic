@@ -503,6 +503,7 @@ class Spectrum(object):
             'CONT_eA': np.sqrt(self.cont_params['xcov'][0, 0]),
             'CONT_B': self.cont_params['x'][1],
             'CONT_eB': np.sqrt(self.cont_params['xcov'][1, 1]),
+            'CONT_cAB': self.cont_params['xcov'][0, 1],
             'CONTCHI2': self.cont_params['chi2'],
             'CONTDOF': self.cont_params['dof'],
         }
