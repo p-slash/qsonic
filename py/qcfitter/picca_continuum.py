@@ -129,7 +129,6 @@ class PiccaContinuumFitter(object):
             spec.cont_params['x']    = result.x
             spec.cont_params['xcov'] = result.hess_inv
             spec.cont_params['chi2'] = result.fun
-            spec.cont_params['dof']  = spec.get_real_size()
             spec.cont_params['cont'] = {}
             for arm, wave_arm in spec.forestwave.items():
                 _cont  = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
@@ -144,7 +143,6 @@ class PiccaContinuumFitter(object):
 
         # For each forest fit continuum
         for spec in spectra_list:
-            spec.cont_params['method'] = 'picca'
             self.fit_continuum(spec)
 
             if not spec.cont_params['valid']:
@@ -224,6 +222,10 @@ class PiccaContinuumFitter(object):
 
     def iterate(self, spectra_list, niterations, outdir=None):
         has_converged = False
+
+        for spec in spectra_list:
+            spec.cont_params['method'] = 'picca'
+            spec.cont_params['dof']    = spec.get_real_size()
 
         for it in range(niterations):
             logging_mpi(f"Fitting iteration {it+1}/{niterations}", self.mpi_rank)
