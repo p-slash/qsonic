@@ -200,9 +200,9 @@ class PiccaContinuumFitter(object):
         std_flux /= _mean
 
         logging_mpi("Continuum updates", self.mpi_rank)
-        _step = max(1, int(self.nbins/10))
+        sl = np.s_[::max(1, int(self.nbins/10))]
         logging_mpi("wave_rf \t| update \t| error", self.mpi_rank)
-        for w, n, e in zip(self.rfwave[::_step], norm_flux[::_step], std_flux[::_step]):
+        for w, n, e in zip(self.rfwave[sl], norm_flux[sl], std_flux[sl]):
             logging_mpi(f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}", self.mpi_rank)
 
         has_converged = np.all(np.abs(norm_flux) < 1.5*std_flux)
@@ -210,11 +210,11 @@ class PiccaContinuumFitter(object):
 
         if self.varlss_fitter is not None:
             logging_mpi("Fitting var_lss", self.mpi_rank)
-            y = self.varlss_fitter.fit(self.varlss_interp.fp)
+            y = self.varlss_fitter.fit(self.varlss_interp.fp, self.comm, self.mpi_rank)
             self.varlss_interp.fp = y
-            _step = max(1, int(y.size/10))
+            sl = np.s_[::max(1, int(y.size/10))]
             logging_mpi("wave_obs \t| var_lss", self.mpi_rank)
-            for w, v in zip(self.varlss_fitter.waveobs[::_step], y[::_step]):
+            for w, v in zip(self.varlss_fitter.waveobs[sl], y[sl]):
                 logging_mpi(f"{w:7.2f}\t| {v:7.2e}", self.mpi_rank)
 
         return has_converged
@@ -272,11 +272,6 @@ class VarLSSFitter(object):
         self.num_pixels = np.zeros_like(self.var_delta, dtype=int)
         self.num_qso = np.zeros_like(self.var_delta, dtype=int)
 
-    # def _get_stats(self, all_indx, weights=None):
-    #     binned = np.bincount(all_indx, weights=weights, minlength=self.minlength)
-    #     binned = binned.reshape(self.nwbins+2, self.nvarbins+2)
-    #     return binned[1:-1, 1:-1]
-
     def reset(self):
         self.var_delta = 0.
         self.mean_delta = 0.
@@ -298,8 +293,7 @@ class VarLSSFitter(object):
         rebin[rebin>0] = 1
         self.num_qso += rebin
 
-    def _allreduce(self):
-        comm = MPI.COMM_WORLD
+    def _allreduce(self, comm):
         comm.Allreduce(MPI.IN_PLACE, self.mean_delta)
         comm.Allreduce(MPI.IN_PLACE, self.var_delta)
         comm.Allreduce(MPI.IN_PLACE, self.var2_delta)
@@ -314,8 +308,8 @@ class VarLSSFitter(object):
         self.var2_delta -= self.var_delta**2
         self.var2_delta[w] /= self.num_pixels[w]
 
-    def fit(self, current_varlss):
-        self._allreduce()
+    def fit(self, current_varlss, comm, mpi_rank):
+        self._allreduce(comm)
         var_lss = np.zeros(self.nwbins)
         std_var_lss = np.zeros(self.nwbins)
 
@@ -327,22 +321,39 @@ class VarLSSFitter(object):
             w  = self.num_pixels[wbinslice] > VarLSSFitter.min_no_pix
             w &= self.num_qso[wbinslice] > VarLSSFitter.min_no_qso
 
-            pfit, pcov = curve_fit(
-                VarLSSFitter.variance_function,
-                1/self.ivar_centers[w],
-                self.var_delta[wbinslice][w],
-                p0=current_varlss[iwave],
-                sigma=np.sqrt(self.var2_delta[wbinslice][w]),
-                absolute_sigma=True,
-                check_finite=True,
-                bounds=(0, 2)
-            )
+            if w.sum() == 0:
+                err_msg = ( "Not enough statistics for VarLSSFitter at"
+                           f" wave_obs: {self.waveobs[iwave]:.2f}.")
+                logging_mpi(err_msg, mpi_rank, "warning")
+                continue
 
-            var_lss[iwave] = pfit[0]
-            std_var_lss[iwave] = np.sqrt(pcov[0, 0])
+            try:
+                pfit, pcov = curve_fit(
+                    VarLSSFitter.variance_function,
+                    1/self.ivar_centers[w],
+                    self.var_delta[wbinslice][w],
+                    p0=current_varlss[iwave],
+                    sigma=np.sqrt(self.var2_delta[wbinslice][w]),
+                    absolute_sigma=True,
+                    check_finite=True,
+                    bounds=(0, 2)
+                )
+            except Exception as e:
+                err_msg = (f"VarLSSFitter failed at wave_obs: {self.waveobs[iwave]:.2f}. "
+                           f"Reason: {e}. Extrapolating.")
+                logging_mpi(err_msg, mpi_rank, "warning")
+            else:
+                var_lss[iwave] = pfit[0]
+                std_var_lss[iwave] = np.sqrt(pcov[0, 0])
 
         # Smooth new estimates
         w = var_lss > 0
         spl = UnivariateSpline(self.waveobs[w], var_lss[w], w=1/std_var_lss[w])
+
+        nfails = np.sum(var_lss == 0)
+        if nfails > 0:
+            logging_mpi(f"VarLSSFitter failed and extrapolated at {nfails} points.",
+                    mpi_rank, "warning")
+
         return spl(self.waveobs)
 
