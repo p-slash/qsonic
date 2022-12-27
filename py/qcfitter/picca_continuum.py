@@ -46,7 +46,7 @@ class PiccaContinuumFitter(object):
         self.meanflux_interp = Fast1DInterpolator(waves_0, dwave,
             meanflux)
         self.varlss_interp = Fast1DInterpolator(waves_0, dwave,
-            varlss)
+            varlss, np.zeros(nsize))
 
     def __init__(self, w1rf, w2rf, dwrf, w1obs, w2obs, nwbins=20, fiducial_fits=None):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
@@ -54,7 +54,7 @@ class PiccaContinuumFitter(object):
         self._denom = np.log(self.rfwave[-1]/self.rfwave[0])
 
         self.meancont_interp = Fast1DInterpolator(w1rf, self.dwrf,
-            np.ones(self.nbins))
+            np.ones(self.nbins), np.zeros(self.nbins))
 
         self.comm = MPI.COMM_WORLD
         self.mpi_rank = self.comm.Get_rank()
@@ -66,7 +66,7 @@ class PiccaContinuumFitter(object):
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
             self.varlss_fitter = VarLSSFitter(w1obs, w2obs, nwbins)
             self.varlss_interp = Fast1DInterpolator(w1obs, self.varlss_fitter.dwobs,
-                0.1*np.ones(nwbins))
+                0.1*np.ones(nwbins), np.zeros(nwbins))
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
         cost = 0
@@ -213,6 +213,7 @@ class PiccaContinuumFitter(object):
         self.meancont_interp.fp /= mean_
         norm_flux = self.meancont_interp.fp/oldcont - 1
         std_flux /= mean_
+        self.meancont_interp.ep = std_flux
 
         logging_mpi("Continuum updates", self.mpi_rank)
         sl = np.s_[::max(1, int(self.nbins/10))]
@@ -225,12 +226,13 @@ class PiccaContinuumFitter(object):
 
         if self.varlss_fitter is not None:
             logging_mpi("Fitting var_lss", self.mpi_rank)
-            y = self.varlss_fitter.fit(self.varlss_interp.fp, self.comm, self.mpi_rank)
+            y, ep = self.varlss_fitter.fit(self.varlss_interp.fp, self.comm, self.mpi_rank)
             self.varlss_interp.fp = y
+            self.varlss_interp.ep = ep
             sl = np.s_[::max(1, int(y.size/10))]
-            logging_mpi("wave_obs \t| var_lss", self.mpi_rank)
-            for w, v in zip(self.varlss_fitter.waveobs[sl], y[sl]):
-                logging_mpi(f"{w:7.2f}\t| {v:7.2e}", self.mpi_rank)
+            logging_mpi("wave_obs \t| var_lss \t| error", self.mpi_rank)
+            for w, v, e in zip(self.varlss_fitter.waveobs[sl], y[sl], ep[sl]):
+                logging_mpi(f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}", self.mpi_rank)
 
         return has_converged
 
@@ -241,11 +243,14 @@ class PiccaContinuumFitter(object):
             spec.cont_params['method'] = 'picca'
             spec.cont_params['dof']    = spec.get_real_size()
 
+        if self.mpi_rank == 0 and outdir:
+            fattr = fitsio.FITS(f"{outdir}/attributes.fits", 'rw', clobber=True)
+
         for it in range(niterations):
             logging_mpi(f"Fitting iteration {it+1}/{niterations}", self.mpi_rank)
 
             if self.mpi_rank == 0 and outdir:
-                self.save(outdir, it+1)
+                self.save(fattr, it+1)
 
             # Fit all continua one by one
             self.fit_continua(spectra_list)
@@ -260,14 +265,14 @@ class PiccaContinuumFitter(object):
         if not has_converged:
             logging_mpi("Iteration has NOT converged.", self.mpi_rank, "warning")
 
-    def save(self, outdir, it):
-        fts = fitsio.FITS(f"{outdir}/attributes-{it}.fits", 'rw', clobber=True)
-        fts.write([self.rfwave, self.meancont_interp.fp],
-            names=['lambda_rf', 'mean_cont'], extname='CONT')
-        fts.write([self.varlss_fitter.waveobs, self.varlss_interp.fp],
-            names=['lambda', 'var_lss'], extname='VAR_FUNC')
-        fts.close()
+        if self.mpi_rank == 0 and outdir:
+            fattr.close()
 
+    def save(self, fattr, it):
+        fattr.write([self.rfwave, self.meancont_interp.fp, self.meancont_interp.ep],
+            names=['lambda_rf', 'mean_cont', 'e_mean_cont'], extname=f'CONT-{it}')
+        fattr.write([self.varlss_fitter.waveobs, self.varlss_interp.fp, self.varlss_interp.ep],
+            names=['lambda', 'var_lss', 'e_var_lss'], extname=f'VAR_FUNC-{it}')
 
 class VarLSSFitter(object):
     min_no_pix = 500
@@ -374,5 +379,5 @@ class VarLSSFitter(object):
             logging_mpi(f"VarLSSFitter failed and extrapolated at {nfails} points.",
                     mpi_rank, "warning")
 
-        return spl(self.waveobs)
+        return spl(self.waveobs), std_var_lss
 

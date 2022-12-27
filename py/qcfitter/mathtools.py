@@ -11,6 +11,8 @@ class Fast1DInterpolator(object):
         Spacing of x points.
     fp: numpy array
         Function calculated at interpolation points
+    ep: numpy array (optional)
+        Error on fp points. Not used! Booking purposes only.
     copy: bool (default: False)
         Copy input data, specifically fp
 
@@ -19,13 +21,14 @@ class Fast1DInterpolator(object):
     __call__(x)
 
     """
-    def __init__(self, xp0, dxp, fp, copy=False):
+    def __init__(self, xp0, dxp, fp, copy=False, ep=None):
         self.xp0 = float(xp0)
         self.dxp = float(dxp)
         if copy:
             self.fp = fp.copy()
         else:
             self.fp = fp
+        self.ep = ep
 
     def __call__(self, x):
         xx = (x - self.xp0)/self.dxp
