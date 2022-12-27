@@ -512,15 +512,15 @@ class Spectrum(object):
             if np.sum(self.forestivar[arm]>0) == 0:
                 continue
 
-            _cont = self.cont_params['cont'][arm]
-            delta = self.forestflux[arm]/_cont-1
-            ivar  = self.forestivar[arm]*_cont**2
+            cont_est = self.cont_params['cont'][arm]
+            delta = self.forestflux[arm]/cont_est-1
+            ivar  = self.forestivar[arm]*cont_est**2
             var_lss = varlss_interp(wave_arm)
             weight = ivar / (1+ivar*var_lss)
 
             hdr_dict['MEANSNR'] = np.mean(np.sqrt(ivar[ivar>0]))
 
-            cols = [wave_arm, delta, ivar, weight, _cont]
+            cols = [wave_arm, delta, ivar, weight, cont_est]
             names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT']
             if self.forestreso:
                 cols.append(self.forestreso[arm].T.astype('f8'))

@@ -65,10 +65,11 @@ class PiccaContinuumFitter(object):
         else:
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
             self.varlss_fitter = VarLSSFitter(w1obs, w2obs, nwbins)
-            self.varlss_interp = Fast1DInterpolator(w1obs, self.varlss_fitter.dwobs, 0.1*np.ones(nwbins))
+            self.varlss_interp = Fast1DInterpolator(w1obs, self.varlss_fitter.dwobs,
+                0.1*np.ones(nwbins))
 
-    def _continuum_chi2(self, x, wave, flux, ivar_sm, z_qso):
-        chi2 = 0
+    def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
+        cost = 0
 
         for arm, wave_arm in wave.items():
             cont_est  = self.get_continuum_model(x, wave_arm/(1+z_qso))
@@ -81,11 +82,9 @@ class PiccaContinuumFitter(object):
             weight  = ivar_sm[arm] / (1+ivar_sm[arm]*var_lss)
             w = weight > 0
 
-            chi2 += np.sum(
-                weight * (flux[arm] - cont_est)**2
-            ) - np.log(weight[w]).sum()# + penalty
+            cost += np.dot(weight, (flux[arm] - cont_est)**2) - np.log(weight[w]).sum()# + penalty
 
-        return chi2
+        return cost
 
     def get_continuum_model(self, x, wave_rf_arm):
         Slope = np.log(wave_rf_arm/self.rfwave[0])/self._denom
@@ -103,7 +102,7 @@ class PiccaContinuumFitter(object):
         # )
 
         result = minimize(
-            self._continuum_chi2,
+            self._continuum_costfn,
             spec.cont_params['x'],
             args=(spec.forestwave,
                   spec.forestflux,
@@ -129,12 +128,19 @@ class PiccaContinuumFitter(object):
         if spec.cont_params['valid']:
             spec.cont_params['x']    = result.x
             spec.cont_params['xcov'] = result.hess_inv.todense()
-            spec.cont_params['chi2'] = result.fun
+            # spec.cont_params['chi2'] = result.fun
             spec.cont_params['cont'] = {}
+            chi2 = 0
             for arm, wave_arm in spec.forestwave.items():
-                _cont  = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
-                _cont *= self.meanflux_interp(wave_arm)
-                spec.cont_params['cont'][arm] = _cont
+                cont_est  = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
+                cont_est *= self.meanflux_interp(wave_arm)
+                spec.cont_params['cont'][arm] = cont_est
+
+                var_lss = self.varlss_interp(wave_arm)*cont_est**2
+                weight  = spec.forestivar_sm[arm] / (1+spec.forestivar_sm[arm]*var_lss)
+
+                chi2 += np.dot(weight, (spec.forestflux[arm] - cont_est)**2)
+            spec.cont_params['chi2'] = chi2
         else:
             spec.cont_params['cont'] = None
 
