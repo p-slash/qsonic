@@ -199,13 +199,20 @@ class PiccaContinuumFitter(object):
         # Smooth new estimates
         spl = UnivariateSpline(self.rfwave, norm_flux, w=1/std_flux)
         norm_flux = spl(self.rfwave)
+        oldcont = self.meancont_interp.fp.copy()
         self.meancont_interp.fp *= norm_flux
 
+        # remove tilt
+        x = np.log(self.rfwave/self.rfwave[0])/self._denom
+        P1 = 2*x-1
+        B = 3*np.trapz(self.meancont_interp.fp*P1, x=x)
+        self.meancont_interp.fp -= B * P1
+
         # normalize
-        _mean = self.meancont_interp.fp.mean()
-        self.meancont_interp.fp /= _mean
-        norm_flux = norm_flux/_mean - 1
-        std_flux /= _mean
+        mean_ = np.trapz(self.meancont_interp.fp, x=x)
+        self.meancont_interp.fp /= mean_
+        norm_flux = self.meancont_interp.fp/oldcont - 1
+        std_flux /= mean_
 
         logging_mpi("Continuum updates", self.mpi_rank)
         sl = np.s_[::max(1, int(self.nbins/10))]
@@ -213,7 +220,7 @@ class PiccaContinuumFitter(object):
         for w, n, e in zip(self.rfwave[sl], norm_flux[sl], std_flux[sl]):
             logging_mpi(f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}", self.mpi_rank)
 
-        has_converged = np.all(np.abs(norm_flux) < 1.5*std_flux)
+        has_converged = np.all(np.abs(norm_flux) < 0.33*std_flux)
         # np.allclose(np.abs(norm_flux), std_flux, rtol=0.5)
 
         if self.varlss_fitter is not None:
