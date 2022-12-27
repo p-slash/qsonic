@@ -240,6 +240,9 @@ if __name__ == '__main__':
         qcfitter.spectrum.save_deltas(spectra_list, args.outdir, qcfit.varlss_interp,
             out_nside=out_nside, mpi_rank=out_by_mpi)
 
+        logging_mpi("Saving continuum chi2 catalog.", mpi_rank)
+        qcfitter.spectrum.save_contchi2_catalog(spectra_list, args.outdir, comm, mpi_rank)
+
 
 
 

@@ -8,7 +8,7 @@
 + If no fiducial is passed, we fit only for var_lss (no eta fitting currently).
 + Internal weights for continuum fitting and coadding are based on smoothed `IVAR`, but output `WEIGHT` is *not* smoothed.
 + `MEANSNR` in header file is average of square root of positive ivar values (`np.mean(np.sqrt(ivar[ivar>0]))`), i.e. not flux/sigma.
-+ Chi2 information as well as best fits are saved in delta headers. Chi2 is calculated using smooth ivar and var_lss, and does not subtract sum of ln(weights).
++ Chi2 information as well as best fits are saved in continuum_chi2_catalog.fits. Chi2 is calculated using smooth ivar and var_lss, and does not subtract sum of ln(weights).
 
 ## Similarities
 + Delta files are the same. `CONT` column is mean flux times continuum even when fiducial mean flux is passed.
