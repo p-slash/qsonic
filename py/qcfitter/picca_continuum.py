@@ -87,20 +87,17 @@ class PiccaContinuumFitter(object):
         return cost
 
     def get_continuum_model(self, x, wave_rf_arm):
-        Slope = np.log(wave_rf_arm/self.rfwave[0])/self._denom
+        slope = np.log(wave_rf_arm/self.rfwave[0])/self._denom
 
-        cont = self.meancont_interp(wave_rf_arm) * (x[0] + x[1]*Slope)
+        cont = self.meancont_interp(wave_rf_arm) * (x[0] + x[1]*slope)
         # Multiply with resolution
         # Edges are difficult though
 
         return cont
 
     def fit_continuum(self, spec):
-        # constr = ({'type': 'eq',
-        #            'fun': lambda x: self.get_continuum_model(x, wave_arm/(1+spec.z_qso))
-        #           } for wave_arm in spec.forestwave.values() if wave_arm.size>0
-        # )
-
+        # We can precalculate meanflux and varlss here,
+        # and store them in respective keys to spec.cont_params
         result = minimize(
             self._continuum_costfn,
             spec.cont_params['x'],
@@ -108,8 +105,6 @@ class PiccaContinuumFitter(object):
                   spec.forestflux,
                   spec.forestivar_sm,
                   spec.z_qso),
-            # constraints=constr,
-            # method='COBYLA',
             method='L-BFGS-B',
             bounds=[(0, None), (None, None)],
             jac=None
@@ -118,29 +113,28 @@ class PiccaContinuumFitter(object):
         spec.cont_params['valid'] = result.success
 
         if result.success:
-            for wave_arm in spec.forestwave.values():
-                _cont = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
-
-                if any(_cont<0):
-                    spec.cont_params['valid'] = False
-                    break
-
-        if spec.cont_params['valid']:
-            spec.cont_params['x']    = result.x
-            spec.cont_params['xcov'] = result.hess_inv.todense()
-            # spec.cont_params['chi2'] = result.fun
             spec.cont_params['cont'] = {}
             chi2 = 0
             for arm, wave_arm in spec.forestwave.items():
-                cont_est  = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
+                cont_est = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
+
+                if any(cont_est<0):
+                    spec.cont_params['valid'] = False
+                    break
+
                 cont_est *= self.meanflux_interp(wave_arm)
                 spec.cont_params['cont'][arm] = cont_est
-
                 var_lss = self.varlss_interp(wave_arm)*cont_est**2
                 weight  = spec.forestivar_sm[arm] / (1+spec.forestivar_sm[arm]*var_lss)
 
                 chi2 += np.dot(weight, (spec.forestflux[arm] - cont_est)**2)
+
+            # We can further eliminate spectra based chi2
             spec.cont_params['chi2'] = chi2
+
+        if spec.cont_params['valid']:
+            spec.cont_params['x']    = result.x
+            spec.cont_params['xcov'] = result.hess_inv.todense()
         else:
             spec.cont_params['cont'] = None
 
@@ -163,7 +157,7 @@ class PiccaContinuumFitter(object):
         logging_mpi(f"Number of valid fits: {no_valid_fits}", self.mpi_rank)
         logging_mpi(f"Number of invalid fits: {no_invalid_fits}", self.mpi_rank)
 
-    def update(self, spectra_list):
+    def update(self, spectra_list, noupdate):
         norm_flux = np.zeros(self.nbins)
         counts = np.zeros(self.nbins)
         if self.varlss_fitter is not None:
@@ -198,22 +192,24 @@ class PiccaContinuumFitter(object):
 
         # Smooth new estimates
         spl = UnivariateSpline(self.rfwave, norm_flux, w=1/std_flux)
-        norm_flux = spl(self.rfwave)
-        oldcont = self.meancont_interp.fp.copy()
-        self.meancont_interp.fp *= norm_flux
+        new_meancont = spl(self.rfwave)
+        new_meancont *= self.meancont_interp.fp
 
         # remove tilt
         x = np.log(self.rfwave/self.rfwave[0])/self._denom
         P1 = 2*x-1
-        B = 3*np.trapz(self.meancont_interp.fp*P1, x=x)
-        self.meancont_interp.fp -= B * P1
+        B = 3*np.trapz(new_meancont*P1, x=x)
+        new_meancont -= B * P1
 
         # normalize
-        mean_ = np.trapz(self.meancont_interp.fp, x=x)
-        self.meancont_interp.fp /= mean_
-        norm_flux = self.meancont_interp.fp/oldcont - 1
+        mean_ = np.trapz(new_meancont, x=x)
+        new_meancont /= mean_
+        norm_flux = new_meancont/self.meancont_interp.fp - 1
         std_flux /= mean_
-        self.meancont_interp.ep = std_flux
+
+        if not noupdate:
+            self.meancont_interp.fp = new_meancont
+            self.meancont_interp.ep = std_flux
 
         logging_mpi("Continuum updates", self.mpi_rank)
         sl = np.s_[::max(1, int(self.nbins/10))]
@@ -222,17 +218,22 @@ class PiccaContinuumFitter(object):
             logging_mpi(f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}", self.mpi_rank)
 
         has_converged = np.all(np.abs(norm_flux) < 0.33*std_flux)
-        # np.allclose(np.abs(norm_flux), std_flux, rtol=0.5)
 
-        if self.varlss_fitter is not None:
-            logging_mpi("Fitting var_lss", self.mpi_rank)
-            y, ep = self.varlss_fitter.fit(self.varlss_interp.fp, self.comm, self.mpi_rank)
+        # If not fitting var_lss return here
+        if self.varlss_fitter is None:
+            return has_converged
+
+        # Else, fit for var_lss
+        logging_mpi("Fitting var_lss", self.mpi_rank)
+        y, ep = self.varlss_fitter.fit(self.varlss_interp.fp, self.comm, self.mpi_rank)
+        if not noupdate:
             self.varlss_interp.fp = y
             self.varlss_interp.ep = ep
-            sl = np.s_[::max(1, int(y.size/10))]
-            logging_mpi("wave_obs \t| var_lss \t| error", self.mpi_rank)
-            for w, v, e in zip(self.varlss_fitter.waveobs[sl], y[sl], ep[sl]):
-                logging_mpi(f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}", self.mpi_rank)
+
+        sl = np.s_[::max(1, int(y.size/10))]
+        logging_mpi("wave_obs \t| var_lss \t| error", self.mpi_rank)
+        for w, v, e in zip(self.varlss_fitter.waveobs[sl], y[sl], ep[sl]):
+            logging_mpi(f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}", self.mpi_rank)
 
         return has_converged
 
@@ -256,7 +257,7 @@ class PiccaContinuumFitter(object):
             self.fit_continua(spectra_list)
             # Stack all spectra in each process
             # Broadcast and recalculate global functions
-            has_converged = self.update(spectra_list)
+            has_converged = self.update(spectra_list, it == niterations-1)
 
             if has_converged:
                 logging_mpi("Iteration has converged.", self.mpi_rank)

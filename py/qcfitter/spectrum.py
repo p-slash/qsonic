@@ -226,6 +226,30 @@ def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=No
 
         results.close()
 
+def save_contchi2_catalog(spectra_list, outdir, comm, mpi_rank, corder=2):
+    dtype = np.dtype([
+        ('TARGETID', 'int64'), ('Z', 'f8'), ('MEANSNR', 'f8'), ('RSNR', 'f8'),
+        ('CONT_chi2', 'f8'), ('CONT_dof', 'i8'),
+        ('CONT_x', 'f8', corder), ('CONT_xcov', 'f8', corder**2)
+    ])
+    local_catalog = np.empty(len(spectra_list), dtype=dtype)
+
+    for i, spec in enumerate(spectra_list):
+        local_catalog['TARGETID'] = spec.targetid
+        local_catalog['Z'] = spec.z_qso
+        local_catalog['MEANSNR'] = spec.mean_snr()
+        local_catalog['RSNR'] = spec.rsnr
+        for lbl in ['x', 'chi2', 'dof']:
+            local_catalog[f'CONT_{lbl}'] = self.cont_params[lbl]
+        local_catalog['CONT_xcov'] = self.cont_params['xcov'].ravel()
+
+    all_catalogs = comm.gather(local_catalog)
+    if mpi_rank == 0:
+        all_catalog = np.concatenate(all_catalogs)
+        fts = fitsio.FITS(f"{outdir}/continuum_chi2_catalog.fits", 'rw', clobber=True)
+        fts.write(all_catalog, extname='CHI2_CAT')
+        fts.close()
+
 class Spectrum(object):
     """Represents one spectrum.
 
@@ -488,6 +512,20 @@ class Spectrum(object):
         if self.reso:
             self._coadd_arms_reso(nwaves, idxes)
 
+    def mean_snr(self):
+        snr=0
+        npix=1e-6
+        for arm, ivar_arm in self.forestivar.items():
+            w = ivar_arm>0
+            armpix = np.sum(w)
+            if armpix == 0:
+                continue
+
+            cont_est = self.cont_params['cont'][arm]
+            snr += np.dot(np.sqrt(ivar_arm), cont_est)
+            npix+= armpix
+        return snr/armpix
+
     def write(self, fts_file, varlss_interp):
         hdr_dict = {
             'LOS_ID': self.targetid,
@@ -499,13 +537,6 @@ class Spectrum(object):
             'MEANSNR': 0.,
             'RSNR': self.rsnr,
             'DLAMBDA': self.dwave,
-            'CONT_A': self.cont_params['x'][0],
-            'CONT_eA': np.sqrt(self.cont_params['xcov'][0, 0]),
-            'CONT_B': self.cont_params['x'][1],
-            'CONT_eB': np.sqrt(self.cont_params['xcov'][1, 1]),
-            'CONT_cAB': self.cont_params['xcov'][0, 1],
-            'CONTCHI2': self.cont_params['chi2'],
-            'CONTDOF': self.cont_params['dof'],
         }
 
         for arm, wave_arm in self.forestwave.items():
