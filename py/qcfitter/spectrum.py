@@ -334,9 +334,9 @@ class Spectrum(object):
             self._f1[arm], self._f2[arm] = 0, wave_arm.size
             self.flux[arm] = flux[arm][idx]
             self.ivar[arm] = ivar[arm][idx]
-            _mask = mask[arm][idx] | np.isnan(self.flux[arm]) | np.isnan(self.ivar[arm])
-            self.flux[arm][_mask] = 0
-            self.ivar[arm][_mask] = 0
+            w = mask[arm][idx] | np.isnan(self.flux[arm]) | np.isnan(self.ivar[arm])
+            self.flux[arm][w] = 0
+            self.ivar[arm][w] = 0
 
             if not reso:
                 pass
