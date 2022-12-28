@@ -5,6 +5,7 @@ from scipy.interpolate import UnivariateSpline
 
 from mpi4py import MPI
 
+from qcfitter.spectrum  import valid_spectra
 from qcfitter.mpi_utils import logging_mpi
 from qcfitter.mathtools import Fast1DInterpolator
 
@@ -46,7 +47,7 @@ class PiccaContinuumFitter(object):
         self.meanflux_interp = Fast1DInterpolator(waves_0, dwave,
             meanflux)
         self.varlss_interp = Fast1DInterpolator(waves_0, dwave,
-            varlss)
+            varlss, ep=np.zeros(nsize))
 
     def __init__(self, w1rf, w2rf, dwrf, w1obs, w2obs, nwbins=20, fiducial_fits=None):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
@@ -54,7 +55,7 @@ class PiccaContinuumFitter(object):
         self._denom = np.log(self.rfwave[-1]/self.rfwave[0])
 
         self.meancont_interp = Fast1DInterpolator(w1rf, self.dwrf,
-            np.ones(self.nbins))
+            np.ones(self.nbins), ep=np.zeros(self.nbins))
 
         self.comm = MPI.COMM_WORLD
         self.mpi_rank = self.comm.Get_rank()
@@ -65,10 +66,11 @@ class PiccaContinuumFitter(object):
         else:
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
             self.varlss_fitter = VarLSSFitter(w1obs, w2obs, nwbins)
-            self.varlss_interp = Fast1DInterpolator(w1obs, self.varlss_fitter.dwobs, 0.1*np.ones(nwbins))
+            self.varlss_interp = Fast1DInterpolator(w1obs, self.varlss_fitter.dwobs,
+                0.1*np.ones(nwbins), ep=np.zeros(nwbins))
 
-    def _continuum_chi2(self, x, wave, flux, ivar_sm, z_qso):
-        chi2 = 0
+    def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
+        cost = 0
 
         for arm, wave_arm in wave.items():
             cont_est  = self.get_continuum_model(x, wave_arm/(1+z_qso))
@@ -81,36 +83,30 @@ class PiccaContinuumFitter(object):
             weight  = ivar_sm[arm] / (1+ivar_sm[arm]*var_lss)
             w = weight > 0
 
-            chi2 += np.sum(
-                weight * (flux[arm] - cont_est)**2
-            ) - np.log(weight[w]).sum()# + penalty
+            cost += np.dot(weight, (flux[arm] - cont_est)**2) - np.log(weight[w]).sum()# + penalty
 
-        return chi2
+        return cost
 
     def get_continuum_model(self, x, wave_rf_arm):
-        Slope = np.log(wave_rf_arm/self.rfwave[0])/self._denom
+        slope = np.log(wave_rf_arm/self.rfwave[0])/self._denom
 
-        cont = self.meancont_interp(wave_rf_arm) * (x[0] + x[1]*Slope)
+        cont = self.meancont_interp(wave_rf_arm) * (x[0] + x[1]*slope)
         # Multiply with resolution
         # Edges are difficult though
 
         return cont
 
     def fit_continuum(self, spec):
-        # constr = ({'type': 'eq',
-        #            'fun': lambda x: self.get_continuum_model(x, wave_arm/(1+spec.z_qso))
-        #           } for wave_arm in spec.forestwave.values() if wave_arm.size>0
-        # )
-
+        # We can precalculate meanflux and varlss here,
+        # and store them in respective keys to spec.cont_params
         result = minimize(
-            self._continuum_chi2,
+            self._continuum_costfn,
             spec.cont_params['x'],
             args=(spec.forestwave,
                   spec.forestflux,
                   spec.forestivar_sm,
                   spec.z_qso),
-            # constraints=constr,
-            # method='COBYLA',
+            method='L-BFGS-B',
             bounds=[(0, None), (None, None)],
             jac=None
         )
@@ -118,22 +114,31 @@ class PiccaContinuumFitter(object):
         spec.cont_params['valid'] = result.success
 
         if result.success:
-            for wave_arm in spec.forestwave.values():
-                _cont = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
+            spec.cont_params['cont'] = {}
+            chi2 = 0
+            for arm, wave_arm in spec.forestwave.items():
+                cont_est = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
 
-                if any(_cont<0):
+                if any(cont_est<0):
                     spec.cont_params['valid'] = False
                     break
 
+                cont_est *= self.meanflux_interp(wave_arm)
+                spec.cont_params['cont'][arm] = cont_est
+                var_lss = self.varlss_interp(wave_arm)*cont_est**2
+                weight  = spec.forestivar_sm[arm] / (1+spec.forestivar_sm[arm]*var_lss)
+
+                chi2 += np.dot(weight, (spec.forestflux[arm] - cont_est)**2)
+
+            # We can further eliminate spectra based chi2
+            spec.cont_params['chi2'] = chi2
+
         if spec.cont_params['valid']:
-            spec.cont_params['x'] = result.x
-            spec.cont_params['cont'] = {}
-            for arm, wave_arm in spec.forestwave.items():
-                _cont  = self.get_continuum_model(result.x, wave_arm/(1+spec.z_qso))
-                _cont *= self.meanflux_interp(wave_arm)
-                spec.cont_params['cont'][arm] = _cont
+            spec.cont_params['x']    = result.x
+            spec.cont_params['xcov'] = result.hess_inv.todense()
         else:
             spec.cont_params['cont'] = None
+            spec.cont_params['chi2'] = -1
 
     def fit_continua(self, spectra_list):
         no_valid_fits=0
@@ -141,7 +146,6 @@ class PiccaContinuumFitter(object):
 
         # For each forest fit continuum
         for spec in spectra_list:
-            spec.cont_params['method'] = 'picca'
             self.fit_continuum(spec)
 
             if not spec.cont_params['valid']:
@@ -155,16 +159,13 @@ class PiccaContinuumFitter(object):
         logging_mpi(f"Number of valid fits: {no_valid_fits}", self.mpi_rank)
         logging_mpi(f"Number of invalid fits: {no_invalid_fits}", self.mpi_rank)
 
-    def update(self, spectra_list):
+    def update(self, spectra_list, noupdate):
         norm_flux = np.zeros(self.nbins)
         counts = np.zeros(self.nbins)
         if self.varlss_fitter is not None:
             self.varlss_fitter.reset()
 
-        for spec in spectra_list:
-            if not spec.cont_params['valid']:
-                continue 
-
+        for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
                 wave_rf_arm = wave_arm/(1+spec.z_qso)
                 bin_idx = ((wave_rf_arm - self.rfwave[0])/self.dwrf + 0.5).astype(int)
@@ -190,14 +191,24 @@ class PiccaContinuumFitter(object):
 
         # Smooth new estimates
         spl = UnivariateSpline(self.rfwave, norm_flux, w=1/std_flux)
-        norm_flux = spl(self.rfwave)
-        self.meancont_interp.fp *= norm_flux
+        new_meancont = spl(self.rfwave)
+        new_meancont *= self.meancont_interp.fp
+
+        # remove tilt
+        x = np.log(self.rfwave/self.rfwave[0])/self._denom
+        P1 = 2*x-1
+        B = 3*np.trapz(new_meancont*P1, x=x)
+        new_meancont -= B * P1
 
         # normalize
-        _mean = self.meancont_interp.fp.mean()
-        self.meancont_interp.fp /= _mean
-        norm_flux = norm_flux/_mean - 1
-        std_flux /= _mean
+        mean_ = np.trapz(new_meancont, x=x)
+        new_meancont /= mean_
+        norm_flux = new_meancont/self.meancont_interp.fp - 1
+        std_flux /= mean_
+
+        if not noupdate:
+            self.meancont_interp.fp = new_meancont
+            self.meancont_interp.ep = std_flux
 
         logging_mpi("Continuum updates", self.mpi_rank)
         sl = np.s_[::max(1, int(self.nbins/10))]
@@ -205,34 +216,47 @@ class PiccaContinuumFitter(object):
         for w, n, e in zip(self.rfwave[sl], norm_flux[sl], std_flux[sl]):
             logging_mpi(f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}", self.mpi_rank)
 
-        has_converged = np.all(np.abs(norm_flux) < 1.5*std_flux)
-        # np.allclose(np.abs(norm_flux), std_flux, rtol=0.5)
+        has_converged = np.all(np.abs(norm_flux) < 0.33*std_flux)
 
-        if self.varlss_fitter is not None:
-            logging_mpi("Fitting var_lss", self.mpi_rank)
-            y = self.varlss_fitter.fit(self.varlss_interp.fp, self.comm, self.mpi_rank)
+        # If not fitting var_lss return here
+        if self.varlss_fitter is None:
+            return has_converged
+
+        # Else, fit for var_lss
+        logging_mpi("Fitting var_lss", self.mpi_rank)
+        y, ep = self.varlss_fitter.fit(self.varlss_interp.fp, self.comm, self.mpi_rank)
+        if not noupdate:
             self.varlss_interp.fp = y
-            sl = np.s_[::max(1, int(y.size/10))]
-            logging_mpi("wave_obs \t| var_lss", self.mpi_rank)
-            for w, v in zip(self.varlss_fitter.waveobs[sl], y[sl]):
-                logging_mpi(f"{w:7.2f}\t| {v:7.2e}", self.mpi_rank)
+            self.varlss_interp.ep = ep
+
+        sl = np.s_[::max(1, int(y.size/10))]
+        logging_mpi("wave_obs \t| var_lss \t| error", self.mpi_rank)
+        for w, v, e in zip(self.varlss_fitter.waveobs[sl], y[sl], ep[sl]):
+            logging_mpi(f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}", self.mpi_rank)
 
         return has_converged
 
     def iterate(self, spectra_list, niterations, outdir=None):
         has_converged = False
 
+        for spec in spectra_list:
+            spec.cont_params['method'] = 'picca'
+            spec.cont_params['dof']    = spec.get_real_size()
+
+        if self.mpi_rank == 0 and outdir:
+            fattr = fitsio.FITS(f"{outdir}/attributes.fits", 'rw', clobber=True)
+
         for it in range(niterations):
             logging_mpi(f"Fitting iteration {it+1}/{niterations}", self.mpi_rank)
 
             if self.mpi_rank == 0 and outdir:
-                self.save(outdir, it+1)
+                self.save(fattr, it+1)
 
             # Fit all continua one by one
             self.fit_continua(spectra_list)
             # Stack all spectra in each process
             # Broadcast and recalculate global functions
-            has_converged = self.update(spectra_list)
+            has_converged = self.update(spectra_list, it == niterations-1)
 
             if has_converged:
                 logging_mpi("Iteration has converged.", self.mpi_rank)
@@ -241,14 +265,14 @@ class PiccaContinuumFitter(object):
         if not has_converged:
             logging_mpi("Iteration has NOT converged.", self.mpi_rank, "warning")
 
-    def save(self, outdir, it):
-        fts = fitsio.FITS(f"{outdir}/attributes-{it}.fits", 'rw', clobber=True)
-        fts.write([self.rfwave, self.meancont_interp.fp],
-            names=['lambda_rf', 'mean_cont'], extname='CONT')
-        fts.write([self.varlss_fitter.waveobs, self.varlss_interp.fp],
-            names=['lambda', 'var_lss'], extname='VAR_FUNC')
-        fts.close()
+        if self.mpi_rank == 0 and outdir:
+            fattr.close()
 
+    def save(self, fattr, it):
+        fattr.write([self.rfwave, self.meancont_interp.fp, self.meancont_interp.ep],
+            names=['lambda_rf', 'mean_cont', 'e_mean_cont'], extname=f'CONT-{it}')
+        fattr.write([self.varlss_fitter.waveobs, self.varlss_interp.fp, self.varlss_interp.ep],
+            names=['lambda', 'var_lss', 'e_var_lss'], extname=f'VAR_FUNC-{it}')
 
 class VarLSSFitter(object):
     min_no_pix = 500
@@ -355,5 +379,5 @@ class VarLSSFitter(object):
             logging_mpi(f"VarLSSFitter failed and extrapolated at {nfails} points.",
                     mpi_rank, "warning")
 
-        return spl(self.waveobs)
+        return spl(self.waveobs), std_var_lss
 

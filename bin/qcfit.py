@@ -210,10 +210,14 @@ if __name__ == '__main__':
     # Broadcast and recalculate global functions
     # Iterate
     qcfit.iterate(spectra_list, args.no_iterations, args.outdir)
-    # Keep only valid spectra
-    spectra_list = [spec for spec in spectra_list if spec.cont_params['valid']]
     logging_mpi("All continua are fit.", mpi_rank)
 
+    if args.outdir:
+        logging_mpi("Saving continuum chi2 catalog.", mpi_rank)
+        qcfitter.spectrum.save_contchi2_catalog(spectra_list, args.outdir, comm, mpi_rank)
+
+    # Keep only valid spectra
+    spectra_list = list(qcfitter.spectrum.valid_spectra(spectra_list))
     if args.coadd_arms:
         logging_mpi("Coadding arms.", mpi_rank)
         for spec in spectra_list:
