@@ -54,7 +54,7 @@ class PiccaContinuumFitter(object):
         self._denom = np.log(self.rfwave[-1]/self.rfwave[0])
 
         self.meancont_interp = Fast1DInterpolator(w1rf, self.dwrf,
-            np.ones(self.nbins), np.zeros(self.nbins))
+            np.ones(self.nbins), ep=np.zeros(self.nbins))
 
         self.comm = MPI.COMM_WORLD
         self.mpi_rank = self.comm.Get_rank()
@@ -137,6 +137,7 @@ class PiccaContinuumFitter(object):
             spec.cont_params['xcov'] = result.hess_inv.todense()
         else:
             spec.cont_params['cont'] = None
+            spec.cont_params['chi2'] = -1
 
     def fit_continua(self, spectra_list):
         no_valid_fits=0
