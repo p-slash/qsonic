@@ -524,8 +524,7 @@ class Spectrum(object):
             if armpix == 0:
                 continue
 
-            cont_est = self.cont_params['cont'][arm]
-            snr += np.dot(np.sqrt(ivar_arm), cont_est)
+            snr += np.dot(np.sqrt(ivar_arm), self.forestflux[arm])
             npix+= armpix
         return snr/armpix
 
