@@ -182,9 +182,12 @@ def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, skip_resomat, prog
 
     return spectra_list
 
+def valid_spectra(spectra_list):
+    return (spec for spec in spectra_list if spec.cont_params['valid'])
+
 def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=None):
     """ Saves given list of spectra as deltas. NO coaddition of arms.
-    Each arm is saved separately
+    Each arm is saved separately. Only valid spectra are saved.
 
     Arguments
     ---------
@@ -220,9 +223,8 @@ def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=No
     for healpix, hp_specs in zip(unique_pix, split_spectra):
         results = fitsio.FITS(f"{outdir}/deltas-{healpix}.fits",'rw', clobber=True)
 
-        for spec in hp_specs:
-            if spec.cont_params['valid']:
-                spec.write(results, varlss_interp)
+        for spec in valid_spectra(hp_specs):
+            spec.write(results, varlss_interp)
 
         results.close()
 
