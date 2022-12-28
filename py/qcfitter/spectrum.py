@@ -376,7 +376,7 @@ class Spectrum(object):
             # Calculate SNR above Lya
             ii1 = np.searchsorted(wave_arm, (1+self.z_qso)*Spectrum.WAVE_LYA_A)
             weight       = np.sqrt(self.ivar[arm][ii1:])
-            self.rsnr   += np.sum(self.flux[arm][ii1:] * weight)
+            self.rsnr   += np.dot(self.flux[arm][ii1:], weight)
             rsnr_weight += np.sum(weight)
 
             # Slice to forest limits
@@ -398,7 +398,7 @@ class Spectrum(object):
             # np.shares_memory(self.forestflux, self.flux)
             w = self.forestflux[arm]>0
 
-            a0 += np.sum(self.forestflux[arm][w]*self.forestivar[arm][w])
+            a0 += np.dot(self.forestflux[arm][w], self.forestivar[arm][w])
             n0 += np.sum(self.forestivar[arm][w])
 
         self.rsnr /= rsnr_weight
