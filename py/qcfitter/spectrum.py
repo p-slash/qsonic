@@ -182,9 +182,12 @@ def read_spectra(cat, input_dir, arms_to_keep, mock_analysis, skip_resomat, prog
 
     return spectra_list
 
+def valid_spectra(spectra_list):
+    return (spec for spec in spectra_list if spec.cont_params['valid'])
+
 def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=None):
     """ Saves given list of spectra as deltas. NO coaddition of arms.
-    Each arm is saved separately
+    Each arm is saved separately. Only valid spectra are saved.
 
     Arguments
     ---------
@@ -220,11 +223,35 @@ def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=No
     for healpix, hp_specs in zip(unique_pix, split_spectra):
         results = fitsio.FITS(f"{outdir}/deltas-{healpix}.fits",'rw', clobber=True)
 
-        for spec in hp_specs:
-            if spec.cont_params['valid']:
-                spec.write(results, varlss_interp)
+        for spec in valid_spectra(hp_specs):
+            spec.write(results, varlss_interp)
 
         results.close()
+
+def save_contchi2_catalog(spectra_list, outdir, comm, mpi_rank, corder=2):
+    dtype = np.dtype([
+        ('TARGETID', 'int64'), ('Z', 'f8'), ('MEANSNR', 'f8'), ('RSNR', 'f8'),
+        ('CONT_valid', bool), ('CONT_chi2', 'f8'), ('CONT_dof', 'i8'),
+        ('CONT_x', 'f8', corder), ('CONT_xcov', 'f8', corder**2)
+    ])
+    local_catalog = np.empty(len(spectra_list), dtype=dtype)
+
+    for i, spec in enumerate(spectra_list):
+        row = local_catalog[i]
+        row['TARGETID'] = spec.targetid
+        row['Z'] = spec.z_qso
+        row['MEANSNR'] = spec.mean_snr()
+        row['RSNR'] = spec.rsnr
+        for lbl in ['valid', 'x', 'chi2', 'dof']:
+            row[f'CONT_{lbl}'] = spec.cont_params[lbl]
+        row['CONT_xcov'] = spec.cont_params['xcov'].ravel()
+
+    all_catalogs = comm.gather(local_catalog)
+    if mpi_rank == 0:
+        all_catalog = np.concatenate(all_catalogs)
+        fts = fitsio.FITS(f"{outdir}/continuum_chi2_catalog.fits", 'rw', clobber=True)
+        fts.write(all_catalog, extname='CHI2_CAT')
+        fts.close()
 
 class Spectrum(object):
     """Represents one spectrum.
@@ -307,9 +334,9 @@ class Spectrum(object):
             self._f1[arm], self._f2[arm] = 0, wave_arm.size
             self.flux[arm] = flux[arm][idx]
             self.ivar[arm] = ivar[arm][idx]
-            _mask = mask[arm][idx] | np.isnan(self.flux[arm]) | np.isnan(self.ivar[arm])
-            self.flux[arm][_mask] = 0
-            self.ivar[arm][_mask] = 0
+            w = mask[arm][idx] | np.isnan(self.flux[arm]) | np.isnan(self.ivar[arm])
+            self.flux[arm][w] = 0
+            self.ivar[arm][w] = 0
 
             if not reso:
                 pass
@@ -322,6 +349,9 @@ class Spectrum(object):
         self.cont_params['method'] = ''
         self.cont_params['valid'] = False
         self.cont_params['x'] = np.array([1., 0.])
+        self.cont_params['xcov'] = np.array([[1., 0.], [0., 1.]])
+        self.cont_params['chi2'] = -1.
+        self.cont_params['dof']  = 0
         self.cont_params['cont'] = {}
 
     def set_forest_region(self, w1, w2, lya1, lya2):
@@ -347,7 +377,7 @@ class Spectrum(object):
             ii1 = np.searchsorted(wave_arm, (1+self.z_qso)*Spectrum.WAVE_LYA_A)
             weight       = np.sqrt(self.ivar[arm][ii1:])
             self.rsnr   += np.dot(self.flux[arm][ii1:], weight)
-            rsnr_weight += np.sum(weight)
+            rsnr_weight += np.sum(weight>0)
 
             # Slice to forest limits
             ii1, ii2 = np.searchsorted(wave_arm, [l1, l2])
@@ -485,32 +515,49 @@ class Spectrum(object):
         if self.reso:
             self._coadd_arms_reso(nwaves, idxes)
 
+    def mean_snr(self):
+        snr=0
+        npix=1e-6
+        for arm, ivar_arm in self.forestivar.items():
+            w = ivar_arm>0
+            armpix = np.sum(w)
+            if armpix == 0:
+                continue
+
+            snr += np.dot(np.sqrt(ivar_arm), self.forestflux[arm])
+            npix+= armpix
+        return snr/armpix
+
     def write(self, fts_file, varlss_interp):
         hdr_dict = {
-                'LOS_ID': self.targetid,
-                'TARGETID': self.targetid,
-                'RA': self.ra, 'DEC': self.dec,
-                'Z': self.z_qso,
-                'BLINDING': "none",
-                'WAVE_SOLUTION': "lin",
-                'MEANSNR': 0.,
-                'RSNR': self.rsnr,
-                'DLAMBDA': self.dwave
+            'LOS_ID': self.targetid,
+            'TARGETID': self.targetid,
+            'RA': self.ra, 'DEC': self.dec,
+            'Z': self.z_qso,
+            'BLINDING': "none",
+            'WAVE_SOLUTION': "lin",
+            'MEANSNR': 0.,
+            'RSNR': self.rsnr,
+            'DLAMBDA': self.dwave,
         }
 
         for arm, wave_arm in self.forestwave.items():
-            if np.sum(self.forestivar[arm]>0) == 0:
+            armpix = np.sum(self.forestivar[arm] > 0)
+            if armpix == 0:
                 continue
+            
+            hdr_dict['MEANSNR'] = np.dot(
+                np.sqrt(self.forestivar[arm]),
+                self.forestflux[arm]
+            ) / armpix
 
-            _cont = self.cont_params['cont'][arm]
-            delta = self.forestflux[arm]/_cont-1
-            ivar  = self.forestivar[arm]*_cont**2
+            cont_est = self.cont_params['cont'][arm]
+            delta = self.forestflux[arm]/cont_est-1
+            ivar  = self.forestivar[arm]*cont_est**2
             var_lss = varlss_interp(wave_arm)
             weight = ivar / (1+ivar*var_lss)
 
-            hdr_dict['MEANSNR'] = np.mean(np.sqrt(ivar[ivar>0]))
-
-            cols = [wave_arm, delta, ivar, weight, _cont]
+            cols = [wave_arm, delta, ivar, weight, cont_est]
             names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT']
             if self.forestreso:
                 cols.append(self.forestreso[arm].T.astype('f8'))
