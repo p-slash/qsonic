@@ -542,16 +542,20 @@ class Spectrum(object):
         }
 
         for arm, wave_arm in self.forestwave.items():
-            if np.sum(self.forestivar[arm]>0) == 0:
+            armpix = np.sum(self.forestivar[arm] > 0)
+            if armpix == 0:
                 continue
+            
+            hdr_dict['MEANSNR'] = np.dot(
+                np.sqrt(self.forestivar[arm]),
+                self.forestflux[arm]
+            ) / armpix
 
             cont_est = self.cont_params['cont'][arm]
             delta = self.forestflux[arm]/cont_est-1
             ivar  = self.forestivar[arm]*cont_est**2
             var_lss = varlss_interp(wave_arm)
             weight = ivar / (1+ivar*var_lss)
-
-            hdr_dict['MEANSNR'] = np.mean(np.sqrt(ivar[ivar>0]))
 
             cols = [wave_arm, delta, ivar, weight, cont_est]
             names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT']
