@@ -5,6 +5,7 @@ from scipy.interpolate import UnivariateSpline
 
 from mpi4py import MPI
 
+from qcfitter.spectrum  import valid_spectra
 from qcfitter.mpi_utils import logging_mpi
 from qcfitter.mathtools import Fast1DInterpolator
 
@@ -164,10 +165,7 @@ class PiccaContinuumFitter(object):
         if self.varlss_fitter is not None:
             self.varlss_fitter.reset()
 
-        for spec in spectra_list:
-            if not spec.cont_params['valid']:
-                continue 
-
+        for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
                 wave_rf_arm = wave_arm/(1+spec.z_qso)
                 bin_idx = ((wave_rf_arm - self.rfwave[0])/self.dwrf + 0.5).astype(int)
