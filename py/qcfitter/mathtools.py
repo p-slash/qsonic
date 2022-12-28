@@ -11,6 +11,8 @@ class Fast1DInterpolator(object):
         Spacing of x points.
     fp: numpy array
         Function calculated at interpolation points
+    ep: numpy array (optional)
+        Error on fp points. Not used! Booking purposes only.
     copy: bool (default: False)
         Copy input data, specifically fp
 
@@ -19,13 +21,14 @@ class Fast1DInterpolator(object):
     __call__(x)
 
     """
-    def __init__(self, xp0, dxp, fp, copy=False):
+    def __init__(self, xp0, dxp, fp, copy=False, ep=None):
         self.xp0 = float(xp0)
         self.dxp = float(dxp)
         if copy:
             self.fp = fp.copy()
         else:
             self.fp = fp
+        self.ep = ep
 
     def __call__(self, x):
         xx = (x - self.xp0)/self.dxp
@@ -37,6 +40,19 @@ class Fast1DInterpolator(object):
         return y1*(1-d_idx) + y2*d_idx
 
 # ===================================================
+
+def fft_gaussian_smooth(x, sigma_pix=20, pad_size=25, mode='edge'):
+    # Pad the input array to get rid of annoying edge effects
+    # Pad values are set to the edge value
+    arrsize    = x.size+2*pad_size
+    padded_arr = np.pad(x, pad_size, mode=mode)
+
+    kvals     = np.fft.rfftfreq(arrsize)
+    smerror_k = np.fft.rfft(padded_arr)*np.exp(-(kvals*sigma_pix)**2/2.)
+
+    y = np.fft.irfft(smerror_k, n=arrsize)[pad_size:-pad_size]
+
+    return y
 
 def get_smooth_ivar(ivar, sigma_pix=20, pad_size=25, esigma=3.5):
     error = np.empty_like(ivar)
@@ -52,16 +68,7 @@ def get_smooth_ivar(ivar, sigma_pix=20, pad_size=25, esigma=3.5):
 
     # Replace them with the median
     error[w2] = median_err
-
-    # Pad the input array to get rid of annoying edge effects
-    # Pad values are set to the edge value
-    arrsize    = ivar.size+2*pad_size
-    padded_arr = np.pad(error, pad_size, mode='edge')
-
-    kvals     = np.fft.rfftfreq(arrsize)
-    smerror_k = np.fft.rfft(padded_arr)*np.exp(-(kvals*sigma_pix)**2/2.)
-
-    error = np.fft.irfft(smerror_k, n=arrsize)[pad_size:-pad_size]
+    error = fft_gaussian_smooth(error, sigma_pix, pad_size)
 
     # Restore values of bad pixels
     error[w2] = err_org
