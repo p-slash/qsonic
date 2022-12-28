@@ -377,7 +377,7 @@ class Spectrum(object):
             ii1 = np.searchsorted(wave_arm, (1+self.z_qso)*Spectrum.WAVE_LYA_A)
             weight       = np.sqrt(self.ivar[arm][ii1:])
             self.rsnr   += np.dot(self.flux[arm][ii1:], weight)
-            rsnr_weight += np.sum(weight)
+            rsnr_weight += np.sum(weight>0)
 
             # Slice to forest limits
             ii1, ii2 = np.searchsorted(wave_arm, [l1, l2])
