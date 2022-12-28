@@ -46,7 +46,7 @@ class PiccaContinuumFitter(object):
         self.meanflux_interp = Fast1DInterpolator(waves_0, dwave,
             meanflux)
         self.varlss_interp = Fast1DInterpolator(waves_0, dwave,
-            varlss, np.zeros(nsize))
+            varlss, ep=np.zeros(nsize))
 
     def __init__(self, w1rf, w2rf, dwrf, w1obs, w2obs, nwbins=20, fiducial_fits=None):
         self.nbins = int((w2rf-w1rf)/dwrf)+1
@@ -66,7 +66,7 @@ class PiccaContinuumFitter(object):
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
             self.varlss_fitter = VarLSSFitter(w1obs, w2obs, nwbins)
             self.varlss_interp = Fast1DInterpolator(w1obs, self.varlss_fitter.dwobs,
-                0.1*np.ones(nwbins), np.zeros(nwbins))
+                0.1*np.ones(nwbins), ep=np.zeros(nwbins))
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
         cost = 0
