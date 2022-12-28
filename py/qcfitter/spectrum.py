@@ -229,19 +229,20 @@ def save_deltas(spectra_list, outdir, varlss_interp, out_nside=None, mpi_rank=No
 def save_contchi2_catalog(spectra_list, outdir, comm, mpi_rank, corder=2):
     dtype = np.dtype([
         ('TARGETID', 'int64'), ('Z', 'f8'), ('MEANSNR', 'f8'), ('RSNR', 'f8'),
-        ('CONT_chi2', 'f8'), ('CONT_dof', 'i8'),
+        ('CONT_valid', bool), ('CONT_chi2', 'f8'), ('CONT_dof', 'i8'),
         ('CONT_x', 'f8', corder), ('CONT_xcov', 'f8', corder**2)
     ])
     local_catalog = np.empty(len(spectra_list), dtype=dtype)
 
     for i, spec in enumerate(spectra_list):
-        local_catalog['TARGETID'] = spec.targetid
-        local_catalog['Z'] = spec.z_qso
-        local_catalog['MEANSNR'] = spec.mean_snr()
-        local_catalog['RSNR'] = spec.rsnr
-        for lbl in ['x', 'chi2', 'dof']:
-            local_catalog[f'CONT_{lbl}'] = self.cont_params[lbl]
-        local_catalog['CONT_xcov'] = self.cont_params['xcov'].ravel()
+        row = local_catalog[i]
+        row['TARGETID'] = spec.targetid
+        row['Z'] = spec.z_qso
+        row['MEANSNR'] = spec.mean_snr()
+        row['RSNR'] = spec.rsnr
+        for lbl in ['valid', 'x', 'chi2', 'dof']:
+            row[f'CONT_{lbl}'] = spec.cont_params[lbl]
+        row['CONT_xcov'] = spec.cont_params['xcov'].ravel()
 
     all_catalogs = comm.gather(local_catalog)
     if mpi_rank == 0:
@@ -347,7 +348,7 @@ class Spectrum(object):
         self.cont_params['valid'] = False
         self.cont_params['x'] = np.array([1., 0.])
         self.cont_params['xcov'] = np.array([[1., 0.], [0., 1.]])
-        self.cont_params['chi2'] = 0.
+        self.cont_params['chi2'] = -1.
         self.cont_params['dof']  = 0
         self.cont_params['cont'] = {}
 
