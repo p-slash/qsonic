@@ -7,11 +7,11 @@
 + You can pass fiducial var_lss (column `VAR`) and mean flux (column `MEANFLUX`) for observed wavelength `LAMBDA` in `STATS` extention of a FITS file. Wavelength should be linearly and equally spaced. This is the same format as rawio output from picca.
 + If no fiducial is passed, we fit only for var_lss (no eta fitting currently).
 + Internal weights for continuum fitting and coadding are based on smoothed `IVAR`, but output `WEIGHT` is *not* smoothed.
-+ `MEANSNR` in header file is average of square root of positive ivar values (`np.mean(np.sqrt(ivar[ivar>0]))`), i.e. not flux/sigma.
 + Chi2 information as well as best fits are saved in continuum_chi2_catalog.fits. Chi2 is calculated using smooth ivar and var_lss, and does not subtract sum of ln(weights).
 
 ## Similarities
 + Delta files are the same. `CONT` column is mean flux times continuum even when fiducial mean flux is passed.
++ `MEANSNR` in header file and chi2 catalog is average of flux times square root of positive ivar values. Header values are per arm, but catalog values are the average over all arms.
 
 ## Programs
 Scripts under `bin` folder are executable. Pass `--help` for arguments. The most important ones are these four scripts:
