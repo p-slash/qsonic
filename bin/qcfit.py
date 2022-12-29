@@ -162,23 +162,27 @@ def read_masks(comm, local_queue, args, mpi_rank):
 
 
 def apply_masks(maskers, spectra_list, mpi_rank):
-    if maskers:
-        start_time = time.time()
-        logging_mpi("Applying masks.", mpi_rank)
-        for spec in spectra_list:
-            for masker in maskers:
-                masker.apply(spec)
-            spec.drop_short_arms()
-        etime = (time.time() - start_time) / 60   # min
-        logging_mpi(f"Masks are applied in {etime:.1f} mins.", mpi_rank)
+    if not maskers:
+        return
+
+    start_time = time.time()
+    logging_mpi("Applying masks.", mpi_rank)
+    for spec in spectra_list:
+        for masker in maskers:
+            masker.apply(spec)
+        spec.drop_short_arms()
+    etime = (time.time() - start_time) / 60   # min
+    logging_mpi(f"Masks are applied in {etime:.1f} mins.", mpi_rank)
 
 
 def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank):
-    if skip_ratio > 0:
-        logging_mpi("Removing short spectra.", mpi_rank)
-        dforest_wave = lya2 - lya1
-        spectra_list = [spec for spec in spectra_list
-                        if spec.is_long(dforest_wave, skip_ratio)]
+    if skip_ratio <= 0:
+        return spectra_list
+
+    logging_mpi("Removing short spectra.", mpi_rank)
+    dforest_wave = lya2 - lya1
+    spectra_list = [spec for spec in spectra_list
+                    if spec.is_long(dforest_wave, skip_ratio)]
 
     return spectra_list
 
