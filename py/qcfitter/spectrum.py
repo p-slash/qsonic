@@ -590,7 +590,7 @@ class Spectrum(object):
             armpix = np.sum(self.forestivar[arm] > 0)
             if armpix == 0:
                 continue
-
+            
             hdr_dict['MEANSNR'] = np.dot(
                 np.sqrt(self.forestivar[arm]),
                 self.forestflux[arm]
