@@ -1,3 +1,4 @@
+import argparse
 import logging
 
 import numpy as np
@@ -150,6 +151,81 @@ def generate_spectra_list_from_data(cat_by_survey, data):
         )
 
     return spectra_list
+
+
+def float_range(f1, f2):
+    # Define the function with default arguments
+    def float_range_checker(arg):
+        """New Type function for argparse - a float within predefined range.
+        """
+        try:
+            f = float(arg)
+        except ValueError:
+            raise argparse.ArgumentTypeError("must be a floating point number")
+        if f < f1 or f > f2:
+            raise argparse.ArgumentTypeError(f"must be in range [{f1}--{f2}]")
+        return f
+
+    # Return function handle to checking function
+    return float_range_checker
+
+
+def add_io_parser(parser):
+    iogroup = parser.add_argument_group(
+        'Input/output parameters and selections')
+    iogroup.add_argument(
+        "--input-dir", required=True,
+        help="Input directory to healpix")
+    iogroup.add_argument(
+        "--catalog", required=True,
+        help="Catalog filename")
+    iogroup.add_argument(
+        "--outdir", '-o',
+        help="Output directory to save deltas.")
+    iogroup.add_argument(
+        "--mock-analysis", action="store_true",
+        help="Input folder is mock. Uses nside=16")
+    iogroup.add_argument(
+        "--keep-surveys", nargs='+', default=['sv3', 'main'],
+        help="Surveys to keep.")
+    iogroup.add_argument(
+        "--coadd-arms", action="store_true",
+        help="Coadds arms when saving.")
+
+    iogroup.add_argument(
+        "--skip-resomat", action="store_true",
+        help="Skip reading resolution matrix for 3D.")
+    iogroup.add_argument(
+        "--arms", default=['B', 'R'], choices=['B', 'R', 'Z'], nargs='+',
+        help="Arms to read.")
+    iogroup.add_argument(
+        "--min-rsnr", type=float, default=0.,
+        help="Minium SNR <F/sigma> above Lya.")
+    iogroup.add_argument(
+        "--skip", type=float_range(0, 1), default=0.,
+        help="Skip short spectra lower than given ratio.")
+    iogroup.add_argument(
+        "--save-by-hpx", action="store_true",
+        help="Save by healpix. If not, saves by MPI rank.")
+    iogroup.add_argument(
+        "--keep-nonforest-pixels", action="store_true",
+        help="Keeps non forest wavelengths. Memory intensive!")
+
+
+def add_wave_region_parser(parser):
+    wave_group = parser.add_argument_group('Wavelength analysis region')
+    wave_group.add_argument(
+        "--wave1", type=float, default=3600.,
+        help="First observed wavelength edge.")
+    wave_group.add_argument(
+        "--wave2", type=float, default=6000.,
+        help="Last observed wavelength edge.")
+    wave_group.add_argument(
+        "--forest-w1", type=float, default=1040.,
+        help="First forest wavelength edge.")
+    wave_group.add_argument(
+        "--forest-w2", type=float, default=1200.,
+        help="Last forest wavelength edge.")
 
 
 def read_spectra(
