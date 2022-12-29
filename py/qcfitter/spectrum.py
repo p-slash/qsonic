@@ -574,7 +574,7 @@ class Spectrum(object):
 
             snr += np.dot(np.sqrt(ivar_arm), self.forestflux[arm])
             npix += armpix
-        return snr / armpix
+        return snr / npix
 
     def write(self, fts_file, varlss_interp):
         hdr_dict = {
@@ -593,7 +593,7 @@ class Spectrum(object):
             armpix = np.sum(self.forestivar[arm] > 0)
             if armpix == 0:
                 continue
-            
+
             hdr_dict['MEANSNR'] = np.dot(
                 np.sqrt(self.forestivar[arm]),
                 self.forestflux[arm]
