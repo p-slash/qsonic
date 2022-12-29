@@ -65,10 +65,10 @@ def _get_local_queue(catalog, mpi_rank, mpi_size):
     split_catalog = np.split(catalog, s[1:])
     logging_mpi(
         f"There are {unique_pix.size} healpixels."
-        " Don't use more MPI processes.", 0)
+        " Don't use more MPI processes.", mpi_rank)
 
     # Roughly equal number of spectra
-    logging_mpi("Load balancing.", 0)
+    logging_mpi("Load balancing.", mpi_rank)
     # Returns a list of catalog (ndarray)
     return balance_load(split_catalog, mpi_size, mpi_rank)
 
