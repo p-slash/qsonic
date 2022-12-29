@@ -13,11 +13,11 @@ _accepted_columns = [
 ]
 
 
-def read_qso_catalog(
+def read_local_qso_catalog(
         filename, comm, mpi_rank, mpi_size,
         n_side=64, keep_surveys=None, zmin=2.1, zmax=6.0):
-    """Returns quasar catalog object. It is sorted in the following order:
-    HPXPIXEL, SURVEY (if applicable), TARGETID
+    """Returns quasar catalog object for mpi_rank. It is sorted in the
+    following order: HPXPIXEL, SURVEY (if applicable), TARGETID
 
     Arguments
     ----------
@@ -49,22 +49,16 @@ def read_qso_catalog(
     if mpi_rank == 0:
         catalog = _read_catalog_on_master(
             filename, n_side, keep_surveys, zmin, zmax)
-        local_queues = _get_local_queues(catalog, mpi_size)
-    else:
-        local_queues = None
 
-    local_queue = comm.scatter(local_queues)
-    if local_queue is None:
+    catalog = comm.bcast(catalog, root=0)
+    if catalog is None:
         logging_mpi("Error while reading catalog.", mpi_rank, "error")
         exit(0)
 
-    return local_queue
+    return _get_local_queue(catalog, mpi_rank, mpi_size)
 
 
-def _get_local_queues(catalog, mpi_size):
-    if catalog is None:
-        return [None] * mpi_size
-
+def _get_local_queue(catalog, mpi_rank, mpi_size):
     # We decide forest filename list
     # Group into unique pixels
     unique_pix, s = np.unique(catalog['HPXPIXEL'], return_index=True)
@@ -75,10 +69,8 @@ def _get_local_queues(catalog, mpi_size):
 
     # Roughly equal number of spectra
     logging_mpi("Load balancing.", 0)
-    # Returns a list of list of catalog (ndarray)
-    local_queues = balance_load(split_catalog, mpi_size)
-
-    return local_queues
+    # Returns a list of catalog (ndarray)
+    return balance_load(split_catalog, mpi_size, mpi_rank)
 
 
 def _read(filename):

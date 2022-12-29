@@ -198,7 +198,7 @@ if __name__ == '__main__':
 
     # read catalog
     n_side = 16 if args.mock_analysis else 64
-    local_queue = qcfitter.catalog.read_qso_catalog(
+    local_queue = qcfitter.catalog.read_local_qso_catalog(
         args.catalog, comm, mpi_rank, mpi_size, n_side, args.keep_surveys)
 
     # Read masks before data
