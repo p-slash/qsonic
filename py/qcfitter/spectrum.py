@@ -263,9 +263,10 @@ def save_deltas(
 
 def save_contchi2_catalog(spectra_list, outdir, comm, mpi_rank, corder=2):
     dtype = np.dtype([
-        ('TARGETID', 'int64'), ('Z', 'f8'), ('MEANSNR', 'f8'), ('RSNR', 'f8'),
-        ('CONT_valid', bool), ('CONT_chi2', 'f8'), ('CONT_dof', 'i8'),
-        ('CONT_x', 'f8', corder), ('CONT_xcov', 'f8', corder**2)
+        ('TARGETID', 'int64'), ('Z', 'f4'), ('HPXPIXEL', 'i8'),
+        ('MPI_RANK', 'i4'), ('MEANSNR', 'f4'), ('RSNR', 'f4'),
+        ('CONT_valid', bool), ('CONT_chi2', 'f4'), ('CONT_dof', 'i4'),
+        ('CONT_x', 'f4', corder), ('CONT_xcov', 'f4', corder**2)
     ])
     local_catalog = np.empty(len(spectra_list), dtype=dtype)
 
@@ -273,6 +274,8 @@ def save_contchi2_catalog(spectra_list, outdir, comm, mpi_rank, corder=2):
         row = local_catalog[i]
         row['TARGETID'] = spec.targetid
         row['Z'] = spec.z_qso
+        row['HPXPIXEL'] = spec.catrow['HPXPIXEL']
+        row['MPI_RANK'] = mpi_rank
         row['MEANSNR'] = spec.mean_snr()
         row['RSNR'] = spec.rsnr
         for lbl in ['valid', 'x', 'chi2', 'dof']:
