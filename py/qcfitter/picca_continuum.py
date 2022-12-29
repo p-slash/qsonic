@@ -226,6 +226,9 @@ class PiccaContinuumFitter(object):
         return has_converged
 
     def update_var_lss(self, spectra_list, noupdate):
+        if self.varlss_fitter is None:
+            return
+
         self.varlss_fitter.reset()
 
         for spec in valid_spectra(spectra_list):
@@ -271,8 +274,8 @@ class PiccaContinuumFitter(object):
             # Broadcast and recalculate global functions
             has_converged = self.update_mean_cont(
                 spectra_list, it == niterations - 1)
-            if self.varlss_fitter is not None:
-                self.update_var_lss(spectra_list, it == niterations - 1)
+
+            self.update_var_lss(spectra_list, it == niterations - 1)
 
             if has_converged:
                 logging_mpi("Iteration has converged.", self.mpi_rank)
