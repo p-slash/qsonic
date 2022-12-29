@@ -13,63 +13,88 @@ import qcfitter.masks
 from qcfitter.mpi_utils import balance_load, logging_mpi
 from qcfitter.picca_continuum import PiccaContinuumFitter
 
+
 def parse():
     # Arguments passed to run the script
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--input-dir", help="Input directory to healpix", required=True)
-    parser.add_argument("--catalog", help="Catalog filename", required=True)
-    parser.add_argument("--keep-surveys", help="Surveys to keep.", nargs='+',
-        default=['sv3', 'main'])
-    parser.add_argument("--min-rsnr", help="Minium SNR <F/sigma> above Lya.",
-        default=0., type=float)
-    parser.add_argument("--outdir", '-o', help="Output directory to save deltas.")
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        "--input-dir", required=True,
+        help="Input directory to healpix")
+    parser.add_argument(
+        "--catalog", required=True,
+        help="Catalog filename")
+    parser.add_argument(
+        "--keep-surveys", nargs='+', default=['sv3', 'main'],
+        help="Surveys to keep.")
+    parser.add_argument(
+        "--min-rsnr", type=float, default=0.,
+        help="Minium SNR <F/sigma> above Lya.")
+    parser.add_argument(
+        "--outdir", '-o',
+        help="Output directory to save deltas.")
 
-    parser.add_argument("--mock-analysis", help="Input folder is mock. Uses nside=16",
-        action="store_true")
-    parser.add_argument("--skip-resomat", help="Skip reading resolution matrix for 3D.",
-        action="store_true")
-    parser.add_argument("--arms", help="Arms to read.", default=['B', 'R'], nargs='+')
+    parser.add_argument(
+        "--mock-analysis", action="store_true",
+        help="Input folder is mock. Uses nside=16")
+    parser.add_argument(
+        "--skip-resomat", action="store_true",
+        help="Skip reading resolution matrix for 3D.")
+    parser.add_argument(
+        "--arms", default=['B', 'R'], nargs='+',
+        help="Arms to read.")
 
-    parser.add_argument("--wave1", help="First observed wavelength edge.", type=float,
-        default=3600.)
-    parser.add_argument("--wave2", help="Last observed wavelength edge.", type=float,
-        default=6000.)
-    parser.add_argument("--forest-w1", help="First forest wavelength edge.", type=float,
-        default=1040.)
-    parser.add_argument("--forest-w2", help="Last forest wavelength edge.", type=float,
-        default=1200.)
-    parser.add_argument("--rfdwave", help="Rest-frame wave steps. Can be adjusted to comply with forest limits",
-        type=float, default=0.8)
-    parser.add_argument("--fiducials", help="Fiducial mean flux and var_lss fits file.")
+    parser.add_argument(
+        "--wave1", type=float, default=3600.,
+        help="First observed wavelength edge.")
+    parser.add_argument(
+        "--wave2", type=float, default=6000.,
+        help="Last observed wavelength edge.")
+    parser.add_argument(
+        "--forest-w1", type=float, default=1040.,
+        help="First forest wavelength edge.")
+    parser.add_argument(
+        "--forest-w2", type=float, default=1200.,
+        help="Last forest wavelength edge.")
+    parser.add_argument(
+        "--rfdwave", type=float, default=0.8,
+        help="Rest-frame wave steps. Complies with forest limits")
+    parser.add_argument(
+        "--fiducials", help="Fiducial mean flux and var_lss fits file.")
 
-    parser.add_argument("--sky-mask", help="Sky mask file.")
-    parser.add_argument("--bal-mask", help="Mask BALs (assumes it is in catalog).",
-        action="store_true")
-    parser.add_argument("--dla-mask", help="DLA catalog to mask.")
+    parser.add_argument(
+        "--sky-mask",
+        help="Sky mask file.")
+    parser.add_argument(
+        "--bal-mask", action="store_true",
+        help="Mask BALs (assumes it is in catalog).")
+    parser.add_argument(
+        "--dla-mask",
+        help="DLA catalog to mask.")
 
-    parser.add_argument("--skip", help="Skip short spectra lower than given ratio.",
-        type=float, default=0.)
-    parser.add_argument("--no-iterations", help="Number of iterations to perform for continuum fitting.",
-        type=int, default=5)
-    parser.add_argument("--keep-nonforest-pixels", help="Keeps non forest wavelengths. Memory intensive!",
-        action="store_true")
+    parser.add_argument(
+        "--skip", type=float, default=0.,
+        help="Skip short spectra lower than given ratio.")
+    parser.add_argument(
+        "--no-iterations", type=int, default=5,
+        help="Number of iterations for continuum fitting.")
+    parser.add_argument(
+        "--keep-nonforest-pixels", action="store_true",
+        help="Keeps non forest wavelengths. Memory intensive!")
 
-    parser.add_argument("--coadd-arms", help="Coadds arms when saving.",
-        action="store_true")
-    parser.add_argument("--save-by-hpx", help="Save by healpix. If not, saves by MPI rank.",
-        action="store_true")
+    parser.add_argument(
+        "--coadd-arms", action="store_true",
+        help="Coadds arms when saving.")
+    parser.add_argument(
+        "--save-by-hpx", action="store_true",
+        help="Save by healpix. If not, saves by MPI rank.")
 
     args = parser.parse_args()
 
     return args
 
-if __name__ == '__main__':
-    comm = MPI.COMM_WORLD
-    mpi_rank = comm.Get_rank()
-    mpi_size = comm.Get_size()
 
-    logging.basicConfig(level=logging.DEBUG)
-
+def mpi_parse(comm, mpi_rank):
     if mpi_rank == 0:
         try:
             args = parse()
@@ -91,22 +116,10 @@ if __name__ == '__main__':
     if args == -1:
         exit(0)
 
-    # read catalog
-    n_side = 16 if args.mock_analysis else 64
-    qso_catalog = qcfitter.catalog.read_qso_catalog(args.catalog, comm, n_side, args.keep_surveys)
+    return args
 
-    # We decide forest filename list
-    # Group into unique pixels
-    unique_pix, s = np.unique(qso_catalog['HPXPIXEL'], return_index=True)
-    split_catalog = np.split(qso_catalog, s[1:])
-    logging_mpi(f"There are {unique_pix.size} healpixels. Don't use more MPI processes.", mpi_rank)
 
-    # Roughly equal number of spectra
-    logging_mpi("Load balancing.", mpi_rank)
-    # Returns a list of catalog (ndarray)
-    local_queue = balance_load(split_catalog, mpi_size, mpi_rank)
-
-    # Read masks before data
+def read_masks(comm, local_queue, args, mpi_rank):
     maskers = []
     if args.sky_mask:
         logging_mpi("Reading sky mask.", mpi_rank)
@@ -122,7 +135,7 @@ if __name__ == '__main__':
     if args.bal_mask:
         logging_mpi("Checking BAL mask.", mpi_rank)
         try:
-            qcfitter.masks.BALMask.check_catalog(qso_catalog)
+            qcfitter.masks.BALMask.check_catalog(local_queue[0])
         except Exception as e:
             logging_mpi(f"{e}", mpi_rank, "error")
             comm.Abort()
@@ -132,16 +145,60 @@ if __name__ == '__main__':
     # DLA mask
     if args.dla_mask:
         logging_mpi("Reading DLA mask.", mpi_rank)
-        local_targetids = np.concatenate([cat['TARGETID'] for cat in local_queue])
+        local_targetids = np.concatenate(
+            [cat['TARGETID'] for cat in local_queue])
         # Read catalog
         try:
-            dlamasker = qcfitter.masks.DLAMask(args.dla_mask, local_targetids,
-                comm, mpi_rank, dla_mask_limit=0.8)
+            dlamasker = qcfitter.masks.DLAMask(
+                args.dla_mask, local_targetids, comm, mpi_rank,
+                dla_mask_limit=0.8)
         except Exception as e:
             logging_mpi(f"{e}", mpi_rank, "error")
             comm.Abort()
 
         maskers.append(dlamasker)
+
+    return maskers
+
+
+def apply_masks(maskers, spectra_list, mpi_rank):
+    if maskers:
+        start_time = time.time()
+        logging_mpi("Applying masks.", mpi_rank)
+        for spec in spectra_list:
+            for masker in maskers:
+                masker.apply(spec)
+            spec.drop_short_arms()
+        etime = (time.time() - start_time) / 60   # min
+        logging_mpi(f"Masks are applied in {etime:.1f} mins.", mpi_rank)
+
+
+def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank):
+    if skip_ratio > 0:
+        logging_mpi("Removing short spectra.", mpi_rank)
+        dforest_wave = lya2 - lya1
+        spectra_list = [spec for spec in spectra_list
+                        if spec.is_long(dforest_wave, skip_ratio)]
+
+    return spectra_list
+
+
+if __name__ == '__main__':
+    comm = MPI.COMM_WORLD
+    mpi_rank = comm.Get_rank()
+    mpi_size = comm.Get_size()
+
+    logging.basicConfig(level=logging.DEBUG)
+
+    args = mpi_parse(comm, mpi_rank)
+
+    # read catalog
+    n_side = 16 if args.mock_analysis else 64
+    local_queue = qcfitter.catalog.read_qso_catalog(
+        args.catalog, comm, mpi_rank, mpi_size, n_side, args.keep_surveys)
+
+    # Read masks before data
+    maskers = read_masks(comm, local_queue, args, mpi_rank)
 
     start_time = time.time()
     logging_mpi("Reading spectra.", mpi_rank)
@@ -161,28 +218,19 @@ if __name__ == '__main__':
             if not args.keep_nonforest_pixels:
                 spec.remove_nonforest_pixels()
 
-        spectra_list.extend([spec for spec in local_specs if spec.rsnr>args.min_rsnr])
+        spectra_list.extend(
+            [spec for spec in local_specs if spec.rsnr > args.min_rsnr])
 
     nspec_all = comm.reduce(len(spectra_list), op=MPI.SUM, root=0)
-    etime = (time.time()-start_time)/60 # min
-    logging_mpi(f"All {nspec_all} spectra are read in {etime:.1f} mins.", mpi_rank)
+    etime = (time.time() - start_time) / 60  # min
+    logging_mpi(
+        f"All {nspec_all} spectra are read in {etime:.1f} mins.", mpi_rank)
 
-    if maskers:
-        start_time = time.time()
-        logging_mpi("Applying masks.", mpi_rank)
-        for spec in spectra_list:
-            for masker in maskers:
-                masker.apply(spec)
-            spec.drop_short_arms()
-        etime = (time.time()-start_time)/60 # min
-        logging_mpi(f"Masks are applied in {etime:.1f} mins.", mpi_rank)
+    apply_masks(maskers, spectra_list, mpi_rank)
 
     # remove from sample if no pixels is small
-    if args.skip > 0:
-        logging_mpi("Removing short spectra.", mpi_rank)
-        dforest_wave = args.forest_w2 - args.forest_w1
-        _npixels = lambda spec: (1+spec.z_qso)*dforest_wave/spec.dwave
-        spectra_list = [spec for spec in spectra_list if spec.get_real_size() > args.skip*_npixels(spec)]
+    spectra_list = remove_short_spectra(
+        spectra_list, args.forest_w1, args.forest_w2, args.skip, mpi_rank)
 
     # Create smoothed ivar as intermediate variable
     for spec in spectra_list:
@@ -210,10 +258,15 @@ if __name__ == '__main__':
     # Broadcast and recalculate global functions
     # Iterate
     qcfit.iterate(spectra_list, args.no_iterations, args.outdir)
-    # Keep only valid spectra
-    spectra_list = [spec for spec in spectra_list if spec.cont_params['valid']]
     logging_mpi("All continua are fit.", mpi_rank)
 
+    if args.outdir:
+        logging_mpi("Saving continuum chi2 catalog.", mpi_rank)
+        qcfitter.spectrum.save_contchi2_catalog(spectra_list, args.outdir,
+                                                comm, mpi_rank)
+
+    # Keep only valid spectra
+    spectra_list = list(qcfitter.spectrum.valid_spectra(spectra_list))
     if args.coadd_arms:
         logging_mpi("Coadding arms.", mpi_rank)
         for spec in spectra_list:
@@ -223,24 +276,21 @@ if __name__ == '__main__':
     for spec in spectra_list:
         spec.drop_short_arms(args.forest_w1, args.forest_w2, args.skip)
 
-    etime = (time.time()-start_time)/60 # min
-    logging_mpi(f"Continuum fitting and tweaking took {etime:.1f} mins.", mpi_rank)
+    etime = (time.time() - start_time) / 60  # min
+    logging_mpi(f"Continuum fitting and tweaking took {etime:.1f} mins.",
+                mpi_rank)
 
     # Save deltas
     if args.outdir:
         logging_mpi("Saving deltas.", mpi_rank)
         os_makedirs(args.outdir, exist_ok=True)
         if args.save_by_hpx:
-            out_nside = nside
-            out_by_mpi= None
+            out_nside = n_side
+            out_by_mpi = None
         else:
             out_nside = None
-            out_by_mpi= mpi_rank
+            out_by_mpi = mpi_rank
 
-        qcfitter.spectrum.save_deltas(spectra_list, args.outdir, qcfit.varlss_interp,
+        qcfitter.spectrum.save_deltas(
+            spectra_list, args.outdir, qcfit.varlss_interp,
             out_nside=out_nside, mpi_rank=out_by_mpi)
-
-
-
-
-
