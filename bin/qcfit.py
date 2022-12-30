@@ -155,11 +155,7 @@ if __name__ == '__main__':
     logging_mpi("Initializing continuum fitter.", mpi_rank)
     start_time = time.time()
     try:
-        qcfit = PiccaContinuumFitter(
-            args.forest_w1, args.forest_w2, args.rfdwave,
-            args.wave1, args.wave2,
-            fiducial_fits=args.fiducials
-        )
+        qcfit = PiccaContinuumFitter(args)
     except Exception as e:
         logging_mpi(f"{e}", 0, "error")
         comm.Abort()
@@ -170,13 +166,7 @@ if __name__ == '__main__':
     # Stack all spectra in each process
     # Broadcast and recalculate global functions
     # Iterate
-    qcfit.iterate(spectra_list, args.no_iterations, args.outdir)
-    logging_mpi("All continua are fit.", mpi_rank)
-
-    if args.outdir:
-        logging_mpi("Saving continuum chi2 catalog.", mpi_rank)
-        qcfitter.spectrum.save_contchi2_catalog(spectra_list, args.outdir,
-                                                comm, mpi_rank)
+    qcfit.iterate(spectra_list)
 
     # Keep only valid spectra
     spectra_list = list(qcfitter.spectrum.valid_spectra(spectra_list))

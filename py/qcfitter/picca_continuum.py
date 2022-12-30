@@ -7,7 +7,7 @@ from mpi4py import MPI
 
 from qcfitter.spectrum import valid_spectra
 from qcfitter.mpi_utils import logging_mpi, MPISaver
-from qcfitter.mathtools import Fast1DInterpolator
+from qcfitter.mathtools import Fast1DInterpolator, mypoly1d
 
 
 class PiccaContinuumFitter(object):
@@ -27,6 +27,9 @@ class PiccaContinuumFitter(object):
             help="Number of iterations for continuum fitting.")
         cont_group.add_argument(
             "--fiducials", help="Fiducial mean flux and var_lss fits file.")
+        cont_group.add_argument(
+            "--cont-order", type=int, default=1,
+            help="Order of continuum fitting polynomial.")
 
     def _set_fiducials(self, fiducial_fits):
         if self.mpi_rank == 0:
@@ -61,28 +64,32 @@ class PiccaContinuumFitter(object):
         self.varlss_interp = Fast1DInterpolator(
             waves_0, dwave, varlss, ep=np.zeros(nsize))
 
-    def __init__(self, w1rf, w2rf, dwrf, w1obs, w2obs,
-                 nwbins=20, fiducial_fits=None):
-        self.nbins = int((w2rf - w1rf) / dwrf) + 1
-        self.rfwave, self.dwrf = np.linspace(w1rf, w2rf, self.nbins,
-                                             retstep=True)
+    def __init__(self, args, nwbins=20):
+        self.nbins = int((args.forest_w2 - args.forest_w1) / args.rfdwave) + 1
+        self.rfwave, self.dwrf = np.linspace(
+            args.forest_w1, args.forest_w2, self.nbins, retstep=True)
         self._denom = np.log(self.rfwave[-1] / self.rfwave[0])
 
         self.meancont_interp = Fast1DInterpolator(
-            w1rf, self.dwrf, np.ones(self.nbins), ep=np.zeros(self.nbins))
+            args.forest_w1, self.dwrf, np.ones(self.nbins),
+            ep=np.zeros(self.nbins))
 
         self.comm = MPI.COMM_WORLD
         self.mpi_rank = self.comm.Get_rank()
 
-        if fiducial_fits:
-            self._set_fiducials(fiducial_fits)
+        if args.fiducials:
+            self._set_fiducials(args.fiducials)
             self.varlss_fitter = None
         else:
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
-            self.varlss_fitter = VarLSSFitter(w1obs, w2obs, nwbins)
+            self.varlss_fitter = VarLSSFitter(args.wave1, args.wave2, nwbins)
             self.varlss_interp = Fast1DInterpolator(
-                w1obs, self.varlss_fitter.dwobs,
+                args.wave1, self.varlss_fitter.dwobs,
                 0.1 * np.ones(nwbins), ep=np.zeros(nwbins))
+
+        self.niterations = args.no_iterations
+        self.cont_order = args.cont_order
+        self.outdir = args.outdir
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
         cost = 0
@@ -107,7 +114,7 @@ class PiccaContinuumFitter(object):
     def get_continuum_model(self, x, wave_rf_arm):
         slope = np.log(wave_rf_arm / self.rfwave[0]) / self._denom
 
-        cont = self.meancont_interp(wave_rf_arm) * (x[0] + x[1] * slope)
+        cont = self.meancont_interp(wave_rf_arm) * mypoly1d(x, slope)
         # Multiply with resolution
         # Edges are difficult though
 
@@ -264,18 +271,21 @@ class PiccaContinuumFitter(object):
         for w, v, e in zip(self.varlss_fitter.waveobs[sl], y[sl], ep[sl]):
             logging_mpi(f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}", self.mpi_rank)
 
-    def iterate(self, spectra_list, niterations, outdir=None):
+    def iterate(self, spectra_list):
         has_converged = False
 
         for spec in spectra_list:
             spec.cont_params['method'] = 'picca'
+            spec.cont_params['x'] = np.append(
+                spec.cont_params['x'][0], np.zeros(self.cont_order))
+            spec.cont_params['xcov'] = np.eye(self.cont_order + 1)
             spec.cont_params['dof'] = spec.get_real_size()
 
-        fname = f"{outdir}/attributes.fits" if outdir else ""
-        fattr = MPISaver(fname, self.mpi_rank, outdir is None)
+        fname = f"{self.outdir}/attributes.fits" if self.outdir else ""
+        fattr = MPISaver(fname, self.mpi_rank)
 
-        for it in range(niterations):
-            logging_mpi(f"Fitting iteration {it+1}/{niterations}",
+        for it in range(self.niterations):
+            logging_mpi(f"Fitting iteration {it+1}/{self.niterations}",
                         self.mpi_rank)
 
             self.save(fattr, it + 1)
@@ -285,9 +295,9 @@ class PiccaContinuumFitter(object):
             # Stack all spectra in each process
             # Broadcast and recalculate global functions
             has_converged = self.update_mean_cont(
-                spectra_list, it == niterations - 1)
+                spectra_list, it == self.niterations - 1)
 
-            self.update_var_lss(spectra_list, it == niterations - 1)
+            self.update_var_lss(spectra_list, it == self.niterations - 1)
 
             if has_converged:
                 logging_mpi("Iteration has converged.", self.mpi_rank)
@@ -298,6 +308,9 @@ class PiccaContinuumFitter(object):
                         "warning")
 
         fattr.close()
+        logging_mpi("All continua are fit.", self.mpi_rank)
+
+        self.save_contchi2_catalog(spectra_list)
 
     def save(self, fattr, it):
         fattr.write(
@@ -308,6 +321,42 @@ class PiccaContinuumFitter(object):
             [self.varlss_fitter.waveobs, self.varlss_interp.fp,
              self.varlss_interp.ep],
             names=['lambda', 'var_lss', 'e_var_lss'], extname=f'VAR_FUNC-{it}')
+
+    def save_contchi2_catalog(self, spectra_list):
+        if not self.outdir:
+            return
+
+        logging_mpi("Saving continuum chi2 catalog.", self.mpi_rank)
+
+        dtype = np.dtype([
+            ('TARGETID', 'int64'), ('Z', 'f4'), ('HPXPIXEL', 'i8'),
+            ('MPI_RANK', 'i4'), ('MEANSNR', 'f4'), ('RSNR', 'f4'),
+            ('CONT_valid', bool), ('CONT_chi2', 'f4'), ('CONT_dof', 'i4'),
+            ('CONT_x', 'f4', self.cont_order),
+            ('CONT_xcov', 'f4', self.cont_order**2)
+        ])
+        local_catalog = np.empty(len(spectra_list), dtype=dtype)
+
+        for i, spec in enumerate(spectra_list):
+            row = local_catalog[i]
+            row['TARGETID'] = spec.targetid
+            row['Z'] = spec.z_qso
+            row['HPXPIXEL'] = spec.catrow['HPXPIXEL']
+            row['MPI_RANK'] = self.mpi_rank
+            row['MEANSNR'] = spec.mean_snr()
+            row['RSNR'] = spec.rsnr
+            for lbl in ['valid', 'x', 'chi2', 'dof']:
+                row[f'CONT_{lbl}'] = spec.cont_params[lbl]
+            row['CONT_xcov'] = spec.cont_params['xcov'].ravel()
+
+        all_catalogs = self.comm.gather(local_catalog)
+        if self.mpi_rank == 0:
+            all_catalog = np.concatenate(all_catalogs)
+            fts = fitsio.FITS(
+                f"{self.outdir}/continuum_chi2_catalog.fits", 'rw',
+                clobber=True)
+            fts.write(all_catalog, extname='CHI2_CAT')
+            fts.close()
 
 
 class VarLSSFitter(object):
