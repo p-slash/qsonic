@@ -68,7 +68,7 @@ class MPISaver(object):
     """
 
     def __init__(self, fname, mpi_rank):
-        if mpi_rank == 0 and not fname:
+        if mpi_rank == 0 and fname:
             self.fts = fitsio.FITS(fname, 'rw', clobber=True)
         else:
             self.fts = None
