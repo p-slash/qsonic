@@ -90,6 +90,7 @@ class PiccaContinuumFitter(object):
         self.niterations = args.no_iterations
         self.cont_order = args.cont_order
         self.outdir = args.outdir
+        self._bounds = [(0, None)] + [(None, None)] * args.cont_order
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
         cost = 0
@@ -131,7 +132,7 @@ class PiccaContinuumFitter(object):
                   spec.forestivar_sm,
                   spec.z_qso),
             method='L-BFGS-B',
-            bounds=[(0, None), (None, None)],
+            bounds=self._bounds,
             jac=None
         )
 
@@ -327,13 +328,14 @@ class PiccaContinuumFitter(object):
             return
 
         logging_mpi("Saving continuum chi2 catalog.", self.mpi_rank)
+        corder = self.cont_order + 1
 
         dtype = np.dtype([
             ('TARGETID', 'int64'), ('Z', 'f4'), ('HPXPIXEL', 'i8'),
             ('MPI_RANK', 'i4'), ('MEANSNR', 'f4'), ('RSNR', 'f4'),
             ('CONT_valid', bool), ('CONT_chi2', 'f4'), ('CONT_dof', 'i4'),
-            ('CONT_x', 'f4', self.cont_order),
-            ('CONT_xcov', 'f4', self.cont_order**2)
+            ('CONT_x', 'f4', corder),
+            ('CONT_xcov', 'f4', corder**2)
         ])
         local_catalog = np.empty(len(spectra_list), dtype=dtype)
 

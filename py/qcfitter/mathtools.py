@@ -45,11 +45,11 @@ class Fast1DInterpolator(object):
 # ===================================================
 
 
-@njit
+@njit("f8[:](f8[:], f8[:])")
 def mypoly1d(coef, x):
     results = np.zeros_like(x)
     for i, a in enumerate(coef):
-        results += a * x**i
+        results += a * np.power(x, i)
     return results
 
 
