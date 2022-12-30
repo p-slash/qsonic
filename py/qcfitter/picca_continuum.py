@@ -2,6 +2,7 @@ import numpy as np
 import fitsio
 from scipy.optimize import minimize, curve_fit
 from scipy.interpolate import UnivariateSpline
+from scipy.special import legendre
 
 from mpi4py import MPI
 
@@ -186,6 +187,23 @@ class PiccaContinuumFitter(object):
         logging_mpi(f"Number of invalid fits: {no_invalid_fits}",
                     self.mpi_rank)
 
+    def _project_normalize_meancont(self, new_meancont):
+        x = np.log(self.rfwave / self.rfwave[0]) / self._denom
+
+        for ci in range(1, self.cont_order + 1):
+            norm = 2 * ci + 1
+            leg_ci = legendre(ci)
+            leg_ci = leg_ci(2 * x - 1)
+
+            B = norm * np.trapz(new_meancont * leg_ci, x=x)
+            new_meancont -= B * leg_ci
+
+        # normalize
+        mean_ = np.trapz(new_meancont, x=x)
+        new_meancont /= mean_
+
+        return new_meancont, mean_
+
     def update_mean_cont(self, spectra_list, noupdate):
         norm_flux = np.zeros(self.nbins)
         counts = np.zeros(self.nbins)
@@ -219,15 +237,9 @@ class PiccaContinuumFitter(object):
         new_meancont = spl(self.rfwave)
         new_meancont *= self.meancont_interp.fp
 
-        # remove tilt
-        x = np.log(self.rfwave / self.rfwave[0]) / self._denom
-        P1 = 2 * x - 1
-        B = 3 * np.trapz(new_meancont * P1, x=x)
-        new_meancont -= B * P1
+        # remove tilt and higher orders and normalize
+        new_meancont, mean_ = self._project_normalize_meancont(new_meancont)
 
-        # normalize
-        mean_ = np.trapz(new_meancont, x=x)
-        new_meancont /= mean_
         norm_flux = new_meancont / self.meancont_interp.fp - 1
         std_flux /= mean_
 
