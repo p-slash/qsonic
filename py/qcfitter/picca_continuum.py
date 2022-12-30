@@ -15,6 +15,18 @@ class PiccaContinuumFitter(object):
     Pipeline ivar is smoothed before using in weights.
     Mean continuum is smoothed using inverse weights and cubic spline.
     """
+    @staticmethod
+    def add_parser(parser):
+        cont_group = parser.add_argument_group('Continuum fitting options')
+
+        cont_group.add_argument(
+            "--rfdwave", type=float, default=0.8,
+            help="Rest-frame wave steps. Complies with forest limits")
+        cont_group.add_argument(
+            "--no-iterations", type=int, default=5,
+            help="Number of iterations for continuum fitting.")
+        cont_group.add_argument(
+            "--fiducials", help="Fiducial mean flux and var_lss fits file.")
 
     def _set_fiducials(self, fiducial_fits):
         if self.mpi_rank == 0:
