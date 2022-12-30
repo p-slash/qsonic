@@ -49,7 +49,7 @@ class Fast1DInterpolator(object):
 def mypoly1d(coef, x):
     results = np.zeros_like(x)
     for i, a in enumerate(coef):
-        results += a * np.power(x, i)
+        results += a * x**i
     return results
 
 
