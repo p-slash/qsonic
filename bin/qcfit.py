@@ -1,5 +1,5 @@
-import logging
 import argparse
+import logging
 import time
 
 from os import makedirs as os_makedirs
@@ -10,113 +10,22 @@ from mpi4py import MPI
 import qcfitter.catalog
 import qcfitter.spectrum
 import qcfitter.masks
-from qcfitter.mpi_utils import balance_load, logging_mpi
+from qcfitter.mpi_utils import logging_mpi, mpi_parse
 from qcfitter.picca_continuum import PiccaContinuumFitter
 
 
-def parse():
+def get_parser(add_help=True):
     # Arguments passed to run the script
     parser = argparse.ArgumentParser(
+        add_help=add_help,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument(
-        "--input-dir", required=True,
-        help="Input directory to healpix")
-    parser.add_argument(
-        "--catalog", required=True,
-        help="Catalog filename")
-    parser.add_argument(
-        "--keep-surveys", nargs='+', default=['sv3', 'main'],
-        help="Surveys to keep.")
-    parser.add_argument(
-        "--min-rsnr", type=float, default=0.,
-        help="Minium SNR <F/sigma> above Lya.")
-    parser.add_argument(
-        "--outdir", '-o',
-        help="Output directory to save deltas.")
 
-    parser.add_argument(
-        "--mock-analysis", action="store_true",
-        help="Input folder is mock. Uses nside=16")
-    parser.add_argument(
-        "--skip-resomat", action="store_true",
-        help="Skip reading resolution matrix for 3D.")
-    parser.add_argument(
-        "--arms", default=['B', 'R'], nargs='+',
-        help="Arms to read.")
+    qcfitter.spectrum.add_io_parser(parser)
+    qcfitter.spectrum.add_wave_region_parser(parser)
+    qcfitter.masks.add_mask_parser(parser)
+    PiccaContinuumFitter.add_parser(parser)
 
-    parser.add_argument(
-        "--wave1", type=float, default=3600.,
-        help="First observed wavelength edge.")
-    parser.add_argument(
-        "--wave2", type=float, default=6000.,
-        help="Last observed wavelength edge.")
-    parser.add_argument(
-        "--forest-w1", type=float, default=1040.,
-        help="First forest wavelength edge.")
-    parser.add_argument(
-        "--forest-w2", type=float, default=1200.,
-        help="Last forest wavelength edge.")
-    parser.add_argument(
-        "--rfdwave", type=float, default=0.8,
-        help="Rest-frame wave steps. Complies with forest limits")
-    parser.add_argument(
-        "--fiducials", help="Fiducial mean flux and var_lss fits file.")
-
-    parser.add_argument(
-        "--sky-mask",
-        help="Sky mask file.")
-    parser.add_argument(
-        "--bal-mask", action="store_true",
-        help="Mask BALs (assumes it is in catalog).")
-    parser.add_argument(
-        "--dla-mask",
-        help="DLA catalog to mask.")
-
-    parser.add_argument(
-        "--skip", type=float, default=0.,
-        help="Skip short spectra lower than given ratio.")
-    parser.add_argument(
-        "--no-iterations", type=int, default=5,
-        help="Number of iterations for continuum fitting.")
-    parser.add_argument(
-        "--keep-nonforest-pixels", action="store_true",
-        help="Keeps non forest wavelengths. Memory intensive!")
-
-    parser.add_argument(
-        "--coadd-arms", action="store_true",
-        help="Coadds arms when saving.")
-    parser.add_argument(
-        "--save-by-hpx", action="store_true",
-        help="Save by healpix. If not, saves by MPI rank.")
-
-    args = parser.parse_args()
-
-    return args
-
-
-def mpi_parse(comm, mpi_rank):
-    if mpi_rank == 0:
-        try:
-            args = parse()
-
-            if any(arm not in ['B', 'R', 'Z'] for arm in args.arms):
-                logging.error("Arms should be 'B', 'R' or 'Z'.")
-                exit(0)
-
-            if args.skip < 0 or args.skip > 1:
-                logging.error("Skip ratio should be between 0 and 1")
-                exit(0)
-
-        except SystemExit:
-            args = -1
-    else:
-        args = -1
-
-    args = comm.bcast(args)
-    if args == -1:
-        exit(0)
-
-    return args
+    return parser
 
 
 def read_masks(comm, local_queue, args, mpi_rank):
@@ -194,7 +103,7 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=logging.DEBUG)
 
-    args = mpi_parse(comm, mpi_rank)
+    args = mpi_parse(get_parser(), comm, mpi_rank)
 
     # read catalog
     n_side = 16 if args.mock_analysis else 64

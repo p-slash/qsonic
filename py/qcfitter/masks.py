@@ -4,6 +4,20 @@ from numpy.lib.recfunctions import rename_fields
 import fitsio
 
 
+def add_mask_parser(parser):
+    mask_group = parser.add_argument_group('Masking')
+
+    mask_group.add_argument(
+        "--sky-mask",
+        help="Sky mask file.")
+    mask_group.add_argument(
+        "--bal-mask", action="store_true",
+        help="Mask BALs (assumes it is in catalog).")
+    mask_group.add_argument(
+        "--dla-mask",
+        help="DLA catalog to mask.")
+
+
 class SkyMask():
     column_names = ('type', 'wave_min', 'wave_max', 'frame')
 

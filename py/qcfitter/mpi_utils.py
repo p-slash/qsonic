@@ -4,6 +4,27 @@ import fitsio
 import numpy as np
 
 
+def mpi_parse(parser, comm, mpi_rank):
+    if mpi_rank == 0:
+        try:
+            args = parser.parse_args()
+        except SystemExit:
+            args = -1
+    else:
+        args = -1
+
+    args = comm.bcast(args)
+    if args == -1:
+        exit(0)
+
+    return args
+
+
+def logging_mpi(msg, mpi_rank, fnc="info"):
+    if mpi_rank == 0:
+        getattr(logging, fnc)(msg)
+
+
 def balance_load(split_catalog, mpi_size, mpi_rank):
     """Load balancing function.
     Arguments
@@ -33,11 +54,6 @@ def balance_load(split_catalog, mpi_size, mpi_rank):
             local_queue.append(cat)
 
     return local_queue
-
-
-def logging_mpi(msg, mpi_rank, fnc="info"):
-    if mpi_rank == 0:
-        getattr(logging, fnc)(msg)
 
 
 class MPISaver(object):
