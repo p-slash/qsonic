@@ -14,7 +14,7 @@ class Fast1DInterpolator(object):
     fp: numpy array
         Function calculated at interpolation points
     ep: numpy array (optional)
-        Error on fp points. Not used! Booking purposes only.
+        Error on fp points. Not used! Bookkeeping purposes only.
     copy: bool (default: False)
         Copy input data, specifically fp
 
@@ -51,6 +51,20 @@ def _fast_eval_interp1d(x, xp0, dxp, fp):
 
 @njit("f8[:](f8[:], f8[:])")
 def mypoly1d(coef, x):
+    """ My simple power series polynomial calculator.
+
+    Arguments
+    ---------
+    coef: ndarray of floats
+        Coefficient array in increasing power starting with the constant.
+    x: ndarray of floats
+        Array to calculate polynomial.
+
+    Returns
+    ---------
+    results: ndarray of floats
+        Polynomial calculated at x.
+    """
     results = np.zeros_like(x)
     for i, a in enumerate(coef):
         results += a * x**i
@@ -58,6 +72,25 @@ def mypoly1d(coef, x):
 
 
 def fft_gaussian_smooth(x, sigma_pix=20, pad_size=25, mode='edge'):
+    """ My Gaussian smoother using FFTs. Input array is padded with edge
+    values at the boundary by default.
+
+    Arguments
+    ---------
+    x: 1D array of floats
+        Array to smooth.
+    sigma_pix: int or float (default: 20)
+        Smoothing Gaussian sigma
+    pad_size: int (default: 25)
+        Number of pixels to pad the array `x` at the boundary.
+    mode: string
+        Padding method. See `np.pad` for options.
+
+    Returns
+    ---------
+    y: 1D array of floats
+        Smoothed `x` values. Same size as `x`
+    """
     # Pad the input array to get rid of annoying edge effects
     # Pad values are set to the edge value
     arrsize = x.size + 2 * pad_size
@@ -72,6 +105,25 @@ def fft_gaussian_smooth(x, sigma_pix=20, pad_size=25, mode='edge'):
 
 
 def get_smooth_ivar(ivar, sigma_pix=20, pad_size=25, esigma=3.5):
+    """ Smoothing `ivar` values to reduce signal-noise coupling. Smoothing
+    is done on `error=1/sqrt(ivar)`, while replacing `ivar=0` and outliers in
+    `error`values with the median. These replaced values are put back in in the
+    final result.
+
+    Arguments
+    ---------
+    ivar: 1D array of floats
+        Inverse variance array.
+    sigma_pix: int or float (default: 20)
+        Smoothing Gaussian sigma.
+    esigma: float (default: 3.5)
+        Sigma to identify outliers via MAD.
+
+    Returns
+    ---------
+    ivar2: 1D array of floats
+        Smoothed `ivar` values. Outliers and masked values are put back in.
+    """
     error = np.empty_like(ivar)
     w1 = ivar > 0
     error[w1] = 1 / np.sqrt(ivar[w1])
