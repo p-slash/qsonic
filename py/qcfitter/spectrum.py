@@ -37,28 +37,33 @@ def _read_imagehdu(imhdu, quasar_indices, sort_idx, nwave):
 
 def _read_onehealpix_file(
         targetids_by_survey, fspec, arms_to_keep, skip_resomat):
-    """Common function to read a single fits file.
+    """ Common function to read a single fits file.
 
     Arguments
     ---------
     targetids_by_survey: ndarray
-    targetids_by_survey (used to be catalog). If data, split by
-    survey and contains only one survey.
+        Targetids_by_survey (used to be catalog). If data, split by survey and
+        contains only one survey.
 
     fspec: str
-    filename to open
+        Filename to open.
 
     arms_to_keep: list of str
-    must only contain B, R and Z
+        Must only contain B, R and Z.
 
     skip_resomat: bool
-    if true, do not read resomat.
+        If true, do not read resomat.
 
     Returns
     ---------
     data: dict
-    only quasar spectra are read into keywords wave, flux etc.
-    Resolution is read if present.
+        Only quasar spectra are read into keywords wave, flux etc.Resolution is
+        read if present.
+
+    Raises
+    ---------
+    Exception if number of quasars in the healpix file does not match the
+    catalog.
     """
     # Assume it is sorted
     # cat_by_survey.sort(order='TARGETID')
@@ -236,22 +241,22 @@ def read_spectra(
     Arguments
     ---------
     cat: named np.array
-    catalog of quasars in single healpix.
+        Catalog of quasars in single healpix.
 
     input_dir: str
-    input directory
+        Input directory
 
     arms_to_keep: list of str
-    must only contain B, R and Z
+        Must only contain B, R and Z
 
     mock_analysis: bool
-    reads for mock data if true.
+        Reads for mock data if true.
 
     skip_resomat: bool
-    if true, do not read resomat.
+        If true, do not read resomat.
 
     program: str
-    always use dark program.
+        Always use dark program.
 
     Returns
     ---------
@@ -298,21 +303,30 @@ def save_deltas(
     Arguments
     ---------
     spectra_list: list of Spectrum
-    continuum fitted spectra objects. All must be valid!
+        Continuum fitted spectra objects. All must be valid!
 
     outdir: str
-    output directory
+        Output directory
 
     varlss_interp: Interpolator
-    interpolator for LSS variance
+        Interpolator for LSS variance
 
     out_nside: int
-    output healpix nside. Do not reorganize! Saves by healpix if passed.
-    Has priority.
+        Output healpix nside. Do not reorganize! Saves by healpix if passed.
+        Has priority.
 
     mpi_rank: int
-    mpi_rank. Save by mpi_rank if passed.
+        Rank of the MPI process. Save by `mpi_rank` if passed.
+
+    Raises
+    ---------
+    Exception if `outdir` is None or empty.
+
+    Exception if both `mpi_rank` and `out_nside` is None.
     """
+    if not outdir:
+        raise Exception("outdir cannot be empty in save_deltas")
+
     if out_nside is not None:
         pixnos = np.array(
             [ang2pix(out_nside, spec.ra, spec.dec, lonlat=True, nest=True)
