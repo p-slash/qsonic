@@ -34,14 +34,18 @@ class Fast1DInterpolator(object):
         self.ep = ep
 
     def __call__(self, x):
-        xx = (x - self.xp0) / self.dxp
-        idx = (np.clip(xx, 0, self.fp.size - 2)).astype(int)
+        return _fast_eval_interp1d(x, self.xp0, self.dxp, self.fp)
 
-        d_idx = xx - idx
-        y1, y2 = self.fp[idx], self.fp[idx + 1]
 
-        return y1 * (1 - d_idx) + y2 * d_idx
+@njit("f8[:](f8[:], f8, f8, f8[:])")
+def _fast_eval_interp1d(x, xp0, dxp, fp):
+    xx = (x - xp0) / dxp
+    idx = (np.clip(xx, 0, fp.size - 2)).astype(np.int_)
 
+    d_idx = xx - idx
+    y1, y2 = fp[idx], fp[idx + 1]
+
+    return y1 * (1 - d_idx) + y2 * d_idx
 # ===================================================
 
 

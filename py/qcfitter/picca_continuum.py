@@ -116,7 +116,7 @@ class PiccaContinuumFitter(object):
     def get_continuum_model(self, x, wave_rf_arm):
         slope = np.log(wave_rf_arm / self.rfwave[0]) / self._denom
 
-        cont = self.meancont_interp(wave_rf_arm) * mypoly1d(x, slope)
+        cont = self.meancont_interp(wave_rf_arm) * mypoly1d(x, 2 * slope - 1)
         # Multiply with resolution
         # Edges are difficult though
 
@@ -192,8 +192,7 @@ class PiccaContinuumFitter(object):
 
         for ci in range(1, self.cont_order + 1):
             norm = 2 * ci + 1
-            leg_ci = legendre(ci)
-            leg_ci = leg_ci(2 * x - 1)
+            leg_ci = legendre(ci)(2 * x - 1)
 
             B = norm * np.trapz(new_meancont * leg_ci, x=x)
             new_meancont -= B * leg_ci
