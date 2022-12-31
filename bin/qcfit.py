@@ -29,6 +29,21 @@ def get_parser(add_help=True):
 
 
 def read_spectra_local_queue(local_queue, args):
+    """ Read local spectra for the MPI rank. Set forest and observed wavelength
+    range.
+
+    Arguments
+    ---------
+    local_queue: list of ndarray
+        Catalog from `qcfitter.spectrum.read_local_qso_catalog`.
+    args: Namespace obtained by argparse
+        Options passed to script.
+
+    Returns
+    ---------
+    spectra_list: list of Spectrum
+        Spectrum objects for the local MPI rank.
+    """
     start_time = time.time()
     logging_mpi("Reading spectra.", mpi_rank)
 
@@ -60,6 +75,25 @@ def read_spectra_local_queue(local_queue, args):
 
 
 def read_masks(comm, local_queue, args, mpi_rank):
+    """ Read and set masking objects. Broadcast from the master process if
+    necessary. See `qcfitter.masks` for `SkyMask`, `BALMask` and `DLAMask`.
+
+    Arguments
+    ---------
+    comm: MPI.COMM_WORLD
+        Communication object for broadcasting data.
+    local_queue: list of ndarray
+        Catalog from `qcfitter.spectrum.read_local_qso_catalog`.
+    args: Namespace obtained by argparse
+        Options passed to script.
+    mpi_rank: int
+        Rank of the MPI process
+
+    Returns
+    ---------
+    maskers: list of Masks
+        Mask objects from `qcfitter.masks`.
+    """
     maskers = []
 
     try:
@@ -97,6 +131,20 @@ def read_masks(comm, local_queue, args, mpi_rank):
 
 
 def apply_masks(maskers, spectra_list, mpi_rank):
+    """ Apply masks in `maskers` to the local `spectra_list`. See
+    `qcfitter.masks` for `SkyMask`, `BALMask` and `DLAMask`. Masking is set by
+    setting `forestivar=0`. `DLAMask` further corrects for Lya and Lyb damping
+    wings. Empty arms are removed after masking.
+
+    Arguments
+    ---------
+    maskers: list of Masks
+        Mask objects from `qcfitter.masks`.
+    spectra_list: list of Spectrum
+        Spectrum objects for the local MPI rank.
+    mpi_rank: int
+        Rank of the MPI process
+    """
     if not maskers:
         return
 
@@ -122,7 +170,7 @@ def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank):
     return spectra_list
 
 
-def save_local_deltas(spectra_list, args, varlss_interp, mpi_rank):
+def save_local_deltas(spectra_list, args, varlss_interp, n_side, mpi_rank):
     if not args.outdir:
         return
 
@@ -206,4 +254,5 @@ if __name__ == '__main__':
                 mpi_rank)
 
     # Save deltas
-    save_local_deltas(spectra_list, args, qcfit.varlss_interp, mpi_rank)
+    save_local_deltas(
+        spectra_list, args, qcfit.varlss_interp, n_side, mpi_rank)
