@@ -28,93 +28,10 @@ def get_parser(add_help=True):
     return parser
 
 
-def read_masks(comm, local_queue, args, mpi_rank):
-    maskers = []
-    if args.sky_mask:
-        logging_mpi("Reading sky mask.", mpi_rank)
-        try:
-            skymasker = qcfitter.masks.SkyMask(args.sky_mask)
-        except Exception as e:
-            logging_mpi(f"{e}", mpi_rank, "error")
-            comm.Abort()
-
-        maskers.append(skymasker)
-
-    # BAL mask
-    if args.bal_mask:
-        logging_mpi("Checking BAL mask.", mpi_rank)
-        try:
-            qcfitter.masks.BALMask.check_catalog(local_queue[0])
-        except Exception as e:
-            logging_mpi(f"{e}", mpi_rank, "error")
-            comm.Abort()
-
-        maskers.append(qcfitter.masks.BALMask)
-
-    # DLA mask
-    if args.dla_mask:
-        logging_mpi("Reading DLA mask.", mpi_rank)
-        local_targetids = np.concatenate(
-            [cat['TARGETID'] for cat in local_queue])
-        # Read catalog
-        try:
-            dlamasker = qcfitter.masks.DLAMask(
-                args.dla_mask, local_targetids, comm, mpi_rank,
-                dla_mask_limit=0.8)
-        except Exception as e:
-            logging_mpi(f"{e}", mpi_rank, "error")
-            comm.Abort()
-
-        maskers.append(dlamasker)
-
-    return maskers
-
-
-def apply_masks(maskers, spectra_list, mpi_rank):
-    if not maskers:
-        return
-
-    start_time = time.time()
-    logging_mpi("Applying masks.", mpi_rank)
-    for spec in spectra_list:
-        for masker in maskers:
-            masker.apply(spec)
-        spec.drop_short_arms()
-    etime = (time.time() - start_time) / 60   # min
-    logging_mpi(f"Masks are applied in {etime:.1f} mins.", mpi_rank)
-
-
-def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank):
-    if skip_ratio <= 0:
-        return spectra_list
-
-    logging_mpi("Removing short spectra.", mpi_rank)
-    dforest_wave = lya2 - lya1
-    spectra_list = [spec for spec in spectra_list
-                    if spec.is_long(dforest_wave, skip_ratio)]
-
-    return spectra_list
-
-
-if __name__ == '__main__':
-    comm = MPI.COMM_WORLD
-    mpi_rank = comm.Get_rank()
-    mpi_size = comm.Get_size()
-
-    logging.basicConfig(level=logging.DEBUG)
-
-    args = mpi_parse(get_parser(), comm, mpi_rank)
-
-    # read catalog
-    n_side = 16 if args.mock_analysis else 64
-    local_queue = qcfitter.catalog.read_local_qso_catalog(
-        args.catalog, comm, mpi_rank, mpi_size, n_side, args.keep_surveys)
-
-    # Read masks before data
-    maskers = read_masks(comm, local_queue, args, mpi_rank)
-
+def read_spectra_local_queue(local_queue, args):
     start_time = time.time()
     logging_mpi("Reading spectra.", mpi_rank)
+
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
@@ -138,6 +55,111 @@ if __name__ == '__main__':
     etime = (time.time() - start_time) / 60  # min
     logging_mpi(
         f"All {nspec_all} spectra are read in {etime:.1f} mins.", mpi_rank)
+
+    return spectra_list
+
+
+def read_masks(comm, local_queue, args, mpi_rank):
+    maskers = []
+
+    try:
+        if args.sky_mask:
+            logging_mpi("Reading sky mask.", mpi_rank)
+            skymasker = qcfitter.masks.SkyMask(args.sky_mask)
+
+            maskers.append(skymasker)
+
+        # BAL mask
+        if args.bal_mask:
+            logging_mpi("Checking BAL mask.", mpi_rank)
+            qcfitter.masks.BALMask.check_catalog(local_queue[0])
+
+            maskers.append(qcfitter.masks.BALMask)
+
+        # DLA mask
+        if args.dla_mask:
+            logging_mpi("Reading DLA mask.", mpi_rank)
+            local_targetids = np.concatenate(
+                [cat['TARGETID'] for cat in local_queue])
+
+            # Read catalog
+            dlamasker = qcfitter.masks.DLAMask(
+                args.dla_mask, local_targetids, comm, mpi_rank,
+                dla_mask_limit=0.8)
+
+            maskers.append(dlamasker)
+
+    except Exception as e:
+        logging_mpi(f"{e}", mpi_rank, "error")
+        comm.Abort()
+
+    return maskers
+
+
+def apply_masks(maskers, spectra_list, mpi_rank):
+    if not maskers:
+        return
+
+    start_time = time.time()
+    logging_mpi("Applying masks.", mpi_rank)
+    for spec in spectra_list:
+        for masker in maskers:
+            masker.apply(spec)
+        spec.drop_short_arms()
+    etime = (time.time() - start_time) / 60   # min
+    logging_mpi(f"Masks are applied in {etime:.1f} mins.", mpi_rank)
+
+
+def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank):
+    if not skip_ratio:
+        return spectra_list
+
+    logging_mpi("Removing short spectra.", mpi_rank)
+    dforest_wave = lya2 - lya1
+    spectra_list = [spec for spec in spectra_list
+                    if spec.is_long(dforest_wave, skip_ratio)]
+
+    return spectra_list
+
+
+def save_local_deltas(spectra_list, args, varlss_interp, mpi_rank):
+    if not args.outdir:
+        return
+
+    logging_mpi("Saving deltas.", mpi_rank)
+
+    if args.save_by_hpx:
+        out_nside = n_side
+        out_by_mpi = None
+    else:
+        out_nside = None
+        out_by_mpi = mpi_rank
+
+    qcfitter.spectrum.save_deltas(
+        spectra_list, args.outdir, varlss_interp,
+        out_nside=out_nside, mpi_rank=out_by_mpi)
+
+
+if __name__ == '__main__':
+    comm = MPI.COMM_WORLD
+    mpi_rank = comm.Get_rank()
+    mpi_size = comm.Get_size()
+
+    logging.basicConfig(level=logging.DEBUG)
+
+    args = mpi_parse(get_parser(), comm, mpi_rank)
+    if mpi_rank == 0 and args.outdir:
+        os_makedirs(args.outdir, exist_ok=True)
+
+    # read catalog
+    n_side = 16 if args.mock_analysis else 64
+    local_queue = qcfitter.catalog.read_local_qso_catalog(
+        args.catalog, comm, mpi_rank, mpi_size, n_side, args.keep_surveys)
+
+    # Read masks before data
+    maskers = read_masks(comm, local_queue, args, mpi_rank)
+
+    spectra_list = read_spectra_local_queue(local_queue, args)
 
     apply_masks(maskers, spectra_list, mpi_rank)
 
@@ -184,16 +206,4 @@ if __name__ == '__main__':
                 mpi_rank)
 
     # Save deltas
-    if args.outdir:
-        logging_mpi("Saving deltas.", mpi_rank)
-        os_makedirs(args.outdir, exist_ok=True)
-        if args.save_by_hpx:
-            out_nside = n_side
-            out_by_mpi = None
-        else:
-            out_nside = None
-            out_by_mpi = mpi_rank
-
-        qcfitter.spectrum.save_deltas(
-            spectra_list, args.outdir, qcfit.varlss_interp,
-            out_nside=out_nside, mpi_rank=out_by_mpi)
+    save_local_deltas(spectra_list, args, qcfit.varlss_interp, mpi_rank)
