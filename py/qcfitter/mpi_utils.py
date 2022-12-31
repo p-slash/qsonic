@@ -26,22 +26,23 @@ def logging_mpi(msg, mpi_rank, fnc="info"):
 
 
 def balance_load(split_catalog, mpi_size, mpi_rank):
-    """Load balancing function.
+    """ Load balancing function.
+
     Arguments
     ---------
     split_catalog: list of named ndarray
-    list of catalog. Each element is a ndarray with the same healpix
+        List of catalog. Each element is a ndarray with the same healpix
 
     mpi_size: int
-    number of mpi tasks running
+        Number of MPI tasks running.
 
     mpi_rank: int
-    rank of current mpi task
+        Rank of the MPI process.
 
     Returns
     ---------
     local_queue: list of named ndarray
-    spectra that current rank is reponsible for. same format as split_catalog
+        Spectra that current rank is reponsible for in `split_catalog` format.
     """
     number_of_spectra = np.zeros(mpi_size, dtype=int)
     local_queue = []
@@ -64,7 +65,7 @@ class MPISaver(object):
     fname: str
         Filename. Does not create if empty string
     mpi_rank: int
-        MPI rank. Creates FITS if 0.
+        Rank of the MPI process. Creates FITS if 0.
     """
 
     def __init__(self, fname, mpi_rank):
