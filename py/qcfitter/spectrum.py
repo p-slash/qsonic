@@ -337,36 +337,6 @@ def save_deltas(
         results.close()
 
 
-def save_contchi2_catalog(spectra_list, outdir, comm, mpi_rank, corder=2):
-    dtype = np.dtype([
-        ('TARGETID', 'int64'), ('Z', 'f4'), ('HPXPIXEL', 'i8'),
-        ('MPI_RANK', 'i4'), ('MEANSNR', 'f4'), ('RSNR', 'f4'),
-        ('CONT_valid', bool), ('CONT_chi2', 'f4'), ('CONT_dof', 'i4'),
-        ('CONT_x', 'f4', corder), ('CONT_xcov', 'f4', corder**2)
-    ])
-    local_catalog = np.empty(len(spectra_list), dtype=dtype)
-
-    for i, spec in enumerate(spectra_list):
-        row = local_catalog[i]
-        row['TARGETID'] = spec.targetid
-        row['Z'] = spec.z_qso
-        row['HPXPIXEL'] = spec.catrow['HPXPIXEL']
-        row['MPI_RANK'] = mpi_rank
-        row['MEANSNR'] = spec.mean_snr()
-        row['RSNR'] = spec.rsnr
-        for lbl in ['valid', 'x', 'chi2', 'dof']:
-            row[f'CONT_{lbl}'] = spec.cont_params[lbl]
-        row['CONT_xcov'] = spec.cont_params['xcov'].ravel()
-
-    all_catalogs = comm.gather(local_catalog)
-    if mpi_rank == 0:
-        all_catalog = np.concatenate(all_catalogs)
-        fts = fitsio.FITS(
-            f"{outdir}/continuum_chi2_catalog.fits", 'rw', clobber=True)
-        fts.write(all_catalog, extname='CHI2_CAT')
-        fts.close()
-
-
 class Spectrum(object):
     """Represents one spectrum.
 
@@ -465,7 +435,7 @@ class Spectrum(object):
         self.cont_params['method'] = ''
         self.cont_params['valid'] = False
         self.cont_params['x'] = np.array([1., 0.])
-        self.cont_params['xcov'] = np.array([[1., 0.], [0., 1.]])
+        self.cont_params['xcov'] = np.eye(2)
         self.cont_params['chi2'] = -1.
         self.cont_params['dof'] = 0
         self.cont_params['cont'] = {}

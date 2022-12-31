@@ -62,15 +62,13 @@ class MPISaver(object):
     Parameters
     ----------
     fname: str
-        Filename.
+        Filename. Does not create if empty string
     mpi_rank: int
         MPI rank. Creates FITS if 0.
-    is_dummy: bool
-        Does not create file if true.
     """
 
-    def __init__(self, fname, mpi_rank, is_dummy):
-        if mpi_rank == 0 and not is_dummy:
+    def __init__(self, fname, mpi_rank):
+        if mpi_rank == 0 and fname:
             self.fts = fitsio.FITS(fname, 'rw', clobber=True)
         else:
             self.fts = None
