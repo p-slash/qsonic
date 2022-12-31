@@ -26,7 +26,7 @@ def read_local_qso_catalog(
     comm: MPI comm object
         MPI comm object for bcast
     mpi_rank: int
-        Rank of MPI process
+        Rank of the MPI process
     mpi_size: int
         Size of MPI processes
     n_side: int (default: 64)
