@@ -91,7 +91,6 @@ class PiccaContinuumFitter(object):
         self.niterations = args.no_iterations
         self.cont_order = args.cont_order
         self.outdir = args.outdir
-        self._bounds = [(0, None)] + [(None, None)] * args.cont_order
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
         cost = 0
@@ -123,6 +122,19 @@ class PiccaContinuumFitter(object):
         return cont
 
     def fit_continuum(self, spec):
+        """ Fits the continuum for a single Spectrum. This function uses
+        `forestivar_sm` in inverse variance. Must be smoothed beforehand.
+        It also modifies `spec.cont_params` dictionary in `valid, cont, x,
+        xcov, chi2, dof` keys. If the best-fitting continuum is negative at any
+        point, the fit is invalidated. Chi2 is set separately, i.e. not using
+        the cost function. `x` key is the best-fitting parameter, and `xcov` is
+        their inverse Hessian `hess_inv`.
+
+        Arguments
+        ---------
+        spec: Spectrum
+            Spectrum object to fit.
+        """
         # We can precalculate meanflux and varlss here,
         # and store them in respective keys to spec.cont_params
         result = minimize(
@@ -133,7 +145,7 @@ class PiccaContinuumFitter(object):
                   spec.forestivar_sm,
                   spec.z_qso),
             method='L-BFGS-B',
-            bounds=self._bounds,
+            bounds=None,
             jac=None
         )
 
@@ -169,6 +181,13 @@ class PiccaContinuumFitter(object):
             spec.cont_params['chi2'] = -1
 
     def fit_continua(self, spectra_list):
+        """ Fits all continua for a list of Spectrum objects.
+
+        Arguments
+        ---------
+        spectra_list: list of Spectrum
+            Spectrum objects to fit.
+        """
         no_valid_fits = 0
         no_invalid_fits = 0
 
@@ -188,6 +207,23 @@ class PiccaContinuumFitter(object):
                     self.mpi_rank)
 
     def _project_normalize_meancont(self, new_meancont):
+        """ Project out higher order Legendre polynomials from the new mean
+        continuum, since these are degenerate with the free fitting parameters.
+        Returns a normalized mean continuum. Integrals are calculated using
+        `np.trapz` with `ln lambda_RF` as x array.
+
+        Arguments
+        ---------
+        new_meancont: 1D ndarray.
+            First estimate of the new mean continuum.
+
+        Returns
+        ---------
+        new_meancont: 1D ndarray.
+            Legendere polynomials projected out and normalized mean continuum.
+        mean_: float
+            Normalization of the mean continuum.
+        """
         x = np.log(self.rfwave / self.rfwave[0]) / self._denom
 
         for ci in range(1, self.cont_order + 1):
@@ -204,6 +240,25 @@ class PiccaContinuumFitter(object):
         return new_meancont, mean_
 
     def update_mean_cont(self, spectra_list, noupdate):
+        """ Update the global mean continuum. Uses `forestivar_sm` in inverse
+        variance. Must be smoothed beforehand. Raw mean continuum estimates are
+        smoothed with a weighted `UnivariateSpline`. The mean continuum is
+        removed from higher Legendre polynomials and normalized by the mean.
+        This function updates `self.meancont_interp.fp` if noupdate is False.
+
+        Arguments
+        ---------
+        spectra_list: list of Spectrum
+            Spectrum objects to fit.
+        noupdate: bool
+            Does not update `self.meancont_interp.fp` if True (last iteration).
+
+        Returns
+        ---------
+        has_converged: bool.
+            True if all continuum updates on every point are less than 0.33
+            times the error estimates.
+        """
         norm_flux = np.zeros(self.nbins)
         counts = np.zeros(self.nbins)
 
@@ -257,6 +312,15 @@ class PiccaContinuumFitter(object):
         return has_converged
 
     def update_var_lss(self, spectra_list, noupdate):
+        """ Fit for var_lss. See `VarLSSFitter` for implementation details.
+
+        Arguments
+        ---------
+        spectra_list: list of Spectrum
+            Spectrum objects to fit.
+        noupdate: bool
+            Does not update `self.varlss_interp.fp` if True (last iteration).
+        """
         if self.varlss_fitter is None:
             return
 
