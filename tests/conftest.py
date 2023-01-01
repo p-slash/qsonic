@@ -11,28 +11,33 @@ def setup_data():
     cat_dtype = np.dtype([
         ('TARGETID', '>i8'), ('Z', '>f8'), ('RA', '>f8'), ('DEC', '>f8'),
         ('HPXPIXEL', '>i8'), ('SURVEY', '<U4')])
-    cat_by_survey = np.array([
-        (39627939372861215, 2.328, 229.861, 6.1925, 8258, b'main')],
-        dtype=cat_dtype)
 
-    npix = 1000
-    data = {
-        'wave': {
-            'B': 3600. + 0.8 * np.arange(npix),
-            'R': 4000. + 0.8 * np.arange(npix)},
-        'flux': {
-            'B': 2.1 * np.ones(npix).reshape(1, npix),
-            'R': 2.1 * np.ones(npix).reshape(1, npix)},
-        'ivar': {
-            'B': np.ones(npix).reshape(1, npix),
-            'R': np.ones(npix).reshape(1, npix)},
-        'mask': {
-            'B': np.zeros(npix, dtype='i4').reshape(1, npix),
-            'R': np.zeros(npix, dtype='i4').reshape(1, npix)},
-        'reso': {}
-    }
+    def _setup_data(nspec):
+        cat_by_survey = np.array(
+            [(39627939372861215, 2.328, 229.86, 6.19, 8258, b'main')] * nspec,
+            dtype=cat_dtype)
+        cat_by_survey['TARGETID'] += np.arange(nspec)
 
-    return cat_by_survey, npix, data
+        npix = 1000
+        data = {
+            'wave': {
+                'B': 3600. + 0.8 * np.arange(npix),
+                'R': 4000. + 0.8 * np.arange(npix)},
+            'flux': {
+                'B': 2.1 * np.ones((nspec, npix)),
+                'R': 2.1 * np.ones((nspec, npix))},
+            'ivar': {
+                'B': np.ones((nspec, npix)),
+                'R': np.ones((nspec, npix))},
+            'mask': {
+                'B': np.zeros((nspec, npix), dtype='i4'),
+                'R': np.zeros((nspec, npix), dtype='i4')},
+            'reso': {}
+        }
+
+        return cat_by_survey, npix, data
+
+    return _setup_data
 
 
 def pytest_addoption(parser):

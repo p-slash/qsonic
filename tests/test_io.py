@@ -57,14 +57,13 @@ class TestIOReading(object):
         with pytest.raises(Exception, match=expected_msg):
             qcfitter.io.save_deltas([], "outdir", None)
 
-    # Including this test fails spectrum tests?
     def test_read_spectra(self, my_setup_fits):
         cat_by_survey, input_dir, _, xarms, data = my_setup_fits
 
         slist = qcfitter.io.read_spectra(
             cat_by_survey, input_dir, xarms, False, True)
 
-        assert (len(slist) == 1)
+        assert (len(slist) == 2)
         for spec in slist:
             for arm in xarms:
                 npt.assert_allclose(spec.wave[arm], data['wave'][arm])
@@ -72,9 +71,9 @@ class TestIOReading(object):
                 npt.assert_allclose(spec.ivar[arm], data['ivar'][arm][0])
 
 
-@pytest.fixture
+@pytest.fixture()
 def my_setup_fits(tmp_path, setup_data):
-    cat_by_survey, _, data = setup_data
+    cat_by_survey, _, data = setup_data(2)
     pixnum = 8258
     cat_by_survey['HPXPIXEL'] = pixnum
     xarms = data['wave'].keys()
