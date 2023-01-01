@@ -22,51 +22,26 @@ class TestSpecParsers(object):
 
 
 class TestSpectrum(object):
-    def setup_method(self):
-        cat_dtype = np.dtype([
-            ('TARGETID', '>i8'), ('Z', '>f8'), ('RA', '>f8'), ('DEC', '>f8'),
-            ('HPXPIXEL', '>i8'), ('SURVEY', '<U4')])
-        self.cat_by_survey = np.array([
-            (39627939372861215, 2.328, 229.861, 6.1925, 8258, b'main')],
-            dtype=cat_dtype)
+    def test_generate_spectra_list_from_data(self, setup_data):
+        cat_by_survey, _, data, spectra_list = setup_data
+        assert (len(spectra_list) == 1)
+        spec = spectra_list[0]
 
-        self.npix = 1000
-        self.data = {
-            'wave': {
-                'B': 3600. + 0.8 * np.arange(self.npix),
-                'R': 4000. + 0.8 * np.arange(self.npix)},
-            'flux': {
-                'B': 2.1 * np.ones(self.npix).reshape(1, self.npix),
-                'R': 2.1 * np.ones(self.npix).reshape(1, self.npix)},
-            'ivar': {
-                'B': np.ones(self.npix).reshape(1, self.npix),
-                'R': np.ones(self.npix).reshape(1, self.npix)},
-            'mask': {
-                'B': np.zeros(self.npix, dtype='i4').reshape(1, self.npix),
-                'R': np.zeros(self.npix, dtype='i4').reshape(1, self.npix)},
-            'reso': {}
-        }
-
-        self.spectra_list = qcfitter.spectrum.Spectrum.list_from_data(
-            self.cat_by_survey, self.data)
-
-    def test_generate_spectra_list_from_data(self):
-        assert (len(self.spectra_list) == 1)
-        spec = self.spectra_list[0]
-
-        assert (spec.targetid == self.cat_by_survey['TARGETID'])
-        npt.assert_almost_equal(spec.z_qso, self.cat_by_survey['Z'])
-        npt.assert_almost_equal(spec.ra, self.cat_by_survey['RA'])
-        npt.assert_almost_equal(spec.dec, self.cat_by_survey['DEC'])
+        assert (spec.targetid == cat_by_survey['TARGETID'])
+        npt.assert_almost_equal(spec.z_qso, cat_by_survey['Z'])
+        npt.assert_almost_equal(spec.ra, cat_by_survey['RA'])
+        npt.assert_almost_equal(spec.dec, cat_by_survey['DEC'])
         npt.assert_almost_equal(spec.dwave, 0.8)
         npt.assert_almost_equal(spec.cont_params['x'], [1., 0.])
 
-        npt.assert_allclose(spec.flux['B'], self.data['flux']['B'][0])
+        npt.assert_allclose(spec.flux['B'], data['flux']['B'][0])
+        npt.assert_allclose(spec.flux['R'], data['flux']['R'][0])
         assert (not spec.forestflux)
         assert (not spec.reso)
 
-    def test_set_forest_region(self):
-        spec = self.spectra_list[0]
+    def test_set_forest_region(self, setup_data):
+        _, _, _, spectra_list = setup_data
+        spec = copy.deepcopy(spectra_list[0])
         spec.set_forest_region(3600., 6000., 1050., 1180.)
 
         npt.assert_almost_equal(spec.rsnr, 2.1)
@@ -77,8 +52,9 @@ class TestSpectrum(object):
         assert ('R' not in spec.forestflux.keys())
         assert (not spec.forestreso)
 
-    def test_drop_short_arms(self):
-        spec = self.spectra_list[0]
+    def test_drop_short_arms(self, setup_data):
+        _, _, _, spectra_list = setup_data
+        spec = copy.deepcopy(spectra_list[0])
         spec.set_forest_region(3600., 6000., 1050., 1210.)
 
         assert ('R' in spec.forestflux.keys())
@@ -87,21 +63,23 @@ class TestSpectrum(object):
         spec.drop_short_arms(1050., 1180., 0.5)
         assert ('R' not in spec.forestflux.keys())
 
-    def test_get_real_size(self):
-        spec = self.spectra_list[0]
+    def test_get_real_size(self, setup_data):
+        _, npix, _, spectra_list = setup_data
+        spec = copy.deepcopy(spectra_list[0])
         npt.assert_equal(spec.get_real_size(), 0)
 
         spec.set_forest_region(3600., 6000., 1000., 2000.)
-        npt.assert_equal(spec.get_real_size(), 2 * self.npix)
+        npt.assert_equal(spec.get_real_size(), 2 * npix)
 
         spec.set_forest_region(3600., 4400., 1000., 2000.)
-        npt.assert_equal(spec.get_real_size(), 1.5 * self.npix)
+        npt.assert_equal(spec.get_real_size(), 1.5 * npix)
 
-    def test_is_long(self):
+    def test_is_long(self, setup_data):
+        _, _, _, spectra_list = setup_data
         dforest_wave = 1180. - 1050.
         skip_ratio = 0.5
 
-        spec = self.spectra_list[0]
+        spec = copy.deepcopy(spectra_list[0])
         assert (not spec.is_long(dforest_wave, skip_ratio))
 
         spec.set_forest_region(3600., 6000., 1000., 2000.)
@@ -111,10 +89,11 @@ class TestSpectrum(object):
         spec.set_forest_region(3600., 6000., 1120., 1130.)
         assert (not spec.is_long(dforest_wave, skip_ratio))
 
-    def test_coadd_arms_forest(self):
+    def test_coadd_arms_forest(self, setup_data):
+        _, _, data, spectra_list = setup_data
         # var_lss zero
         varlss_interp = Fast1DInterpolator(0, 1, np.zeros(3))
-        spec = copy.deepcopy(self.spectra_list[0])
+        spec = copy.deepcopy(spectra_list[0])
         spec.set_forest_region(3600., 6000., 1050., 1300.)
         spec.cont_params['valid'] = True
         spec.cont_params['cont'] = {
@@ -125,14 +104,14 @@ class TestSpectrum(object):
         assert ('brz' in spec.forestflux.keys())
         npt.assert_almost_equal(spec.forestflux['brz'], 2.1)
         npt.assert_almost_equal(spec.cont_params['cont']['brz'], 1.)
-        w = (spec.forestwave['brz'] < self.data['wave']['R'][0])\
-            | (spec.forestwave['brz'] > self.data['wave']['B'][-1])
+        w = (spec.forestwave['brz'] < data['wave']['R'][0])\
+            | (spec.forestwave['brz'] > data['wave']['B'][-1])
         npt.assert_almost_equal(spec.forestivar['brz'][w], 1)
         npt.assert_almost_equal(spec.forestivar['brz'][~w], 2)
 
         # var_lss non-zero
         varlss_interp = Fast1DInterpolator(0, 1, 0.5 * np.ones(3))
-        spec = copy.deepcopy(self.spectra_list[0])
+        spec = copy.deepcopy(spectra_list[0])
         spec.set_forest_region(3600., 6000., 1050., 1300.)
         spec.cont_params['valid'] = True
         spec.cont_params['cont'] = {
@@ -143,10 +122,42 @@ class TestSpectrum(object):
         assert ('brz' in spec.forestflux.keys())
         npt.assert_almost_equal(spec.forestflux['brz'], 2.1)
         npt.assert_almost_equal(spec.cont_params['cont']['brz'], 1.)
-        w = (spec.forestwave['brz'] < self.data['wave']['R'][0])\
-            | (spec.forestwave['brz'] > self.data['wave']['B'][-1])
+        w = (spec.forestwave['brz'] < data['wave']['R'][0])\
+            | (spec.forestwave['brz'] > data['wave']['B'][-1])
         npt.assert_almost_equal(spec.forestivar['brz'][w], 1)
         npt.assert_almost_equal(spec.forestivar['brz'][~w], 2)
+
+
+@pytest.fixture
+def setup_data():
+    cat_dtype = np.dtype([
+        ('TARGETID', '>i8'), ('Z', '>f8'), ('RA', '>f8'), ('DEC', '>f8'),
+        ('HPXPIXEL', '>i8'), ('SURVEY', '<U4')])
+    cat_by_survey = np.array([
+        (39627939372861215, 2.328, 229.861, 6.1925, 8258, b'main')],
+        dtype=cat_dtype)
+
+    npix = 1000
+    data = {
+        'wave': {
+            'B': 3600. + 0.8 * np.arange(npix),
+            'R': 4000. + 0.8 * np.arange(npix)},
+        'flux': {
+            'B': 2.1 * np.ones(npix).reshape(1, npix),
+            'R': 2.1 * np.ones(npix).reshape(1, npix)},
+        'ivar': {
+            'B': np.ones(npix).reshape(1, npix),
+            'R': np.ones(npix).reshape(1, npix)},
+        'mask': {
+            'B': np.zeros(npix, dtype='i4').reshape(1, npix),
+            'R': np.zeros(npix, dtype='i4').reshape(1, npix)},
+        'reso': {}
+    }
+
+    spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
+        cat_by_survey, data)
+
+    return cat_by_survey, npix, data, spectra_list
 
 
 if __name__ == '__main__':
