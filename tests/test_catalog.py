@@ -44,7 +44,8 @@ class TestCatalog(object):
         assert ('DEC' in colnames)
         assert ('TARGET_RA' not in colnames)
 
-        with pytest.raises(Exception):
+        expected_msg = "SURVEY column must be present in the catalog for data!"
+        with pytest.raises(Exception, match=expected_msg):
             qcfitter.catalog._validate_adjust_column_names(
                 catalog, is_mock=False)
 
