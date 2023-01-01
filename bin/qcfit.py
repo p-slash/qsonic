@@ -8,6 +8,7 @@ import numpy as np
 from mpi4py import MPI
 
 import qcfitter.catalog
+import qcfitter.io
 import qcfitter.spectrum
 import qcfitter.masks
 from qcfitter.mpi_utils import logging_mpi, mpi_parse
@@ -20,7 +21,7 @@ def get_parser(add_help=True):
         add_help=add_help,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    qcfitter.spectrum.add_io_parser(parser)
+    qcfitter.io.add_io_parser(parser)
     qcfitter.spectrum.add_wave_region_parser(parser)
     qcfitter.masks.add_mask_parser(parser)
     PiccaContinuumFitter.add_parser(parser)
@@ -50,7 +51,7 @@ def read_spectra_local_queue(local_queue, args):
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
-        local_specs = qcfitter.spectrum.read_spectra(
+        local_specs = qcfitter.io.read_spectra(
             cat, args.input_dir, args.arms,
             args.mock_analysis, args.skip_resomat
         )
@@ -170,24 +171,6 @@ def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank):
     return spectra_list
 
 
-def save_local_deltas(spectra_list, args, varlss_interp, n_side, mpi_rank):
-    if not args.outdir:
-        return
-
-    logging_mpi("Saving deltas.", mpi_rank)
-
-    if args.save_by_hpx:
-        out_nside = n_side
-        out_by_mpi = None
-    else:
-        out_nside = None
-        out_by_mpi = mpi_rank
-
-    qcfitter.spectrum.save_deltas(
-        spectra_list, args.outdir, varlss_interp,
-        out_nside=out_nside, mpi_rank=out_by_mpi)
-
-
 if __name__ == '__main__':
     comm = MPI.COMM_WORLD
     mpi_rank = comm.Get_rank()
@@ -202,12 +185,17 @@ if __name__ == '__main__':
     # read catalog
     n_side = 16 if args.mock_analysis else 64
     local_queue = qcfitter.catalog.read_local_qso_catalog(
-        args.catalog, comm, mpi_rank, mpi_size, n_side, args.keep_surveys)
+        args.catalog, comm, mpi_rank, mpi_size, is_mock=args.mock_analysis,
+        n_side=n_side, keep_surveys=args.keep_surveys)
 
     # Read masks before data
     maskers = read_masks(comm, local_queue, args, mpi_rank)
 
-    spectra_list = read_spectra_local_queue(local_queue, args)
+    try:
+        spectra_list = read_spectra_local_queue(local_queue, args)
+    except Exception as e:
+        logging_mpi(f"{e}", 0, "error")
+        comm.Abort()
 
     apply_masks(maskers, spectra_list, mpi_rank)
 
@@ -254,5 +242,7 @@ if __name__ == '__main__':
                 mpi_rank)
 
     # Save deltas
-    save_local_deltas(
-        spectra_list, args, qcfit.varlss_interp, n_side, mpi_rank)
+    logging_mpi("Saving deltas.", mpi_rank)
+    qcfitter.io.save_deltas(
+        spectra_list, args.outdir, qcfit.varlss_interp,
+        save_by_hpx=args.save_by_hpx, mpi_rank=mpi_rank)
