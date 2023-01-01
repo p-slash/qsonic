@@ -158,7 +158,7 @@ def generate_spectra_list_from_data(cat_by_survey, data):
     return spectra_list
 
 
-def float_range(f1, f2):
+def _float_range(f1, f2):
     # Define the function with default arguments
     def float_range_checker(arg):
         """New Type function for argparse - a float within predefined range.
@@ -207,7 +207,7 @@ def add_io_parser(parser):
         "--min-rsnr", type=float, default=0.,
         help="Minium SNR <F/sigma> above Lya.")
     iogroup.add_argument(
-        "--skip", type=float_range(0, 1), default=0.,
+        "--skip", type=_float_range(0, 1), default=0.,
         help="Skip short spectra lower than given ratio.")
     iogroup.add_argument(
         "--save-by-hpx", action="store_true",
