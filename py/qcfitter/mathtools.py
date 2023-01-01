@@ -3,7 +3,7 @@ from numba import njit
 
 
 class Fast1DInterpolator(object):
-    """Fast interpolator for equally spaced data.
+    """ Fast interpolator for equally spaced data. Extrapolated to edge values.
 
     Parameters
     ----------
@@ -39,8 +39,8 @@ class Fast1DInterpolator(object):
 
 @njit("f8[:](f8[:], f8, f8, f8[:])")
 def _fast_eval_interp1d(x, xp0, dxp, fp):
-    xx = (x - xp0) / dxp
-    idx = (np.clip(xx, 0, fp.size - 2)).astype(np.int_)
+    xx = np.clip((x - xp0) / dxp, 0, fp.size - 1 - 1e-8)
+    idx = xx.astype(np.int_)
 
     d_idx = xx - idx
     y1, y2 = fp[idx], fp[idx + 1]
