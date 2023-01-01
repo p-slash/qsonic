@@ -10,40 +10,38 @@ from qcfitter.mathtools import Fast1DInterpolator
 
 
 class TestSpecParsers(object):
-    def setup_method(self):
-        self.parser = argparse.ArgumentParser()
-
     def test_add_wave_region_parser(self):
-        qcfitter.spectrum.add_wave_region_parser(self.parser)
-        assert self.parser.parse_args([])
+        parser = argparse.ArgumentParser()
 
-        args = self.parser.parse_args(["--forest-w1", "1050"])
+        qcfitter.spectrum.add_wave_region_parser(parser)
+        assert parser.parse_args([])
+
+        args = parser.parse_args(["--forest-w1", "1050"])
         npt.assert_almost_equal(args.forest_w1, 1050.)
 
 
 class TestSpectrum(object):
     def test_generate_spectra_list_from_data(self, setup_data):
-        cat_by_survey, _, data = setup_data
+        cat_by_survey, _, data = setup_data(2)
         spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
-        assert (len(spectra_list) == 1)
-        spec = spectra_list[0]
+        assert (len(spectra_list) == 2)
+        for idx, (catrow, spec) in enumerate(zip(cat_by_survey, spectra_list)):
+            assert (spec.targetid == catrow['TARGETID'])
+            npt.assert_almost_equal(spec.z_qso, catrow['Z'])
+            npt.assert_almost_equal(spec.ra, catrow['RA'])
+            npt.assert_almost_equal(spec.dec, catrow['DEC'])
+            npt.assert_almost_equal(spec.dwave, 0.8)
+            npt.assert_almost_equal(spec.cont_params['x'], [1., 0.])
 
-        assert (spec.targetid == cat_by_survey['TARGETID'])
-        npt.assert_almost_equal(spec.z_qso, cat_by_survey['Z'])
-        npt.assert_almost_equal(spec.ra, cat_by_survey['RA'])
-        npt.assert_almost_equal(spec.dec, cat_by_survey['DEC'])
-        npt.assert_almost_equal(spec.dwave, 0.8)
-        npt.assert_almost_equal(spec.cont_params['x'], [1., 0.])
-
-        npt.assert_allclose(spec.flux['B'], data['flux']['B'][0])
-        npt.assert_allclose(spec.flux['R'], data['flux']['R'][0])
-        assert (not spec.forestflux)
-        assert (not spec.reso)
+            npt.assert_allclose(spec.flux['B'], data['flux']['B'][idx])
+            npt.assert_allclose(spec.flux['R'], data['flux']['R'][idx])
+            assert (not spec.forestflux)
+            assert (not spec.reso)
 
     def test_set_forest_region(self, setup_data):
-        cat_by_survey, _, data = setup_data
+        cat_by_survey, _, data = setup_data(1)
         spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
@@ -59,7 +57,7 @@ class TestSpectrum(object):
         assert (not spec.forestreso)
 
     def test_drop_short_arms(self, setup_data):
-        cat_by_survey, _, data = setup_data
+        cat_by_survey, _, data = setup_data(1)
         spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
@@ -73,7 +71,7 @@ class TestSpectrum(object):
         assert ('R' not in spec.forestflux.keys())
 
     def test_get_real_size(self, setup_data):
-        cat_by_survey, npix, data = setup_data
+        cat_by_survey, npix, data = setup_data(1)
         spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
@@ -87,7 +85,7 @@ class TestSpectrum(object):
         npt.assert_equal(spec.get_real_size(), 1.5 * npix)
 
     def test_is_long(self, setup_data):
-        cat_by_survey, _, data = setup_data
+        cat_by_survey, _, data = setup_data(1)
         spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
@@ -105,7 +103,7 @@ class TestSpectrum(object):
         assert (not spec.is_long(dforest_wave, skip_ratio))
 
     def test_coadd_arms_forest(self, setup_data):
-        cat_by_survey, _, data = setup_data
+        cat_by_survey, _, data = setup_data(1)
         spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
