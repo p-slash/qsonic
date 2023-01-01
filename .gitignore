@@ -1,6 +1,5 @@
-wiki/
+.pytest*
 build/
-dist/
 .ipynb*
 .DS*
 __pycache__
