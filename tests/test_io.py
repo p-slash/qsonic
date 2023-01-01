@@ -1,5 +1,6 @@
 import argparse
 import pytest
+import shutil
 
 import fitsio
 import numpy as np
@@ -33,19 +34,21 @@ class TestIOParsers(object):
 
 class TestIOReading(object):
     def test_read_onehealpix_file_data(self, my_setup_fits):
-        cat_by_survey, input_dir, pixnum, arms_to_keep, b_wave = my_setup_fits
-        nsize = b_wave.size
+        cat_by_survey, input_dir, pixnum, xarms, indata = my_setup_fits
 
-        data = qcfitter.io.read_onehealpix_file_data(
-            cat_by_survey, input_dir, pixnum, arms_to_keep, skip_resomat=True)
+        outdata = qcfitter.io.read_onehealpix_file_data(
+            cat_by_survey, input_dir, pixnum, xarms, skip_resomat=True)
 
-        assert (len(data['wave']) == 1)
-        assert (len(data['flux']) == 1)
-        assert (data['wave']['B'].size == nsize)
-        assert (data['flux']['B'].shape == (2, nsize))
-        npt.assert_allclose(data['wave']['B'], b_wave)
-        npt.assert_allclose(data['flux']['B'], 1)
-        npt.assert_allclose(data['ivar']['B'], 2)
+        for key, inval in indata.items():
+            assert (key in outdata)
+            if key == 'reso':
+                assert (not outdata[key])
+                assert (not inval)
+                continue
+            for arm in xarms:
+                assert (arm in outdata[key])
+                assert (arm in inval)
+                npt.assert_allclose(outdata[key][arm], inval[arm])
 
     def test_save_deltas(self):
         qcfitter.io.save_deltas([], "", None)
@@ -55,30 +58,26 @@ class TestIOReading(object):
             qcfitter.io.save_deltas([], "outdir", None)
 
     # Including this test fails spectrum tests?
-    # def test_read_spectra(self, my_setup_fits):
-    #     cat_by_survey, input_dir, _, arms_to_keep, b_wave = my_setup_fits
+    def test_read_spectra(self, my_setup_fits):
+        cat_by_survey, input_dir, _, xarms, data = my_setup_fits
 
-    #     slist = qcfitter.io.read_spectra(
-    #         cat_by_survey, input_dir, arms_to_keep, False, True)
+        slist = qcfitter.io.read_spectra(
+            cat_by_survey, input_dir, xarms, False, True)
 
-    #     assert (len(slist) == 2)
-    #     for spec in slist:
-    #         npt.assert_allclose(spec.wave['B'], b_wave)
-    #         npt.assert_allclose(spec.flux['B'], 1)
-    #         npt.assert_allclose(spec.ivar['B'], 2)
+        assert (len(slist) == 1)
+        for spec in slist:
+            for arm in xarms:
+                npt.assert_allclose(spec.wave[arm], data['wave'][arm])
+                npt.assert_allclose(spec.flux[arm], data['flux'][arm][0])
+                npt.assert_allclose(spec.ivar[arm], data['ivar'][arm][0])
 
 
 @pytest.fixture
-def my_setup_fits(tmp_path):
-    cat_dtype = np.dtype([
-        ('TARGETID', '>i8'), ('Z', '>f8'), ('RA', '>f8'), ('DEC', '>f8'),
-        ('HPXPIXEL', '>i8'), ('SURVEY', '<U4')])
+def my_setup_fits(tmp_path, setup_data):
+    cat_by_survey, _, data = setup_data
     pixnum = 8258
-    arms_to_keep = ['B']
-    cat_by_survey = np.array([
-        (39627939372861215, 2.328, 229.861, 6.1925, pixnum, b'main'),
-        (39627939372861216, 2.328, 229.861, 6.1925, pixnum, b'main')],
-        dtype=cat_dtype)
+    cat_by_survey['HPXPIXEL'] = pixnum
+    xarms = data['wave'].keys()
 
     d = tmp_path / "main"
     d.mkdir()
@@ -89,17 +88,19 @@ def my_setup_fits(tmp_path):
     d = d / f"{pixnum}"
     d.mkdir()
     fname = d / "coadd-main-dark-8258.fits"
-    nsize = 1000
 
-    b_wave = 3600. + 0.8 * np.arange(nsize)
     with fitsio.FITS(fname, 'rw', clobber=True) as fts:
         fts.write(cat_by_survey, extname="FIBERMAP")
-        fts.write(b_wave, extname="B_WAVELENGTH")
-        fts.write(np.ones((2, nsize)), extname="B_FLUX")
-        fts.write(2 * np.ones((2, nsize)), extname="B_IVAR")
-        fts.write(np.zeros((2, nsize), dtype='i4'), extname="B_MASK")
+        for arm in xarms:
+            shape = data['flux'][arm].shape
+            fts.write(data['wave'][arm], extname=f"{arm}_WAVELENGTH")
+            fts.write(data['flux'][arm], extname=f"{arm}_FLUX")
+            fts.write(data['ivar'][arm], extname=f"{arm}_IVAR")
+            fts.write(np.zeros(shape, dtype='i4'), extname=f"{arm}_MASK")
 
-    return cat_by_survey, tmp_path, pixnum, arms_to_keep, b_wave
+    yield cat_by_survey, tmp_path, pixnum, xarms, data
+
+    shutil.rmtree(tmp_path / "main")
 
 
 if __name__ == '__main__':
