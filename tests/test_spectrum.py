@@ -1,4 +1,5 @@
 import argparse
+import copy
 import pytest
 
 import numpy as np
@@ -131,8 +132,9 @@ class TestSpectrum(object):
         assert (not spec.is_long(dforest_wave, skip_ratio))
 
     def test_coadd_arms_forest(self):
+        # var_lss zero
         varlss_interp = Fast1DInterpolator(0, 1, np.zeros(3))
-        spec = self.spectra_list[0]
+        spec = copy.deepcopy(self.spectra_list[0])
         spec.set_forest_region(3600., 6000., 1050., 1300.)
         spec.cont_params['valid'] = True
         spec.cont_params['cont'] = {
@@ -143,6 +145,28 @@ class TestSpectrum(object):
         assert ('brz' in spec.forestflux.keys())
         npt.assert_almost_equal(spec.forestflux['brz'], 2.1)
         npt.assert_almost_equal(spec.cont_params['cont']['brz'], 1.)
+        w = (spec.forestwave['brz'] < self.data['wave']['R'][0])\
+            | (spec.forestwave['brz'] > self.data['wave']['B'][-1])
+        npt.assert_almost_equal(spec.forestivar['brz'][w], 1)
+        npt.assert_almost_equal(spec.forestivar['brz'][~w], 2)
+
+        # var_lss non-zero
+        varlss_interp = Fast1DInterpolator(0, 1, 0.5 * np.ones(3))
+        spec = copy.deepcopy(self.spectra_list[0])
+        spec.set_forest_region(3600., 6000., 1050., 1300.)
+        spec.cont_params['valid'] = True
+        spec.cont_params['cont'] = {
+            arm: np.ones_like(farm) for arm, farm in spec.forestflux.items()
+        }
+        spec.coadd_arms_forest(varlss_interp)
+
+        assert ('brz' in spec.forestflux.keys())
+        npt.assert_almost_equal(spec.forestflux['brz'], 2.1)
+        npt.assert_almost_equal(spec.cont_params['cont']['brz'], 1.)
+        w = (spec.forestwave['brz'] < self.data['wave']['R'][0])\
+            | (spec.forestwave['brz'] > self.data['wave']['B'][-1])
+        npt.assert_almost_equal(spec.forestivar['brz'][w], 1)
+        npt.assert_almost_equal(spec.forestivar['brz'][~w], 2)
 
 
 if __name__ == '__main__':
