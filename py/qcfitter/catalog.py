@@ -6,18 +6,25 @@ from numpy.lib.recfunctions import rename_fields, append_fields
 from qcfitter.mpi_utils import logging_mpi, balance_load
 
 _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
-_accepted_columns = [
-    'TARGETID', 'Z', 'TARGET_RA', 'RA', 'TARGET_DEC', 'DEC',
-    'SURVEY', 'HPXPIXEL', 'VMIN_CIV_450', 'VMAX_CIV_450',
-    'VMIN_CIV_2000', 'VMAX_CIV_2000'
+_required_columns = [
+    set(['TARGETID']), set(['Z']), set(['TARGET_RA', 'RA']),
+    set(['TARGET_DEC', 'DEC'])
+]
+_optional_columns = [
+    'SURVEY', 'HPXPIXEL', 'VMIN_CIV_450', 'VMAX_CIV_450', 'VMIN_CIV_2000',
+    'VMAX_CIV_2000'
+]
+_all_columns = [
+    col for reqset in (_required_columns + _optional_columns) for col in reqset
 ]
 
 
 def read_local_qso_catalog(
-        filename, comm, mpi_rank, mpi_size,
+        filename, comm, mpi_rank, mpi_size, is_mock,
         n_side=64, keep_surveys=None, zmin=2.1, zmax=6.0):
-    """Returns quasar catalog object for mpi_rank. It is sorted in the
-    following order: HPXPIXEL, SURVEY (if applicable), TARGETID
+    """ Returns quasar catalog object for mpi_rank. It is sorted in the
+    following order: HPXPIXEL, SURVEY (if applicable), TARGETID. BAL info
+    included if available. It is required for BAL masking.
 
     Arguments
     ----------
@@ -29,6 +36,8 @@ def read_local_qso_catalog(
         Rank of the MPI process
     mpi_size: int
         Size of MPI processes
+    is_mock: bool
+        If the catalog is for mocks.
     n_side: int (default: 64)
         Healpix nside.
     keep_surveys: list (default: all)
@@ -42,13 +51,17 @@ def read_local_qso_catalog(
     ----------
     local_queue: list of ndarray
         list of sorted catalogs.
-        BAL info included if available (req. for BAL masking)
     """
     catalog = None
 
     if mpi_rank == 0:
-        catalog = _read_catalog_on_master(
-            filename, n_side, keep_surveys, zmin, zmax)
+        try:
+            catalog = _read(filename)
+            catalog = _validate_adjust_column_names(catalog, is_mock)
+            catalog = _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax)
+        except Exception as e:
+            logging_mpi(f"{e}", 0, "error")
+            catalog = None
 
     catalog = comm.bcast(catalog, root=0)
     if catalog is None:
@@ -59,6 +72,23 @@ def read_local_qso_catalog(
 
 
 def _get_local_queue(catalog, mpi_rank, mpi_size):
+    """ Take a 'HPXPIXEL' sorted `catalog` and assign a list of catalogs to
+    mpi_rank
+
+    Arguments
+    ----------
+    catalog: ndarray
+        'HPXPIXEL' sorted catalog.
+    mpi_rank: int
+        Rank of the MPI process
+    mpi_size: int
+        Size of MPI processes
+
+    Returns
+    ----------
+    local_queue: list of ndarray
+        list of sorted catalogs.
+    """
     # We decide forest filename list
     # Group into unique pixels
     unique_pix, s = np.unique(catalog['HPXPIXEL'], return_index=True)
@@ -73,7 +103,65 @@ def _get_local_queue(catalog, mpi_rank, mpi_size):
     return balance_load(split_catalog, mpi_size, mpi_rank)
 
 
+def _validate_adjust_column_names(catalog, is_mock):
+    """ Validate `catalog` for required columns in `_required_columns`.
+    'SURVEY' is also required for data. 'TARGET_{RA, DEC}' is transformed to
+    'RA' and 'DEC' in return.
+
+    Arguments
+    ----------
+    catalog: ndarray
+        Catalog.
+    is_mock: bool
+        If the catalog is for mocks, does not perform 'SURVEY' check.
+
+    Returns
+    ----------
+    catalog: ndarray
+        Catalog. No checks are performed.
+    """
+    colnames = catalog.dtype.names
+    # Check if required columns are present
+    for reqset in _required_columns:
+        if not reqset.intersection(colnames):
+            raise Exception(
+                "One of these columns must be present in the catalog: "
+                f"{', '.join(reqset)}!")
+
+    if not is_mock and 'SURVEY' not in colnames:
+        raise Exception(
+            "SURVEY column must be present in the catalog for data!")
+
+    logging_mpi(f"There are {catalog.size} quasars in the catalog.", 0)
+
+    if catalog.size != np.unique(catalog['TARGETID']).size:
+        raise Exception("There are duplicate TARGETIDs in catalog!")
+
+    # Adjust column names
+    colname_map = {}
+    for x in ['RA', 'DEC']:
+        if f'TARGET_{x}' in colnames and x not in colnames:
+            colname_map[f'TARGET_{x}'] = x
+
+    if colname_map:
+        catalog = rename_fields(catalog, colname_map)
+
+    return catalog
+
+
 def _read(filename):
+    """ Reads FITS file catalog with all columns present that are in
+    `_all_columns`
+
+    Arguments
+    ----------
+    filename: str
+
+    Returns
+    ----------
+    catalog: ndarray
+        Catalog. No checks are performed.
+    """
     logging_mpi(f'Reading catalogue from {filename}', 0)
     fitsfile = fitsio.FITS(filename)
     extnames = [hdu.get_extname() for hdu in fitsfile]
@@ -87,30 +175,30 @@ def _read(filename):
         cat_hdu = cat_hdu.pop()
 
     colnames = fitsfile[cat_hdu].get_colnames()
-    keep_columns = [col for col in colnames if col in _accepted_columns]
+    keep_columns = [col for col in colnames if col in _all_columns]
     catalog = np.array(fitsfile[cat_hdu].read(columns=keep_columns))
     fitsfile.close()
 
-    return catalog, keep_columns
+    return catalog
 
 
 def _add_healpix(catalog, n_side, keep_columns):
     if 'HPXPIXEL' not in keep_columns:
-        pixnum = ang2pix(n_side, catalog['RA'], catalog['DEC'],
-                         lonlat=True, nest=True)
+        pixnum = ang2pix(
+            n_side, catalog['RA'], catalog['DEC'], lonlat=True, nest=True)
         catalog = append_fields(catalog, 'HPXPIXEL', pixnum, dtypes=int)
 
     return catalog
 
 
-def _read_catalog_on_master(filename, n_side, keep_surveys, zmin, zmax):
-    """Returns quasar catalog object. It is sorted in the following order:
+def _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax):
+    """ Returns quasar catalog object. It is sorted in the following order:
     HPXPIXEL, SURVEY (if applicable), TARGETID
 
     Arguments
     ----------
-    filename: str
-        Filename to catalog.
+    catalog: ndarray
+        Catalog.
     n_side: int
         Healpix nside.
     keep_surveys: list
@@ -125,26 +213,17 @@ def _read_catalog_on_master(filename, n_side, keep_surveys, zmin, zmax):
     catalog: ndarray
         Sorted catalog. BAL info included if available (req. for BAL masking)
     """
-    catalog, keep_columns = _read(filename)
-    logging_mpi(f"There are {catalog.size} quasars in the catalog.", 0)
-
-    if catalog.size != np.unique(catalog['TARGETID']).size:
-        logging_mpi("There are duplicate TARGETIDs in catalog!", 0, "error")
-        return None
+    colnames = catalog.dtype.names
 
     # Redshift cuts
     w = (catalog['Z'] >= zmin) & (catalog['Z'] <= zmax)
     logging_mpi(f"There are {w.sum()} quasars in the redshift range.", 0)
     catalog = catalog[w]
 
-    if 'TARGET_RA' in keep_columns and 'RA' not in keep_columns:
-        catalog = rename_fields(
-            catalog, {'TARGET_RA': 'RA', 'TARGET_DEC': 'DEC'})
-
     sort_order = ['HPXPIXEL', 'TARGETID']
     # Filter all the objects in the catalogue not belonging to the specified
     # surveys.
-    if 'SURVEY' in keep_columns and keep_surveys is not None:
+    if 'SURVEY' in colnames and keep_surveys is not None:
         w = np.isin(catalog["SURVEY"], keep_surveys)
         catalog = catalog[w]
         if len(keep_surveys) > 1:
@@ -153,10 +232,9 @@ def _read_catalog_on_master(filename, n_side, keep_surveys, zmin, zmax):
             f"There are {w.sum()} quasars in given surveys {keep_surveys}.", 0)
 
     if catalog.size == 0:
-        logging_mpi("Empty quasar catalogue.", 0, "error")
-        return None
+        raise Exception("Empty quasar catalogue.")
 
-    catalog = _add_healpix(catalog, n_side, keep_columns)
+    catalog = _add_healpix(catalog, n_side, colnames)
     catalog.sort(order=sort_order)
 
     return catalog

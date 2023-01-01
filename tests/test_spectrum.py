@@ -45,13 +45,9 @@ class TestSpectrum(object):
         cat_dtype = np.dtype([
             ('TARGETID', '>i8'), ('Z', '>f8'), ('RA', '>f8'), ('DEC', '>f8'),
             ('HPXPIXEL', '>i8'), ('SURVEY', '<U4')])
-        self.cat_by_survey = np.empty(1, dtype=cat_dtype)
-        self.cat_by_survey['TARGETID'] = 39627939372861215
-        self.cat_by_survey['Z'] = 2.32799694
-        self.cat_by_survey['RA'] = 229.86143284
-        self.cat_by_survey['DEC'] = 6.19250824
-        self.cat_by_survey['HPXPIXEL'] = 8258
-        self.cat_by_survey['SURVEY'] = "main"
+        self.cat_by_survey = np.array([
+            (39627939372861215, 2.328, 229.861, 6.1925, 8258, b'main')],
+            dtype=cat_dtype)
 
         self.npix = 1000
         self.data = {
