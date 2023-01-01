@@ -1,4 +1,5 @@
 import pytest
+import os
 
 import fitsio
 import numpy as np
@@ -27,6 +28,8 @@ class TestCatalog(object):
                 extname=list(qcfitter.catalog._accepted_extnames)[0])
 
         catalog = qcfitter.catalog._read(fname)
+        os.remove(fname)
+
         colnames = catalog.dtype.names
         assert ('DUMMY' not in colnames)
         assert ('SURVEY' not in colnames)
