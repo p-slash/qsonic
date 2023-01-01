@@ -1,5 +1,6 @@
-import pytest
 import argparse
+import pytest
+
 import numpy as np
 import numpy.testing as npt
 
@@ -9,7 +10,7 @@ from qcfitter.mathtools import Fast1DInterpolator
 
 class TestSpecParsers(object):
     def setup_method(self):
-        self.parser = argparse.ArgumentParser(exit_on_error=False)
+        self.parser = argparse.ArgumentParser()
 
     def test_add_io_parser(self):
         qcfitter.spectrum.add_io_parser(self.parser)
@@ -23,9 +24,11 @@ class TestSpecParsers(object):
             text = "--catalog incat -o outdir"
             self.parser.parse_args(text.split(' '))
 
+        with pytest.raises(SystemExit):
             text = "--input-dir indir --catalog incat --arms T"
             self.parser.parse_args(text.split(' '))
 
+        with pytest.raises(SystemExit):
             text = "--input-dir indir --catalog incat --skip 1.2"
             self.parser.parse_args(text.split(' '))
 
