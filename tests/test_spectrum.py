@@ -1,9 +1,40 @@
 import pytest
+import argparse
 import numpy as np
 import numpy.testing as npt
 
 import qcfitter.spectrum
 from qcfitter.mathtools import Fast1DInterpolator
+
+
+class TestSpecParsers(object):
+    def setup_method(self):
+        self.parser = argparse.ArgumentParser(exit_on_error=False)
+
+    def test_add_io_parser(self):
+        qcfitter.spectrum.add_io_parser(self.parser)
+        text = "--input-dir indir --catalog incat -o outdir"
+        args = self.parser.parse_args(text.split(' '))
+        assert (args.input_dir == "indir")
+        assert (args.catalog == "incat")
+        assert (args.outdir == "outdir")
+
+        with pytest.raises(SystemExit):
+            text = "--catalog incat -o outdir"
+            self.parser.parse_args(text.split(' '))
+
+            text = "--input-dir indir --catalog incat --arms T"
+            self.parser.parse_args(text.split(' '))
+
+            text = "--input-dir indir --catalog incat --skip 1.2"
+            self.parser.parse_args(text.split(' '))
+
+    def test_add_wave_region_parser(self):
+        qcfitter.spectrum.add_wave_region_parser(self.parser)
+        assert self.parser.parse_args([])
+
+        args = self.parser.parse_args(["--forest-w1", "1050"])
+        npt.assert_almost_equal(args.forest_w1, 1050.)
 
 
 class TestSpectrum(object):
@@ -65,6 +96,40 @@ class TestSpectrum(object):
         npt.assert_allclose(spec.forestivar['B'], spec.forestivar_sm['B'])
         assert ('R' not in spec.forestflux.keys())
         assert (not spec.forestreso)
+
+    def test_drop_short_arms(self):
+        spec = self.spectra_list[0]
+        spec.set_forest_region(3600., 6000., 1050., 1210.)
+
+        assert ('R' in spec.forestflux.keys())
+        assert (not spec.cont_params['cont'])
+
+        spec.drop_short_arms(1050., 1180., 0.5)
+        assert ('R' not in spec.forestflux.keys())
+
+    def test_get_real_size(self):
+        spec = self.spectra_list[0]
+        npt.assert_equal(spec.get_real_size(), 0)
+
+        spec.set_forest_region(3600., 6000., 1000., 2000.)
+        npt.assert_equal(spec.get_real_size(), 2 * self.npix)
+
+        spec.set_forest_region(3600., 4400., 1000., 2000.)
+        npt.assert_equal(spec.get_real_size(), 1.5 * self.npix)
+
+    def test_is_long(self):
+        dforest_wave = 1180. - 1050.
+        skip_ratio = 0.5
+
+        spec = self.spectra_list[0]
+        assert (not spec.is_long(dforest_wave, skip_ratio))
+
+        spec.set_forest_region(3600., 6000., 1000., 2000.)
+        assert (spec.is_long(dforest_wave, skip_ratio))
+
+        spec._forestivar = {}
+        spec.set_forest_region(3600., 6000., 1120., 1130.)
+        assert (not spec.is_long(dforest_wave, skip_ratio))
 
     def test_coadd_arms_forest(self):
         varlss_interp = Fast1DInterpolator(0, 1, np.zeros(3))
