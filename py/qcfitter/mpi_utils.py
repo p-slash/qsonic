@@ -4,10 +4,10 @@ import fitsio
 import numpy as np
 
 
-def mpi_parse(parser, comm, mpi_rank):
+def mpi_parse(parser, comm, mpi_rank, options=None):
     if mpi_rank == 0:
         try:
-            args = parser.parse_args()
+            args = parser.parse_args(options)
         except SystemExit:
             args = -1
     else:
