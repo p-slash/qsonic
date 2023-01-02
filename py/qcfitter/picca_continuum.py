@@ -394,6 +394,10 @@ class PiccaContinuumFitter(object):
             [self.rfwave, self.meancont_interp.fp, self.meancont_interp.ep],
             names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
             extname=f'CONT-{it}')
+
+        if self.varlss_fitter is None:
+            return
+
         fattr.write(
             [self.varlss_fitter.waveobs, self.varlss_interp.fp,
              self.varlss_interp.ep],
