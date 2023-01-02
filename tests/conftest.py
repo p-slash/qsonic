@@ -42,7 +42,7 @@ def setup_data():
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--with-mpi", action="store_true", default=False,
+        "--mpi", action="store_true", default=False,
         help="Run MPI tests"
     )
 
@@ -52,9 +52,9 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(config, items):
-    if config.getoption("--with-mpi"):
+    if config.getoption("--mpi"):
         return
-    skip_mpi = pytest.mark.skip(reason="need --with-mpi option to run")
+    skip_mpi = pytest.mark.skip(reason="need --mpi option to run")
     for item in items:
         if "mpi" in item.keywords:
             item.add_marker(skip_mpi)
