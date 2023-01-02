@@ -283,8 +283,12 @@ class PiccaContinuumFitter(object):
 
         self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
         self.comm.Allreduce(MPI.IN_PLACE, counts)
-        norm_flux /= counts
-        std_flux = 1 / np.sqrt(counts)
+        w = counts > 0
+        std_flux = np.empty(self.nbins)
+        norm_flux[w] /= counts[w]
+        norm_flux[~w] = np.mean(norm_flux[w])
+        std_flux[w] = 1 / np.sqrt(counts[w])
+        std_flux[~w] = 2 * np.mean(std_flux[w])
 
         # Smooth new estimates
         spl = UnivariateSpline(self.rfwave, norm_flux, w=1 / std_flux)
