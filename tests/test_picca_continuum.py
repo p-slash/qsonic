@@ -50,7 +50,7 @@ def test_add_parser(setup_parser):
     npt.assert_almost_equal(args.rfdwave, 1.2)
 
 
-@pytest.mark.mpi(min_size=2)
+@pytest.mark.mpi
 class TestPiccaContinuum(object):
     def test_init(self, setup_parser, get_fiducials):
         from mpi4py import MPI
@@ -131,6 +131,57 @@ class TestPiccaContinuum(object):
         qcfit.fit_continuum(spec)
         assert (spec.cont_params['valid'])
         npt.assert_almost_equal(spec.cont_params['x'], [2.1, 0])
+
+    def test_project_normalize_meancont(self, setup_parser):
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        mpi_rank = comm.Get_rank()
+        mpi_size = comm.Get_size()
+        assert mpi_size > 0
+
+        parser = setup_parser
+        args = mpi_parse(parser, comm, mpi_rank, ["--cont-order", "3"])
+        qcfit = PiccaContinuumFitter(args)
+        x = np.log(qcfit.rfwave / qcfit.rfwave[0]) / qcfit._denom
+        x = 2 * x - 1
+
+        # add Legendre-like distortions
+        new_meancont = 1.5 * np.ones_like(x)
+        for ci in range(1, args.cont_order + 1):
+            new_meancont += 0.5 / ci * x**ci
+
+        new_meancont, _ = qcfit._project_normalize_meancont(new_meancont)
+        npt.assert_allclose(new_meancont, 1, rtol=1e-3)
+        npt.assert_almost_equal(new_meancont.mean(), 1, decimal=4)
+
+    def test_update_mean_cont(self, setup_parser, setup_data):
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        mpi_rank = comm.Get_rank()
+        mpi_size = comm.Get_size()
+        assert mpi_size > 0
+
+        parser = setup_parser
+        # There are empty bins in the rest-frame, they should be extrapolated
+        # correctly.
+        args = mpi_parse(parser, comm, mpi_rank, [])
+        qcfit = PiccaContinuumFitter(args)
+
+        cat_by_survey, npix, data = setup_data(3)
+        spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
+            cat_by_survey, data)
+
+        for spec in spectra_list:
+            spec.set_forest_region(
+                3600., 6000., args.forest_w1, args.forest_w2)
+            spec.cont_params['valid'] = True
+            spec.cont_params['cont'] = {}
+            for arm, wave_arm in spec.forestwave.items():
+                spec.cont_params['cont'][arm] = np.ones_like(wave_arm)
+
+        qcfit.update_mean_cont(spectra_list, False)
+        npt.assert_allclose(qcfit.meancont_interp.fp, 1, rtol=1e-3)
+        npt.assert_almost_equal(qcfit.meancont_interp.fp.mean(), 1)
 
 
 if __name__ == '__main__':
