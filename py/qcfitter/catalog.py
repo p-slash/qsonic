@@ -1,3 +1,5 @@
+import warnings
+
 import fitsio
 from healpy import ang2pix
 import numpy as np
@@ -168,9 +170,9 @@ def _read(filename):
     cat_hdu = _accepted_extnames.intersection(extnames)
     if not cat_hdu:
         cat_hdu = 1
-        logging_mpi(
+        warnings.warn(
             "Catalog HDU not found by hduname. Using extension 1.",
-            0, "warning")
+            RuntimeWarning)
     else:
         cat_hdu = cat_hdu.pop()
 
