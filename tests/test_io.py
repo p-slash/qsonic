@@ -34,10 +34,10 @@ class TestIOParsers(object):
 
 class TestIOReading(object):
     def test_read_onehealpix_file_data(self, my_setup_fits):
-        cat_by_survey, input_dir, pixnum, xarms, indata = my_setup_fits
+        cat_by_survey, input_dir, xarms, indata = my_setup_fits
 
         outdata, _ = qcfitter.io.read_onehealpix_file_data(
-            cat_by_survey, input_dir, pixnum, xarms, skip_resomat=True)
+            cat_by_survey, input_dir, xarms, skip_resomat=True)
 
         for key, inval in indata.items():
             assert (key in outdata)
@@ -58,7 +58,7 @@ class TestIOReading(object):
             qcfitter.io.save_deltas([], "outdir", None)
 
     def test_read_spectra(self, my_setup_fits):
-        cat_by_survey, input_dir, _, xarms, data = my_setup_fits
+        cat_by_survey, input_dir, xarms, data = my_setup_fits
 
         slist = qcfitter.io.read_spectra(
             cat_by_survey, input_dir, xarms, False, True)
@@ -97,7 +97,7 @@ def my_setup_fits(tmp_path, setup_data):
             fts.write(data['ivar'][arm], extname=f"{arm}_IVAR")
             fts.write(np.zeros(shape, dtype='i4'), extname=f"{arm}_MASK")
 
-    yield cat_by_survey, tmp_path, pixnum, xarms, data
+    yield cat_by_survey, tmp_path, xarms, data
 
     shutil.rmtree(tmp_path / "main")
 

@@ -20,6 +20,14 @@ class PiccaContinuumFitter(object):
     """
     @staticmethod
     def add_parser(parser):
+        """ Adds PiccaContinuumFitter related arguments to parser. These
+        arguments are grouped under 'Continuum fitting options'. All of them
+        come with defaults, none are required.
+
+        Arguments
+        ---------
+        parser: argparse.ArgumentParser
+        """
         cont_group = parser.add_argument_group('Continuum fitting options')
 
         cont_group.add_argument(
