@@ -36,7 +36,7 @@ class TestIOReading(object):
     def test_read_onehealpix_file_data(self, my_setup_fits):
         cat_by_survey, input_dir, pixnum, xarms, indata = my_setup_fits
 
-        outdata = qcfitter.io.read_onehealpix_file_data(
+        outdata, _ = qcfitter.io.read_onehealpix_file_data(
             cat_by_survey, input_dir, pixnum, xarms, skip_resomat=True)
 
         for key, inval in indata.items():

@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import fitsio
 from scipy.optimize import minimize, curve_fit
@@ -383,9 +385,8 @@ class PiccaContinuumFitter(object):
                 logging_mpi("Iteration has converged.", self.mpi_rank)
                 break
 
-        if not has_converged:
-            logging_mpi("Iteration has NOT converged.", self.mpi_rank,
-                        "warning")
+        if not has_converged and self.mpi_rank == 0:
+            warnings.warn("Iteration has NOT converged.", RuntimeWarning)
 
         fattr.close()
         logging_mpi("All continua are fit.", self.mpi_rank)
@@ -397,6 +398,10 @@ class PiccaContinuumFitter(object):
             [self.rfwave, self.meancont_interp.fp, self.meancont_interp.ep],
             names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
             extname=f'CONT-{it}')
+
+        if self.varlss_fitter is None:
+            return
+
         fattr.write(
             [self.varlss_fitter.waveobs, self.varlss_interp.fp,
              self.varlss_interp.ep],
@@ -517,10 +522,11 @@ class VarLSSFitter(object):
             w = self.num_pixels[wbinslice] > VarLSSFitter.min_no_pix
             w &= self.num_qso[wbinslice] > VarLSSFitter.min_no_qso
 
-            if w.sum() == 0:
-                err_msg = ("Not enough statistics for VarLSSFitter at"
-                           f" wave_obs: {self.waveobs[iwave]:.2f}.")
-                logging_mpi(err_msg, mpi_rank, "warning")
+            if w.sum() == 0 and mpi_rank == 0:
+                warnings.warn(
+                    "Not enough statistics for VarLSSFitter at"
+                    f" wave_obs: {self.waveobs[iwave]:.2f}.",
+                    RuntimeWarning)
                 continue
 
             try:
@@ -535,11 +541,12 @@ class VarLSSFitter(object):
                     bounds=(0, 2)
                 )
             except Exception as e:
-                err_msg = (
-                    "VarLSSFitter failed at wave_obs: "
-                    f"{self.waveobs[iwave]:.2f}. "
-                    f"Reason: {e}. Extrapolating.")
-                logging_mpi(err_msg, mpi_rank, "warning")
+                if mpi_rank == 0:
+                    warnings.warn(
+                        "VarLSSFitter failed at wave_obs: "
+                        f"{self.waveobs[iwave]:.2f}. "
+                        f"Reason: {e}. Extrapolating.",
+                        RuntimeWarning)
             else:
                 var_lss[iwave] = pfit[0]
                 std_var_lss[iwave] = np.sqrt(pcov[0, 0])
@@ -550,9 +557,9 @@ class VarLSSFitter(object):
             self.waveobs[w], var_lss[w], w=1 / std_var_lss[w])
 
         nfails = np.sum(var_lss == 0)
-        if nfails > 0:
-            logging_mpi(
+        if nfails > 0 and mpi_rank == 0:
+            warnings.warn(
                 f"VarLSSFitter failed and extrapolated at {nfails} points.",
-                mpi_rank, "warning")
+                RuntimeWarning)
 
         return spl(self.waveobs), std_var_lss
