@@ -5,6 +5,13 @@ import fitsio
 
 
 def add_mask_parser(parser):
+    """ Adds masking related arguments to parser. These arguments are grouped
+    under 'Masking'.
+
+    Arguments
+    ---------
+    parser: argparse.ArgumentParser
+    """
     mask_group = parser.add_argument_group('Masking')
 
     mask_group.add_argument(
