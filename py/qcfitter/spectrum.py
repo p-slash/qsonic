@@ -4,6 +4,14 @@ from qcfitter.mathtools import get_smooth_ivar
 
 
 def add_wave_region_parser(parser):
+    """ Adds wavelength analysis related arguments to parser. These
+    arguments are grouped under 'Wavelength analysis region'. All of them
+    come with defaults, none are required.
+
+    Arguments
+    ---------
+    parser: argparse.ArgumentParser
+    """
     wave_group = parser.add_argument_group('Wavelength analysis region')
     wave_group.add_argument(
         "--wave1", type=float, default=3600.,

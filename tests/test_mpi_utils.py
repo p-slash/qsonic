@@ -5,6 +5,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.testing as npt
 
+from qcfitter.io import add_io_parser
 import qcfitter.mpi_utils
 import qcfitter.spectrum
 
@@ -18,7 +19,7 @@ class TestMPIUtils(TestCase):
 
         mpi_rank = comm.Get_rank()
         parser = argparse.ArgumentParser()
-        qcfitter.spectrum.add_io_parser(parser)
+        add_io_parser(parser)
 
         options = "--input-dir indir --catalog incat -o outdir".split(' ')
         args = qcfitter.mpi_utils.mpi_parse(parser, comm, mpi_rank, options)
