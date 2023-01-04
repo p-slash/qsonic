@@ -89,7 +89,7 @@ def read_spectra(
 
     Raises
     ---------
-    Warning if number of quasars in the healpix file does not match the
+    RuntimeWarning if number of quasars in the healpix file does not match the
     catalog.
     """
     spectra_list = []
@@ -239,7 +239,7 @@ def _read_onehealpix_file(
 
     Raises
     ---------
-    Warning if number of quasars in the healpix file does not match the
+    RuntimeWarning if number of quasars in the healpix file does not match the
     catalog.
     """
     # Assume it is sorted
@@ -257,7 +257,7 @@ def _read_onehealpix_file(
             f"healpix:{common_targetids.size}!", RuntimeWarning)
 
     fbrmap = fbrmap[idx_fbr]
-    sort_idx = np.argsort(fbrmap.argsort())
+    sort_idx = np.argsort(idx_fbr)
 
     data = {
         'wave': {},
@@ -319,7 +319,7 @@ def read_onehealpix_file_data(
 
     Raises
     ---------
-    Warning if number of quasars in the healpix file does not match the
+    RuntimeWarning if number of quasars in the healpix file does not match the
     catalog.
     """
     survey = cat_by_survey['SURVEY'][0]
@@ -362,7 +362,7 @@ def read_onehealpix_file_mock(
 
     Raises
     ---------
-    Warning if number of quasars in the healpix file does not match the
+    RuntimeWarning if number of quasars in the healpix file does not match the
     catalog.
     """
     pixnum = catalog_hpx['HPXPIXEL'][0]

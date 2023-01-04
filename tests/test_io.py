@@ -63,17 +63,33 @@ class TestIOReading(object):
         slist = qcfitter.io.read_spectra(
             cat_by_survey, input_dir, xarms, False, True)
 
-        assert (len(slist) == 2)
-        for spec in slist:
+        assert (len(slist) == cat_by_survey.size)
+        for jj, spec in enumerate(slist):
             for arm in xarms:
                 npt.assert_allclose(spec.wave[arm], data['wave'][arm])
-                npt.assert_allclose(spec.flux[arm], data['flux'][arm][0])
-                npt.assert_allclose(spec.ivar[arm], data['ivar'][arm][0])
+                npt.assert_allclose(spec.flux[arm], data['flux'][arm][jj])
+                npt.assert_allclose(spec.ivar[arm], data['ivar'][arm][jj])
+
+        # Test extra targetid in catalog
+        ens_ = 3
+        cat_by_survey2 = np.concatenate((cat_by_survey, cat_by_survey[-ens_:]))
+        cat_by_survey2[-ens_:]['TARGETID'] += 20
+        npt.assert_array_equal(cat_by_survey, cat_by_survey2[:-ens_])
+        with pytest.warns(RuntimeWarning):
+            slist = qcfitter.io.read_spectra(
+                cat_by_survey2, input_dir, xarms, False, True)
+
+        assert (len(slist) == cat_by_survey.size)
+        for jj, spec in enumerate(slist):
+            for arm in xarms:
+                npt.assert_allclose(spec.wave[arm], data['wave'][arm])
+                npt.assert_allclose(spec.flux[arm], data['flux'][arm][jj])
+                npt.assert_allclose(spec.ivar[arm], data['ivar'][arm][jj])
 
 
 @pytest.fixture()
 def my_setup_fits(tmp_path, setup_data):
-    cat_by_survey, _, data = setup_data(2)
+    cat_by_survey, _, data = setup_data(5)
     pixnum = 8258
     cat_by_survey['HPXPIXEL'] = pixnum
     xarms = data['wave'].keys()
