@@ -16,7 +16,8 @@ def setup_data():
         cat_by_survey = np.array(
             [(39627939372861215, 2.328, 229.86, 6.19, 8258, b'main')] * nspec,
             dtype=cat_dtype)
-        cat_by_survey['TARGETID'] += np.arange(nspec)
+        inc = np.arange(nspec)
+        cat_by_survey['TARGETID'] += inc
 
         npix = 1000
         data = {
@@ -24,8 +25,8 @@ def setup_data():
                 'B': 3600. + 0.8 * np.arange(npix),
                 'R': 4000. + 0.8 * np.arange(npix)},
             'flux': {
-                'B': 2.1 * np.ones((nspec, npix)),
-                'R': 2.1 * np.ones((nspec, npix))},
+                'B': (2.1 + inc[:, np.newaxis]) * np.ones((nspec, npix)),
+                'R': (2.1 + inc[:, np.newaxis]) * np.ones((nspec, npix))},
             'ivar': {
                 'B': np.ones((nspec, npix)),
                 'R': np.ones((nspec, npix))},
