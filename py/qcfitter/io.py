@@ -8,10 +8,18 @@ import qcfitter.spectrum
 
 
 def add_io_parser(parser):
+    """ Adds IO related arguments to parser. These arguments are grouped under
+    'Input/output parameters and selections'. `--input-dir` and `--catalog` are
+    required.
+
+    Arguments
+    ---------
+    parser: argparse.ArgumentParser
+    """
     iogroup = parser.add_argument_group(
         'Input/output parameters and selections')
     iogroup.add_argument(
-        "--input-dir", required=True,
+        "--input-dir", '-i', required=True,
         help="Input directory to healpix")
     iogroup.add_argument(
         "--catalog", required=True,
@@ -50,14 +58,15 @@ def add_io_parser(parser):
 
 
 def read_spectra(
-        cat, input_dir, arms_to_keep, mock_analysis, skip_resomat,
+        catalog_hpx, input_dir, arms_to_keep, mock_analysis, skip_resomat,
         program="dark"):
     """ Returns a list of Spectrum objects for a given catalog.
 
     Arguments
     ---------
-    cat: named np.array
-        Catalog of quasars in single healpix.
+    catalog_hpx: named np.array
+        Catalog of quasars in a single healpix. If for data 'SURVEY' column
+        must be present and sorted.
 
     input_dir: str
         Input directory
@@ -80,33 +89,33 @@ def read_spectra(
 
     Raises
     ---------
-    Exception if number of quasars in the healpix file does not match the
+    RuntimeWarning if number of quasars in the healpix file does not match the
     catalog.
     """
     spectra_list = []
-    pixnum = cat['HPXPIXEL'][0]
 
     if mock_analysis:
         data, idx_cat = read_onehealpix_file_mock(
-            cat, input_dir, pixnum, arms_to_keep, skip_resomat
+            catalog_hpx, input_dir, arms_to_keep, skip_resomat
         )
 
-        if idx_cat.size != cat.size:
-            cat = cat[idx_cat]
+        if idx_cat.size != catalog_hpx.size:
+            catalog_hpx = catalog_hpx[idx_cat]
 
         spectra_list.extend(
             qcfitter.spectrum.generate_spectra_list_from_data(
-                cat, data)
+                catalog_hpx, data)
         )
     else:
         # Assume sorted by survey
         # cat.sort(order='SURVEY')
-        unique_surveys, s2 = np.unique(cat['SURVEY'], return_index=True)
-        survey_split_cat = np.split(cat, s2[1:])
+        unique_surveys, s2 = np.unique(
+            catalog_hpx['SURVEY'], return_index=True)
+        survey_split_cat = np.split(catalog_hpx, s2[1:])
 
         for cat_by_survey in survey_split_cat:
             data, idx_cat = read_onehealpix_file_data(
-                cat_by_survey, input_dir, pixnum, arms_to_keep,
+                cat_by_survey, input_dir, arms_to_keep,
                 skip_resomat, program
             )
 
@@ -123,8 +132,7 @@ def read_spectra(
 
 
 def save_deltas(
-        spectra_list, outdir, varlss_interp,
-        save_by_hpx=False, mpi_rank=None):
+        spectra_list, outdir, varlss_interp, save_by_hpx=False, mpi_rank=None):
     """ Saves given list of spectra as deltas. NO coaddition of arms.
     Each arm is saved separately. Only valid spectra are saved.
 
@@ -223,12 +231,15 @@ def _read_onehealpix_file(
     Returns
     ---------
     data: dict
-        Only quasar spectra are read into keywords wave, flux etc.Resolution is
-        read if present.
+        Only quasar spectra are read into keywords wave, flux etc. Resolution
+        is read if present.
+
+    idx_cat: ndarray
+        Indices in `targetids_by_survey` there were succesfully read.
 
     Raises
     ---------
-    Exception if number of quasars in the healpix file does not match the
+    RuntimeWarning if number of quasars in the healpix file does not match the
     catalog.
     """
     # Assume it is sorted
@@ -246,7 +257,7 @@ def _read_onehealpix_file(
             f"healpix:{common_targetids.size}!", RuntimeWarning)
 
     fbrmap = fbrmap[idx_fbr]
-    sort_idx = np.argsort(fbrmap.argsort())
+    sort_idx = np.argsort(idx_fbr)
 
     data = {
         'wave': {},
@@ -280,9 +291,39 @@ def _read_onehealpix_file(
 
 
 def read_onehealpix_file_data(
-        cat_by_survey, input_dir, pixnum, arms_to_keep, skip_resomat,
-        program="dark"):
+        cat_by_survey, input_dir, arms_to_keep, skip_resomat, program="dark"):
+    """ Read a single fits file for data.
+
+    Arguments
+    ---------
+    cat_by_survey: ndarray
+        Catalog for a single survey and healpix. Ordered by TARGETID.
+
+    input_dir: str
+        Input directory.
+
+    arms_to_keep: list of str
+        Must only contain B, R and Z.
+
+    skip_resomat: bool
+        If true, do not read resomat.
+
+    Returns
+    ---------
+    data: dict
+        Only quasar spectra are read into keywords wave, flux etc. Resolution
+        is read if present.
+
+    idx_cat: ndarray
+        Indices in `cat_by_survey` there were succesfully read.
+
+    Raises
+    ---------
+    RuntimeWarning if number of quasars in the healpix file does not match the
+    catalog.
+    """
     survey = cat_by_survey['SURVEY'][0]
+    pixnum = cat_by_survey['HPXPIXEL'][0]
 
     fspec = (f"{input_dir}/{survey}/{program}/{pixnum//100}/"
              f"{pixnum}/coadd-{survey}-{program}-{pixnum}.fits")
@@ -293,10 +334,41 @@ def read_onehealpix_file_data(
 
 
 def read_onehealpix_file_mock(
-        cat, input_dir, pixnum, arms_to_keep, skip_resomat, nside=16):
+        catalog_hpx, input_dir, arms_to_keep, skip_resomat, nside=16):
+    """ Read a single FITS file for mocks.
+
+    Arguments
+    ---------
+    catalog_hpx: ndarray
+        Catalog for a single healpix. Ordered by TARGETID.
+
+    input_dir: str
+        Input directory.
+
+    arms_to_keep: list of str
+        Must only contain B, R and Z.
+
+    skip_resomat: bool
+        If true, do not read resomat.
+
+    Returns
+    ---------
+    data: dict
+        Only quasar spectra are read into keywords wave, flux etc. Resolution
+        is read if present.
+
+    idx_cat: ndarray
+        Indices in `catalog_hpx` there were succesfully read.
+
+    Raises
+    ---------
+    RuntimeWarning if number of quasars in the healpix file does not match the
+    catalog.
+    """
+    pixnum = catalog_hpx['HPXPIXEL'][0]
     fspec = f"{input_dir}/{pixnum//100}/{pixnum}/spectra-{nside}-{pixnum}.fits"
     data, idx_cat = _read_onehealpix_file(
-        cat['TARGETID'], fspec, arms_to_keep, skip_resomat)
+        catalog_hpx['TARGETID'], fspec, arms_to_keep, skip_resomat)
 
     if skip_resomat:
         return data, idx_cat
