@@ -177,6 +177,7 @@ if __name__ == '__main__':
     mpi_size = comm.Get_size()
 
     logging.basicConfig(level=logging.DEBUG)
+    logging.captureWarnings(True)
 
     args = mpi_parse(get_parser(), comm, mpi_rank)
     if mpi_rank == 0 and args.outdir:

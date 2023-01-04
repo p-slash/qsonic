@@ -36,7 +36,7 @@ class TestIOReading(object):
         cat_by_survey, input_dir, pixnum, arms_to_keep, b_wave = my_setup_fits
         nsize = b_wave.size
 
-        data = qcfitter.io.read_onehealpix_file_data(
+        data, _ = qcfitter.io.read_onehealpix_file_data(
             cat_by_survey, input_dir, pixnum, arms_to_keep, skip_resomat=True)
 
         assert (len(data['wave']) == 1)
