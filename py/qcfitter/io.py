@@ -156,6 +156,7 @@ def save_deltas(
     Raises
     ---------
     Exception if both `mpi_rank` and `save_by_hpx` is None/False.
+    Exception if blinding is not set.
     """
     if not outdir:
         return
@@ -171,6 +172,9 @@ def save_deltas(
         split_spectra = [spectra_list]
     else:
         raise Exception("save_by_hpx and mpi_rank can't both be None.")
+
+    if qcfitter.spectrum.Spectrum.blinding_not_set():
+        raise Exception("Blinding is not set. Cannot save deltas.")
 
     for healpix, hp_specs in zip(unique_pix, split_spectra):
         results = fitsio.FITS(
