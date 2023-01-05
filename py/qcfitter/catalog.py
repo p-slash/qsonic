@@ -24,9 +24,10 @@ _all_columns = [
 def read_local_qso_catalog(
         filename, comm, mpi_rank, mpi_size, is_mock,
         n_side=64, keep_surveys=None, zmin=2.1, zmax=6.0):
-    """ Returns quasar catalog object for mpi_rank. It is sorted in the
-    following order: HPXPIXEL, SURVEY (if applicable), TARGETID. BAL info
-    included if available. It is required for BAL masking.
+    """ Returns quasar catalog object for mpi_rank.
+
+    It is sorted in the following order: HPXPIXEL, SURVEY (if applicable),
+    TARGETID. BAL info included if available. It is required for BAL masking.
 
     Arguments
     ----------
