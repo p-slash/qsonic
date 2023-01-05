@@ -1,7 +1,8 @@
 from setuptools import setup
 import os
 
-binscripts = [os.path.join("bin", f) for f in os.listdir("bin") if f.endswith(".py")]
+binscripts = [os.path.join("bin", f) for f in os.listdir("bin")
+              if f.endswith(".py")]
 with open("requirements.txt") as file_reqs:
     requirements = file_reqs.read().splitlines()
 
@@ -14,9 +15,8 @@ setup(
     install_requires=requirements,
 
     # metadata to display on PyPI
-    author = "Naim Goksel Karacayli",
-    author_email = "ngokselk@gmail.com",
+    author="Naim Goksel Karacayli",
+    author_email="ngokselk@gmail.com",
     description=("Quasar continuum fitter for DESI."),
     # could also include long_description, download_url, etc.
 )
-    
