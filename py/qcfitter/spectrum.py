@@ -129,6 +129,11 @@ class Spectrum(object):
         if not args.skip_resomat:
             Spectrum._fits_colnames.append('RESOMAT')
 
+    @staticmethod
+    def blinding_not_set():
+        """Return `True` if blinding is not set."""
+        return Spectrum._blinding is None
+
     def __init__(self, catrow, wave, flux, ivar, mask, reso, idx):
         self.catrow = catrow
         Spectrum._set_wave(wave)
@@ -353,9 +358,6 @@ class Spectrum(object):
         return snr / npix
 
     def write(self, fts_file, varlss_interp):
-        if Spectrum._blinding is None:
-            raise Exception("Blinding is not set. Cannot save deltas.")
-
         hdr_dict = {
             'LOS_ID': self.targetid,
             'TARGETID': self.targetid,
