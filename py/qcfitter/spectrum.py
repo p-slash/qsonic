@@ -226,6 +226,8 @@ class Spectrum(object):
         self._forestreso = self.reso
 
     def get_real_size(self):
+        """Returns the sum of number of pixels with `forestivar > 0` for all
+        arms."""
         size = 0
         for ivar_arm in self.forestivar.values():
             size += np.sum(ivar_arm > 0)
@@ -244,6 +246,7 @@ class Spectrum(object):
             self._forestivar_sm[arm] = get_smooth_ivar(ivar_arm)
 
     def _coadd_arms_reso(self, nwaves, idxes):
+        """Coadd resolution matrix with equal weights."""
         max_ndia = np.max([reso.shape[0] for reso in self.forestreso.values()])
         coadd_reso = np.zeros((max_ndia, nwaves))
         creso_norm = np.zeros(nwaves)
@@ -263,6 +266,13 @@ class Spectrum(object):
     def coadd_arms_forest(self, varlss_interp):
         """ Coadds different arms using smoothed pipeline ivar and var_lss.
         Resolution matrix is equally weighted!
+
+        Replaces `forest` variables and `cont_params['cont']`with a dictionary
+        that has a single arm `brz` as key to access coadded data.
+        Arguments
+        ---------
+        varlss_interp: mathtools.Fast1DInterpolator or any other interpolator.
+            LSS variance interpolator.
         """
         if not self.cont_params['valid'] or not self.cont_params['cont']:
             raise Exception("Continuum needed for coadding.")
@@ -325,6 +335,19 @@ class Spectrum(object):
         return snr / npix
 
     def write(self, fts_file, varlss_interp):
+        """Writes each arm to FITS file separately.
+
+        Writes 'LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT' columns and
+        'RESOMAT' column if resolution matrix is present to extention name
+        'targetid-arm'. FITS file must be initialized before. Each arm has its
+        own `MEANSNR`. `weights` in the file are **not** smoothed.
+
+        Arguments
+        ---------
+        fts_file: FITS file
+        varlss_interp: mathtools.Fast1DInterpolator or any other interpolator.
+            LSS variance interpolator.
+        """
         hdr_dict = {
             'LOS_ID': self.targetid,
             'TARGETID': self.targetid,
