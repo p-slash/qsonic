@@ -207,14 +207,18 @@ class DLAMask():
 
             fts_colnames = set(fts["DLACAT"].get_colnames())
             z_colname = fts_colnames.intersection(accepted_zcolnames)
+
             if not z_colname:
                 raise ValueError(
                     "Z colname has to be one of "
                     f"{', '.join(accepted_zcolnames)}")
+
             z_colname = z_colname.pop()
             columns_list = ["TARGETID", z_colname, "NHI"]
             catalog = fts['DLACAT'].read(columns=columns_list)
-            catalog = rename_fields(catalog, {z_colname: 'Z_DLA'})
+
+            if z_colname != 'Z_DLA':
+                catalog = rename_fields(catalog, {z_colname: 'Z_DLA'})
 
             fts.close()
 

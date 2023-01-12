@@ -14,9 +14,46 @@ from qcfitter.mathtools import Fast1DInterpolator, mypoly1d
 
 
 class PiccaContinuumFitter(object):
-    """ Picca continuum fitter. Fits spectra without coadding.
-    Pipeline ivar is smoothed before using in weights.
-    Mean continuum is smoothed using inverse weights and cubic spline.
+    """ Picca continuum fitter.
+
+    Fits spectra without coadding. Pipeline ivar is smoothed before using in
+    weights. Mean continuum is smoothed using inverse weights and cubic spline.
+    Contruct, then call `iterate()` with local spectra.
+
+    Parameters
+    ----------
+    args: argparse.Namespace
+        Namespace. Wavelength values are taken to be the edges (not centers).
+        See respective parsers for default values.
+    nwbins: int
+        Number of wavelength bins in the observed frame for variance fitting.
+
+    Attributes
+    ----------
+    nbins: int
+        Number of bins for the mean continuum in the rest frame.
+    rfwave: float ndarray
+        Rest-frame wavelength centers for the mean continuum.
+    _denom: float
+        Denominator for the slope term in the continuum model.
+    meancont_interp: Fast1DInterpolator
+        Fast linear interpolator object for the mean continuum.
+    comm: MPI.COMM_WORLD
+        MPI comm object to reduce, broadcast etc.
+    mpi_rank: int
+        Rank of the MPI process.
+    meanflux_interp: Fast1DInterpolator
+        Interpolator for mean flux. If fiducial is not set, this equals to 1.
+    varlss_fitter: VarLSSFitter or None
+        None if fiducials are set for var_lss.
+    varlss_interp: Fast1DInterpolator
+        Interpolator for var_lss.
+    niterations: int
+        Number of iterations from `args.no_iterations`.
+    cont_order: int
+        Order of continuum polynomial from `args.cont_order`.
+    outdir: str or None
+        Directory to save catalogs. If None or empty, does not save.
     """
     @staticmethod
     def add_parser(parser):
@@ -76,13 +113,18 @@ class PiccaContinuumFitter(object):
             waves_0, dwave, varlss, ep=np.zeros(nsize))
 
     def __init__(self, args, nwbins=20):
-        self.nbins = int((args.forest_w2 - args.forest_w1) / args.rfdwave) + 1
-        self.rfwave, self.dwrf = np.linspace(
-            args.forest_w1, args.forest_w2, self.nbins, retstep=True)
+        # We first decide how many bins will approximately satisfy
+        # rest-frame wavelength spacing. Then we create wavelength edges, and
+        # transform these edges into centers
+        self.nbins = int(round(
+            (args.forest_w2 - args.forest_w1) / args.rfdwave))
+        edges, self.dwrf = np.linspace(
+            args.forest_w1, args.forest_w2, self.nbins + 1, retstep=True)
+        self.rfwave = (edges[1:] + edges[:-1]) / 2
         self._denom = np.log(self.rfwave[-1] / self.rfwave[0])
 
         self.meancont_interp = Fast1DInterpolator(
-            args.forest_w1, self.dwrf, np.ones(self.nbins),
+            self.rfwave[0], self.dwrf, np.ones(self.nbins),
             ep=np.zeros(self.nbins))
 
         self.comm = MPI.COMM_WORLD
@@ -95,7 +137,7 @@ class PiccaContinuumFitter(object):
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
             self.varlss_fitter = VarLSSFitter(args.wave1, args.wave2, nwbins)
             self.varlss_interp = Fast1DInterpolator(
-                args.wave1, self.varlss_fitter.dwobs,
+                self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
                 0.1 * np.ones(nwbins), ep=np.zeros(nwbins))
 
         self.niterations = args.no_iterations
@@ -132,13 +174,14 @@ class PiccaContinuumFitter(object):
         return cont
 
     def fit_continuum(self, spec):
-        """ Fits the continuum for a single Spectrum. This function uses
-        `forestivar_sm` in inverse variance. Must be smoothed beforehand.
-        It also modifies `spec.cont_params` dictionary in `valid, cont, x,
-        xcov, chi2, dof` keys. If the best-fitting continuum is negative at any
-        point, the fit is invalidated. Chi2 is set separately, i.e. not using
-        the cost function. `x` key is the best-fitting parameter, and `xcov` is
-        their inverse Hessian `hess_inv`.
+        """ Fits the continuum for a single Spectrum.
+
+        This function uses `forestivar_sm` in inverse variance. Must be
+        smoothed beforehand. It also modifies `spec.cont_params` dictionary in
+        `valid, cont, x, xcov, chi2, dof` keys. If the best-fitting continuum
+        is negative at any point, the fit is invalidated. Chi2 is set
+        separately, i.e. not using the cost function. `x` key is the
+        best-fitting parameter, and `xcov` is their inverse Hessian `hess_inv`.
 
         Arguments
         ---------
@@ -454,20 +497,65 @@ class PiccaContinuumFitter(object):
 
 
 class VarLSSFitter(object):
+    """ Variance fitter for the large-scale fluctuations.
+
+    Input wavelengths and variances are the bin edges, so centers will be
+    shifted. Valid bins require at least 500 pixels from 50 quasars. Assumes no
+    spectra has `wave < w1obs` or `wave > w2obs`.
+
+    Parameters
+    ----------
+    w1obs: float
+        Lower observed wavelength edge.
+    w2obs: float
+        Upper observed wavelength edge.
+    nwbins: int
+        Number of wavelength bins.
+    var1: float
+        Lower variance edge.
+    var2: float
+        Upper variance edge.
+    nvarbins: int
+        Number of variance bins.
+
+    Attributes
+    ----------
+    waveobs: float ndarray
+        Wavelength centers in the observed frame.
+    ivar_edges: float ndarray
+        Inverse variance edges.
+    ivar_centers: float ndarray
+        Inverse variance centers.
+    minlength: int
+        Minimum size of the combined bin count array. It includes underflow and
+        overflow bins for both wavelength and variance bins.
+    var_delta: float ndarray
+        Variance delta.
+    mean_delta: float ndarray
+        Mean delta.
+    var2_delta: float ndarray
+        delta^4.
+    num_pixels: int ndarray
+        Number of pixels in the bin.
+    num_qso: int ndarray
+        Number of quasars in the bin.
+    """
     min_no_pix = 500
     min_no_qso = 50
 
     @staticmethod
     def variance_function(var_pipe, var_lss, eta=1):
+        """ Variance model to be fit. """
         return eta * var_pipe + var_lss
 
     def __init__(self, w1obs, w2obs, nwbins, var1=1e-5, var2=2., nvarbins=100):
         self.nwbins = nwbins
         self.nvarbins = nvarbins
-        self.waveobs, self.dwobs = np.linspace(w1obs, w2obs, nwbins,
-                                               retstep=True)
-        self.ivar_edges = np.logspace(-np.log10(var2), -np.log10(var1),
-                                      nvarbins + 1)
+        wave_edges, self.dwobs = np.linspace(
+            w1obs, w2obs, nwbins + 1, retstep=True)
+        self.waveobs = (wave_edges[1:] + wave_edges[:-1]) / 2
+        self.ivar_edges = np.logspace(
+            -np.log10(var2), -np.log10(var1), nvarbins + 1)
         self.ivar_centers = (self.ivar_edges[1:] + self.ivar_edges[:-1]) / 2
 
         self.minlength = (self.nvarbins + 2) * (self.nwbins + 2)
@@ -478,6 +566,7 @@ class VarLSSFitter(object):
         self.num_qso = np.zeros_like(self.var_delta, dtype=int)
 
     def reset(self):
+        """ Reset delta and num arrays to zero. """
         self.var_delta = 0.
         self.mean_delta = 0.
         self.var2_delta = 0.
@@ -485,9 +574,21 @@ class VarLSSFitter(object):
         self.num_qso = 0
 
     def add(self, wave, delta, ivar):
+        """ Add statistics of a single spectrum. Updates delta and num arrays.
+
+        Assumes no spectra has `wave < w1obs` or `wave > w2obs`.
+
+        Arguments
+        ---------
+        wave: float ndarray
+            Wavelength array.
+        delta: float ndarray
+            Delta array.
+        ivar: float ndarray
+            Inverse variance array.
+        """
         # add 1 to match searchsorted/bincount output/input
-        wave_indx = ((wave - self.waveobs[0]) / self.dwobs
-                     + 0.5).astype(int) + 1
+        wave_indx = ((wave - self.waveobs[0]) / self.dwobs + 1.5).astype(int)
         ivar_indx = np.searchsorted(self.ivar_edges, ivar)
         all_indx = ivar_indx + wave_indx * (self.nvarbins + 2)
 
@@ -503,6 +604,14 @@ class VarLSSFitter(object):
         self.num_qso += rebin
 
     def _allreduce(self, comm):
+        """ Sums statistics from all MPI process, and calculates mean, variance
+        and error on the variance.
+
+        Arguments
+        ---------
+        comm: MPI comm object
+            MPI comm object for Allreduce
+        """
         comm.Allreduce(MPI.IN_PLACE, self.mean_delta)
         comm.Allreduce(MPI.IN_PLACE, self.var_delta)
         comm.Allreduce(MPI.IN_PLACE, self.var2_delta)
@@ -518,6 +627,30 @@ class VarLSSFitter(object):
         self.var2_delta[w] /= self.num_pixels[w]
 
     def fit(self, current_varlss, comm, mpi_rank):
+        """ Syncronize all MPI processes and fit for `var_lss`.
+
+        This implemented using `scipy.optimize.curve_fit` with sqrt(var2_delta)
+        as absolute errors. `var_lss` is bounded to `(0, 2)`. These fits are
+        then smoothed via `UnivariateSpline` using weights from `curve_fit`,
+        while missing values or failed wavelength bins are extrapolated.
+
+        Arguments
+        ---------
+        current_varlss: float ndarray
+            Initial guess for var_lss
+        comm: MPI comm object
+            MPI comm object for Allreduce
+        mpi_rank: int
+            Rank of the MPI process.
+
+        Returns
+        ---------
+        var_lss: float ndarray
+            Smoothed LSS variance at observed wavelengths. Missing values are
+            extrapolated.
+        std_var_lss: float ndarray
+            Error on `var_lss` from sqrt of `curve_fit` output.
+        """
         self._allreduce(comm)
         var_lss = np.zeros(self.nwbins)
         std_var_lss = np.zeros(self.nwbins)
