@@ -1,6 +1,7 @@
 import pytest
 
 import numpy as np
+from scipy.interpolate import interp1d
 import numpy.testing as npt
 
 import qcfitter.mathtools
@@ -15,7 +16,7 @@ class TestMathtools(object):
         xarr = np.linspace(310., 560., 100)
         yarr = fast_interp(xarr)
 
-        ytrue = np.interp(xarr, xin, fp)
+        ytrue = interp1d(xin, fp, fill_value='extrapolate')(xarr)
 
         npt.assert_allclose(yarr, ytrue)
 
