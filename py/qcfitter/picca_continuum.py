@@ -371,13 +371,13 @@ class PiccaContinuumFitter(object):
         if self.mpi_rank != 0:
             return has_converged
 
-        text = ("Continuum updates\n" "wave_rf \t| update \t| error\n")
+        text = ("Continuum updates\n" "rfwave\t| update\t| error\n")
 
         sl = np.s_[::max(1, int(self.nbins / 10))]
         for w, n, e in zip(self.rfwave[sl], norm_flux[sl], std_flux[sl]):
             text += f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}\n"
 
-        text += f"Change in chi2: {chi2_change*100:.2f}%"
+        text += f"Change in chi2: {chi2_change*100:.4e}%"
         logging_mpi(text, self.mpi_rank)
 
         return has_converged
