@@ -293,11 +293,13 @@ class PiccaContinuumFitter(object):
         return new_meancont, mean_
 
     def update_mean_cont(self, spectra_list, noupdate):
-        """ Update the global mean continuum. Uses `forestivar_sm` in inverse
-        variance. Must be smoothed beforehand. Raw mean continuum estimates are
-        smoothed with a weighted `UnivariateSpline`. The mean continuum is
-        removed from higher Legendre polynomials and normalized by the mean.
-        This function updates `self.meancont_interp.fp` if noupdate is False.
+        """ Update the global mean continuum.
+
+        Uses `forestivar_sm` in inverse variance, but must be set beforehand.
+        Raw mean continuum estimates are smoothed with a weighted
+        `UnivariateSpline`. The mean continuum is removed from higher Legendre
+        polynomials and normalized by the mean. This function updates
+        `self.meancont_interp.fp` if noupdate is False.
 
         Arguments
         ---------
@@ -313,6 +315,7 @@ class PiccaContinuumFitter(object):
             times the error estimates.
         """
         norm_flux = np.zeros(self.nbins)
+        std_flux = np.empty(self.nbins)
         counts = np.zeros(self.nbins)
 
         for spec in valid_spectra(spectra_list):
@@ -337,11 +340,14 @@ class PiccaContinuumFitter(object):
         self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
         self.comm.Allreduce(MPI.IN_PLACE, counts)
         w = counts > 0
-        std_flux = np.empty(self.nbins)
+
+        if w.sum() != self.nbins and self.mpi_rank == 0:
+            warnings.warn("Extrapolating empty bins in the mean continuum.")
+
         norm_flux[w] /= counts[w]
         norm_flux[~w] = np.mean(norm_flux[w])
         std_flux[w] = 1 / np.sqrt(counts[w])
-        std_flux[~w] = 2 * np.mean(std_flux[w])
+        std_flux[~w] = 10 * np.mean(std_flux[w])
 
         # Smooth new estimates
         spl = UnivariateSpline(self.rfwave, norm_flux, w=1 / std_flux)
@@ -358,13 +364,21 @@ class PiccaContinuumFitter(object):
             self.meancont_interp.fp = new_meancont
             self.meancont_interp.ep = std_flux
 
-        logging_mpi("Continuum updates", self.mpi_rank)
-        sl = np.s_[::max(1, int(self.nbins / 10))]
-        logging_mpi("wave_rf \t| update \t| error", self.mpi_rank)
-        for w, n, e in zip(self.rfwave[sl], norm_flux[sl], std_flux[sl]):
-            logging_mpi(f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}", self.mpi_rank)
+        all_pt_test = np.all(np.abs(norm_flux) < 0.33 * std_flux)
+        chi2_change = np.sum((norm_flux / std_flux)**2) / self.nbins
+        has_converged = (chi2_change < 1e-3) | all_pt_test
 
-        has_converged = np.all(np.abs(norm_flux) < 0.33 * std_flux)
+        if self.mpi_rank != 0:
+            return has_converged
+
+        text = ("Continuum updates\n" "wave_rf \t| update \t| error\n")
+
+        sl = np.s_[::max(1, int(self.nbins / 10))]
+        for w, n, e in zip(self.rfwave[sl], norm_flux[sl], std_flux[sl]):
+            text += f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}\n"
+
+        text += f"Change in chi2: {chi2_change*100:.2f}%"
+        logging_mpi(text, self.mpi_rank)
 
         return has_converged
 
