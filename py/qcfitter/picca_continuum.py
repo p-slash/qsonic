@@ -1,5 +1,3 @@
-import warnings
-
 import numpy as np
 import fitsio
 from scipy.optimize import minimize, curve_fit
@@ -9,7 +7,7 @@ from scipy.special import legendre
 from mpi4py import MPI
 
 from qcfitter.spectrum import valid_spectra
-from qcfitter.mpi_utils import logging_mpi, MPISaver
+from qcfitter.mpi_utils import logging_mpi, warn_mpi, MPISaver
 from qcfitter.mathtools import Fast1DInterpolator, mypoly1d
 
 
@@ -321,8 +319,9 @@ class PiccaContinuumFitter(object):
         for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
                 wave_rf_arm = wave_arm / (1 + spec.z_qso)
-                bin_idx = ((wave_rf_arm - self.rfwave[0]) / self.dwrf
-                           + 0.5).astype(int)
+                bin_idx = (
+                    (wave_rf_arm - self.rfwave[0]) / self.dwrf + 0.5
+                ).astype(int)
 
                 cont = spec.cont_params['cont'][arm]
                 flux_ = spec.forestflux[arm] / cont
@@ -332,17 +331,19 @@ class PiccaContinuumFitter(object):
                 weight = spec.forestivar_sm[arm] * cont**2
                 weight = weight / (1 + weight * var_lss)
 
-                norm_flux += np.bincount(bin_idx, weights=flux_ * weight,
-                                         minlength=self.nbins)
-                counts += np.bincount(bin_idx, weights=weight,
-                                      minlength=self.nbins)
+                norm_flux += np.bincount(
+                    bin_idx, weights=flux_ * weight, minlength=self.nbins)
+                counts += np.bincount(
+                    bin_idx, weights=weight, minlength=self.nbins)
 
         self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
         self.comm.Allreduce(MPI.IN_PLACE, counts)
         w = counts > 0
 
-        if w.sum() != self.nbins and self.mpi_rank == 0:
-            warnings.warn("Extrapolating empty bins in the mean continuum.")
+        if w.sum() != self.nbins:
+            warn_mpi(
+                "Extrapolating empty bins in the mean continuum.",
+                self.mpi_rank)
 
         norm_flux[w] /= counts[w]
         norm_flux[~w] = np.mean(norm_flux[w])
@@ -378,7 +379,7 @@ class PiccaContinuumFitter(object):
             text += f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}\n"
 
         text += f"Change in chi2: {chi2_change*100:.4e}%"
-        logging_mpi(text, self.mpi_rank)
+        logging_mpi(text, 0)
 
         return has_converged
 
@@ -400,10 +401,10 @@ class PiccaContinuumFitter(object):
         for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
                 cont = spec.cont_params['cont'][arm]
-                flux_ = spec.forestflux[arm] / cont
+                delta = spec.forestflux[arm] / cont - 1
+                ivar = spec.forestivar[arm] * cont**2
 
-                self.varlss_fitter.add(
-                    wave_arm, flux_ - 1, spec.forestivar[arm] * cont**2)
+                self.varlss_fitter.add(wave_arm, delta, ivar)
 
         # Else, fit for var_lss
         logging_mpi("Fitting var_lss", self.mpi_rank)
@@ -413,10 +414,15 @@ class PiccaContinuumFitter(object):
             self.varlss_interp.fp = y
             self.varlss_interp.ep = ep
 
+        if self.mpi_rank != 0:
+            return
+
         sl = np.s_[::max(1, int(y.size / 10))]
-        logging_mpi("wave_obs \t| var_lss \t| error", self.mpi_rank)
+        text = "wave_obs \t| var_lss \t| error\n"
         for w, v, e in zip(self.varlss_fitter.waveobs[sl], y[sl], ep[sl]):
-            logging_mpi(f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}", self.mpi_rank)
+            text += f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}"
+
+        logging_mpi(text, 0)
 
     def iterate(self, spectra_list):
         has_converged = False
@@ -432,8 +438,8 @@ class PiccaContinuumFitter(object):
         fattr = MPISaver(fname, self.mpi_rank)
 
         for it in range(self.niterations):
-            logging_mpi(f"Fitting iteration {it+1}/{self.niterations}",
-                        self.mpi_rank)
+            logging_mpi(
+                f"Fitting iteration {it+1}/{self.niterations}", self.mpi_rank)
 
             self.save(fattr, it + 1)
 
@@ -450,8 +456,8 @@ class PiccaContinuumFitter(object):
                 logging_mpi("Iteration has converged.", self.mpi_rank)
                 break
 
-        if not has_converged and self.mpi_rank == 0:
-            warnings.warn("Iteration has NOT converged.", RuntimeWarning)
+        if not has_converged:
+            warn_mpi("Iteration has NOT converged.", self.mpi_rank)
 
         fattr.close()
         logging_mpi("All continua are fit.", self.mpi_rank)
@@ -677,11 +683,11 @@ class VarLSSFitter(object):
             w = self.num_pixels[wbinslice] > VarLSSFitter.min_no_pix
             w &= self.num_qso[wbinslice] > VarLSSFitter.min_no_qso
 
-            if w.sum() == 0 and mpi_rank == 0:
-                warnings.warn(
+            if w.sum() == 0:
+                warn_mpi(
                     "Not enough statistics for VarLSSFitter at"
                     f" wave_obs: {self.waveobs[iwave]:.2f}.",
-                    RuntimeWarning)
+                    mpi_rank)
                 continue
 
             try:
@@ -696,12 +702,11 @@ class VarLSSFitter(object):
                     bounds=(0, 2)
                 )
             except Exception as e:
-                if mpi_rank == 0:
-                    warnings.warn(
-                        "VarLSSFitter failed at wave_obs: "
-                        f"{self.waveobs[iwave]:.2f}. "
-                        f"Reason: {e}. Extrapolating.",
-                        RuntimeWarning)
+                warn_mpi(
+                    "VarLSSFitter failed at wave_obs: "
+                    f"{self.waveobs[iwave]:.2f}. "
+                    f"Reason: {e}. Extrapolating.",
+                    mpi_rank)
             else:
                 var_lss[iwave] = pfit[0]
                 std_var_lss[iwave] = np.sqrt(pcov[0, 0])
@@ -712,9 +717,9 @@ class VarLSSFitter(object):
             self.waveobs[w], var_lss[w], w=1 / std_var_lss[w])
 
         nfails = np.sum(var_lss == 0)
-        if nfails > 0 and mpi_rank == 0:
-            warnings.warn(
+        if nfails > 0:
+            warn_mpi(
                 f"VarLSSFitter failed and extrapolated at {nfails} points.",
-                RuntimeWarning)
+                mpi_rank)
 
         return spl(self.waveobs), std_var_lss
