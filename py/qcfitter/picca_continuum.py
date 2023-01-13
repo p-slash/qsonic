@@ -34,17 +34,17 @@ class PiccaContinuumFitter(object):
         Rest-frame wavelength centers for the mean continuum.
     _denom: float
         Denominator for the slope term in the continuum model.
-    meancont_interp: Fast1DInterpolator
+    meancont_interp: qcfitter.mathtools.Fast1DInterpolator
         Fast linear interpolator object for the mean continuum.
     comm: MPI.COMM_WORLD
         MPI comm object to reduce, broadcast etc.
     mpi_rank: int
         Rank of the MPI process.
-    meanflux_interp: Fast1DInterpolator
+    meanflux_interp: qcfitter.mathtools.Fast1DInterpolator
         Interpolator for mean flux. If fiducial is not set, this equals to 1.
     varlss_fitter: VarLSSFitter or None
         None if fiducials are set for var_lss.
-    varlss_interp: Fast1DInterpolator
+    varlss_interp: qcfitter.mathtools.Fast1DInterpolator
         Interpolator for var_lss.
     niterations: int
         Number of iterations from `args.no_iterations`.
@@ -78,6 +78,19 @@ class PiccaContinuumFitter(object):
             help="Order of continuum fitting polynomial.")
 
     def _set_fiducials(self, fiducial_fits):
+        """ Set fiducial interpolators for mean flux and var_lss.
+
+        FITS file must have a 'STATS' extention, which must have 'LAMBDA',
+        'MEANFLUX' and 'VAR' columns. This is the same format as raw_io output
+        from picca. 'LAMBDA' must be linearly and equally spaced.
+        This function sets `self.meanflux_interp` and `self.varlss_interp` as
+        `Fast1DInterpolator` objects.
+
+        Arguments
+        ---------
+        fiducial_fits: str
+            Filename of the FITS file.
+        """
         if self.mpi_rank == 0:
             with fitsio.FITS(fiducial_fits) as fts:
                 data = fts['STATS'].read()
@@ -143,6 +156,29 @@ class PiccaContinuumFitter(object):
         self.outdir = args.outdir
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
+        """ Cost function to minimize for each quasar.
+
+        This is a modified chi2 where amplitude is also part of minimization.
+        Cost of each arm is simply added to the total cost.
+
+        Arguments
+        ---------
+        x: ndarray
+            Polynomial coefficients for quasar diversity.
+        wave: dict of ndarray
+            Observed-frame wavelengths.
+        flux: dict of ndarray
+            Flux.
+        ivar_sm: dict of ndarray
+            Smooth inverse variance.
+        z_qso: float
+            Quasar redshift.
+
+        Returns
+        ---------
+        cost: float
+            Cost (modified chi2) for a given `x`.
+        """
         cost = 0
 
         for arm, wave_arm in wave.items():
@@ -163,6 +199,20 @@ class PiccaContinuumFitter(object):
         return cost
 
     def get_continuum_model(self, x, wave_rf_arm):
+        """ Returns interpolated continuum model.
+
+        Arguments
+        ---------
+        x: ndarray
+            Polynomial coefficients for quasar diversity.
+        wave_rf_arm: ndarray
+            Rest-frame wavelength per arm.
+
+        Returns
+        ---------
+        cont: ndarray
+            Continuum at `wave_rf_arm` values given `x`.
+        """
         slope = np.log(wave_rf_arm / self.rfwave[0]) / self._denom
 
         cont = self.meancont_interp(wave_rf_arm) * mypoly1d(x, 2 * slope - 1)
@@ -425,6 +475,29 @@ class PiccaContinuumFitter(object):
         logging_mpi(text, 0)
 
     def iterate(self, spectra_list):
+        """ Main function to fit continua and iterate.
+
+        Consists of three major steps: initializing, fitting, updating global
+        variables. The initialization sets `cont_params` variable of every
+        Spectrum object. Continuum polynomial order is carried by setting
+        `cont_params[x]`. At each iteration:
+            - Global variables (mean continuum, var_lss) are saved to file
+            (attributes.fits) file. This ensures the order of what is used in
+            each iteration.
+            - All spectra are fit.
+            - Mean continuum is updated by stacking, smoothing and removing
+            degenarate modes. Check for convergence if update is small.
+            - If fitting for var_lss, fit and update by calculating variance
+            statistics.
+        At the end of requested iterations or convergence, a chi2 catalog is
+        created that includes information regarding chi2, mean_snr, targetid,
+        etc.
+
+        Arguments
+        ---------
+        spectra_list: list of Spectrum
+            Spectrum objects to fit.
+        """
         has_converged = False
 
         for spec in spectra_list:
@@ -465,6 +538,14 @@ class PiccaContinuumFitter(object):
         self.save_contchi2_catalog(spectra_list)
 
     def save(self, fattr, it):
+        """ Save mean continuum and var_lss (if fitting) to a fits file.
+        Arguments
+        ---------
+        fattr: qcfitter.mpi_utils.MPISaver
+            File handler to save only on master node.
+        it: int
+            Current iteration number.
+        """
         fattr.write(
             [self.rfwave, self.meancont_interp.fp, self.meancont_interp.ep],
             names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
@@ -479,6 +560,14 @@ class PiccaContinuumFitter(object):
             names=['lambda', 'var_lss', 'e_var_lss'], extname=f'VAR_FUNC-{it}')
 
     def save_contchi2_catalog(self, spectra_list):
+        """ Save chi2 catalog if `self.outdir` is set. All values are gathered
+        and saved on the master node.
+
+        Arguments
+        ---------
+        spectra_list: list of Spectrum
+            Spectrum objects to fit.
+        """
         if not self.outdir:
             return
 
