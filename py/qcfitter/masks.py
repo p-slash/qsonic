@@ -26,6 +26,15 @@ def add_mask_parser(parser):
 
 
 class SkyMask():
+    """ Sky line masking object.
+
+    Parameters
+    ----------
+    fname: str
+        Filename to read by `astropy.io.ascii`. Must have four columns ordered
+        as type, minimum wavelength, maximum wavelength and frame (must be 'RF'
+        or 'OBS').
+    """
     column_names = ('type', 'wave_min', 'wave_max', 'frame')
 
     def __init__(self, fname):
@@ -39,6 +48,13 @@ class SkyMask():
                 f"Error loading SkyMask from mask file {fname}.") from e
 
     def apply(self, spec):
+        """ Apply the mask by setting *only* `forestivar` to zero.
+
+        Arguments
+        ----------
+        spec: qcfitter.spectrum.Spectrum
+            Spectrum object to mask.
+        """
         for arm, wave_arm in spec.forestwave.items():
             w = np.ones(wave_arm.size, dtype=bool)
 
@@ -62,6 +78,9 @@ class SkyMask():
 
 
 class BALMask():
+    """ BAL masking object. Does not need construction. Assumes BAL related
+    columns are present in the catalog.
+    """
     # Wavelengths in Angstroms
     lines = np.array([
         ("lCIV", 1549),
@@ -88,12 +107,14 @@ class BALMask():
 
     @staticmethod
     def check_catalog(catalog):
+        """ Checks if the required columns are present in the catalog."""
         if not all(col in catalog.dtype.names
                    for col in BALMask.expected_columns):
             raise Exception("Input catalog is missing BAL columns.")
 
     @staticmethod
     def apply(spec):
+        """ Apply BAL mask by setting *only* `forestivar` to zero."""
         min_velocities = np.concatenate(
             (spec.catrow['VMIN_CIV_450'], spec.catrow['VMIN_CIV_2000']))
         max_velocities = np.concatenate(
