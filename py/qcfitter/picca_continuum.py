@@ -233,7 +233,7 @@ class PiccaContinuumFitter(object):
 
         Arguments
         ---------
-        spec: Spectrum
+        spec: qcfitter.spectrum.Spectrum
             Spectrum object to fit.
         """
         # We can precalculate meanflux and varlss here,
@@ -286,7 +286,7 @@ class PiccaContinuumFitter(object):
 
         Arguments
         ---------
-        spectra_list: list of Spectrum
+        spectra_list: list of qcfitter.spectrum.Spectrum
             Spectrum objects to fit.
         """
         no_valid_fits = 0
@@ -351,7 +351,7 @@ class PiccaContinuumFitter(object):
 
         Arguments
         ---------
-        spectra_list: list of Spectrum
+        spectra_list: list of qcfitter.spectrum.Spectrum
             Spectrum objects to fit.
         noupdate: bool
             Does not update `self.meancont_interp.fp` if True (last iteration).
@@ -438,7 +438,7 @@ class PiccaContinuumFitter(object):
 
         Arguments
         ---------
-        spectra_list: list of Spectrum
+        spectra_list: list of qcfitter.spectrum.Spectrum
             Spectrum objects to fit.
         noupdate: bool
             Does not update `self.varlss_interp.fp` if True (last iteration).
@@ -495,7 +495,7 @@ class PiccaContinuumFitter(object):
 
         Arguments
         ---------
-        spectra_list: list of Spectrum
+        spectra_list: list of qcfitter.spectrum.Spectrum
             Spectrum objects to fit.
         """
         has_converged = False
@@ -565,7 +565,7 @@ class PiccaContinuumFitter(object):
 
         Arguments
         ---------
-        spectra_list: list of Spectrum
+        spectra_list: list of qcfitter.spectrum.Spectrum
             Spectrum objects to fit.
         """
         if not self.outdir:
