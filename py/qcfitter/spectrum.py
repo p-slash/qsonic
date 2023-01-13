@@ -41,6 +41,7 @@ def generate_spectra_list_from_data(cat_by_survey, data):
 
 
 def valid_spectra(spectra_list):
+    """Generator for continuum valid spectra."""
     return (spec for spec in spectra_list if spec.cont_params['valid'])
 
 
@@ -61,32 +62,19 @@ class Spectrum(object):
         Dictionary of arrays specifying the bitmask. Not stored
     reso: dict
         Dictionary of 2D arrays specifying the resolution matrix.
+    idx: int
+        Index to access in flux, ivar, mask and reso that corresponds to the
+        quasar in `catrow`.
 
     Attributes
     ----------
-    arms: list
-        List of characters to id spectrograph like 'B', 'R' and 'Z'.
-        Static variable!
-    z_qso: float
-        Quasar redshift.
     rsnr: float
         Average SNR above Lya. Calculated in set_forest_region.
-    targetid: int
-        Unique TARGETID identifier.
-    ra, dec: float
-        RA and DEC
     _f1, _f2: dict of int
-        Forest indices. Set up using set_forest method. Then use property
-        functions to access forest wave, flux, ivar instead.
+        Forest indices. Set up using `set_forest_region` method. Then use
+        property functions to access forest wave, flux, ivar instead.
     cont_params: dict
         Initial estimates are constructed.
-
-    Methods
-    ----------
-    set_forest_region
-    remove_nonforest_pixels
-    get_real_size
-    coadd_arms_forest
 
     """
     WAVE_LYA_A = 1215.67
@@ -183,10 +171,9 @@ class Spectrum(object):
         Arguments
         ---------
         w1, w2: floats
-        Observed wavelength range
-
+            Observed wavelength range
         lya1, lya2: floats
-        Rest-frame wavelength for the forest
+            Rest-frame wavelength for the forest
         """
         l1 = max(w1, (1 + self.z_qso) * lya1)
         l2 = min(w2, (1 + self.z_qso) * lya2)
@@ -234,10 +221,9 @@ class Spectrum(object):
         Arguments
         ---------
         lya1, lya2: floats
-        Rest-frame wavelength for the forest
-
+            Rest-frame wavelength for the forest
         skip_ratio: float
-        Remove arms if they have less than this ratio of pixels
+            Remove arms if they have less than this ratio of pixels
         """
         npixels_expected = (1 + self.z_qso) * (lya2 - lya1) / self.dwave
         npixels_expected = int(skip_ratio * npixels_expected) + 1
@@ -252,6 +238,12 @@ class Spectrum(object):
             self.cont_params['cont'].pop(arm, None)
 
     def remove_nonforest_pixels(self):
+        """ Remove non-forest pixels from storage.
+
+        This equates `flux` to `forestflux` etc, but `wave` is not modified,
+        since it is a static variable. Good practive is to loop using, e.g.,
+        `for arm, wave_arm in self.forestwave.items():`.
+        """
         self.flux = self.forestflux
         self.ivar = self.forestivar
         self.reso = self.forestreso
@@ -262,6 +254,8 @@ class Spectrum(object):
         self._forestreso = self.reso
 
     def get_real_size(self):
+        """Returns the sum of number of pixels with `forestivar > 0` for all
+        arms."""
         size = 0
         for ivar_arm in self.forestivar.values():
             size += np.sum(ivar_arm > 0)
@@ -273,11 +267,14 @@ class Spectrum(object):
         return self.get_real_size() > skip_ratio * npixels
 
     def set_smooth_ivar(self):
+        """ Set `forestivar_sm` to smoothed inverse variance. Before this call
+        `forestivar_sm` points to `forestivar`."""
         self._forestivar_sm = {}
         for arm, ivar_arm in self.forestivar.items():
             self._forestivar_sm[arm] = get_smooth_ivar(ivar_arm)
 
     def _coadd_arms_reso(self, nwaves, idxes):
+        """Coadd resolution matrix with equal weights."""
         max_ndia = np.max([reso.shape[0] for reso in self.forestreso.values()])
         coadd_reso = np.zeros((max_ndia, nwaves))
         creso_norm = np.zeros(nwaves)
@@ -297,6 +294,13 @@ class Spectrum(object):
     def coadd_arms_forest(self, varlss_interp):
         """ Coadds different arms using smoothed pipeline ivar and var_lss.
         Resolution matrix is equally weighted!
+
+        Replaces `forest` variables and `cont_params['cont']`with a dictionary
+        that has a single arm `brz` as key to access coadded data.
+        Arguments
+        ---------
+        varlss_interp: mathtools.Fast1DInterpolator or any other interpolator.
+            LSS variance interpolator.
         """
         if not self.cont_params['valid'] or not self.cont_params['cont']:
             raise Exception("Continuum needed for coadding.")
@@ -345,6 +349,7 @@ class Spectrum(object):
             self._coadd_arms_reso(nwaves, idxes)
 
     def mean_snr(self):
+        """Mean signal-to-noise ratio in the forest."""
         snr = 0
         npix = 1e-6
         for arm, ivar_arm in self.forestivar.items():
@@ -358,6 +363,19 @@ class Spectrum(object):
         return snr / npix
 
     def write(self, fts_file, varlss_interp):
+        """Writes each arm to FITS file separately.
+
+        Writes 'LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT' columns and
+        'RESOMAT' column if resolution matrix is present to extention name
+        'targetid-arm'. FITS file must be initialized before. Each arm has its
+        own `MEANSNR`. `weights` in the file are **not** smoothed.
+
+        Arguments
+        ---------
+        fts_file: FITS file
+        varlss_interp: mathtools.Fast1DInterpolator or any other interpolator.
+            LSS variance interpolator.
+        """
         hdr_dict = {
             'LOS_ID': self.targetid,
             'TARGETID': self.targetid,
@@ -396,48 +414,63 @@ class Spectrum(object):
 
     @property
     def z_qso(self):
+        """Quasar redshift."""
         return self.catrow['Z']
 
     @property
     def targetid(self):
+        """Unique TARGETID identifier."""
         return self.catrow['TARGETID']
 
     @property
     def hpix(self):
+        """Healpix."""
         return self.catrow['HPXPIXEL']
 
     @property
     def ra(self):
+        """Right ascension."""
         return self.catrow['RA']
 
     @property
     def dec(self):
+        """Declination"""
         return self.catrow['DEC']
 
     @property
     def wave(self):
+        """Original wavelength grid in A."""
         return Spectrum._wave
 
     @property
     def dwave(self):
+        """Wavelength step size in A."""
         return Spectrum._dwave
 
     @property
     def forestwave(self):
+        """Forest wavelength field in A."""
         return self._forestwave
 
     @property
     def forestflux(self):
+        """Forest flux field."""
         return self._forestflux
 
     @property
     def forestivar(self):
+        """Forest inverse variance field."""
         return self._forestivar
 
     @property
     def forestivar_sm(self):
+        """Forest smoothed inverse variance field.
+
+        Initially equal to `forestivar`. Smoothed if `set_smooth_ivar` is
+        called."""
         return self._forestivar_sm
 
     @property
     def forestreso(self):
+        """Resolution matrix in the forest."""
         return self._forestreso

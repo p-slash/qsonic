@@ -67,19 +67,14 @@ def read_spectra(
     catalog_hpx: named np.array
         Catalog of quasars in a single healpix. If for data 'SURVEY' column
         must be present and sorted.
-
     input_dir: str
         Input directory
-
     arms_to_keep: list of str
         Must only contain B, R and Z
-
     mock_analysis: bool
         Reads for mock data if true.
-
     skip_resomat: bool
         If true, do not read resomat.
-
     program: str
         Always use dark program.
 
@@ -140,16 +135,12 @@ def save_deltas(
     ---------
     spectra_list: list of Spectrum
         Continuum fitted spectra objects. All must be valid!
-
     outdir: str
         Output directory. Does not save if empty of None
-
     varlss_interp: Interpolator
         Interpolator for LSS variance
-
     save_by_hpx: bool
         Saves by healpix if True. Has priority over mpi_rank
-
     mpi_rank: int
         Rank of the MPI process. Save by `mpi_rank` if passed.
 
@@ -222,13 +213,10 @@ def _read_onehealpix_file(
     targetids_by_survey: ndarray
         Targetids_by_survey (used to be catalog). If data, split by survey and
         contains only one survey.
-
     fspec: str
         Filename to open.
-
     arms_to_keep: list of str
         Must only contain B, R and Z.
-
     skip_resomat: bool
         If true, do not read resomat.
 
@@ -237,7 +225,6 @@ def _read_onehealpix_file(
     data: dict
         Only quasar spectra are read into keywords wave, flux etc. Resolution
         is read if present.
-
     idx_cat: ndarray
         Indices in `targetids_by_survey` there were succesfully read.
 
@@ -302,13 +289,10 @@ def read_onehealpix_file_data(
     ---------
     cat_by_survey: ndarray
         Catalog for a single survey and healpix. Ordered by TARGETID.
-
     input_dir: str
         Input directory.
-
     arms_to_keep: list of str
         Must only contain B, R and Z.
-
     skip_resomat: bool
         If true, do not read resomat.
 
@@ -317,7 +301,6 @@ def read_onehealpix_file_data(
     data: dict
         Only quasar spectra are read into keywords wave, flux etc. Resolution
         is read if present.
-
     idx_cat: ndarray
         Indices in `cat_by_survey` there were succesfully read.
 
@@ -345,13 +328,10 @@ def read_onehealpix_file_mock(
     ---------
     catalog_hpx: ndarray
         Catalog for a single healpix. Ordered by TARGETID.
-
     input_dir: str
         Input directory.
-
     arms_to_keep: list of str
         Must only contain B, R and Z.
-
     skip_resomat: bool
         If true, do not read resomat.
 
@@ -360,7 +340,6 @@ def read_onehealpix_file_mock(
     data: dict
         Only quasar spectra are read into keywords wave, flux etc. Resolution
         is read if present.
-
     idx_cat: ndarray
         Indices in `catalog_hpx` there were succesfully read.
 

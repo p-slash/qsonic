@@ -8,7 +8,7 @@ import numpy.testing as npt
 
 from qcfitter.mpi_utils import mpi_parse
 import qcfitter.spectrum
-from qcfitter.picca_continuum import PiccaContinuumFitter
+from qcfitter.picca_continuum import PiccaContinuumFitter, VarLSSFitter
 
 
 @pytest.fixture
@@ -62,10 +62,13 @@ class TestPiccaContinuum(object):
         parser = setup_parser
         args = mpi_parse(parser, comm, mpi_rank, [])
         qcfit = PiccaContinuumFitter(args)
+        # assert rfwave is centers and forest_w1 is the edge
+        w1rf_truth = args.forest_w1 + qcfit.dwrf / 2
+        w2rf_truth = args.forest_w2 - qcfit.dwrf / 2
 
         npt.assert_allclose(
-            qcfit.rfwave[[0, -1]], [args.forest_w1, args.forest_w2])
-        npt.assert_almost_equal(qcfit.meancont_interp.xp0, args.forest_w1)
+            qcfit.rfwave[[0, -1]], [w1rf_truth, w2rf_truth])
+        npt.assert_almost_equal(qcfit.meancont_interp.xp0, w1rf_truth)
         npt.assert_allclose(qcfit.meancont_interp.fp, 1)
         assert (qcfit.varlss_fitter is not None)
 
@@ -182,6 +185,35 @@ class TestPiccaContinuum(object):
         qcfit.update_mean_cont(spectra_list, False)
         npt.assert_allclose(qcfit.meancont_interp.fp, 1, rtol=1e-3)
         npt.assert_almost_equal(qcfit.meancont_interp.fp.mean(), 1)
+
+
+@pytest.mark.mpi
+class TestVarLSSFitter(object):
+    def test_add(self, setup_data):
+        nwbins = 4
+        dwbins = 300.
+        wbins_truth = 3600. + (0.5 + np.arange(nwbins)) * dwbins
+        varlss_fitter = VarLSSFitter(
+            3600, 4800, nwbins=nwbins, var1=1e-5, var2=2., nvarbins=3)
+        npt.assert_almost_equal(varlss_fitter.dwobs, dwbins)
+        npt.assert_allclose(varlss_fitter.waveobs, wbins_truth)
+
+        cat_by_survey, npix, data = setup_data(1)
+        varlss_fitter.add(
+            data['wave']['B'], data['flux']['B'][0], data['ivar']['B'][0])
+
+        empty_bins = np.s_[-5:]
+        assert all(varlss_fitter.num_pixels[:5] == 0)
+        assert all(varlss_fitter.num_pixels[empty_bins] == 0)
+        expected_numqso = np.zeros((nwbins + 2) * 5, dtype=int)
+        expected_numqso[[6, 11, 16]] = 1
+        npt.assert_equal(varlss_fitter.num_qso, expected_numqso)
+
+        varlss_fitter.add(
+            data['wave']['R'], data['flux']['R'][0], data['ivar']['R'][0])
+        expected_numqso[[11, 16]] = 2
+        expected_numqso[21] = 1
+        npt.assert_equal(varlss_fitter.num_qso, expected_numqso)
 
 
 if __name__ == '__main__':
