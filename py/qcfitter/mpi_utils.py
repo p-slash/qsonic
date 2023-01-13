@@ -1,10 +1,22 @@
 import logging
+import warnings
 
 import fitsio
 import numpy as np
 
 
 def mpi_parse(parser, comm, mpi_rank, options=None):
+    """ Parse arguments on the master node, then broadcast.
+
+    Arguments
+    ---------
+    parser: argparse.ArgumentParser
+    comm: MPI comm object
+        MPI comm object for bcast
+    mpi_rank: int
+        Rank of the MPI process.
+    options: list. Default is None, which parses sys.argv
+    """
     if mpi_rank == 0:
         try:
             args = parser.parse_args(options)
@@ -21,8 +33,34 @@ def mpi_parse(parser, comm, mpi_rank, options=None):
 
 
 def logging_mpi(msg, mpi_rank, fnc="info"):
+    """ Logs only on `mpi_rank=0`.
+
+    Arguments
+    ---------
+    msg: str
+        Message to log.
+    mpi_rank: int
+        Rank of the MPI process.
+    fnc: logging attr
+        Channel to log, usually info or error.
+    """
     if mpi_rank == 0:
         getattr(logging, fnc)(msg)
+
+
+def warn_mpi(msg, mpi_rank):
+    """ Warns of RuntimeWarning only on `mpi_rank=0`.
+
+    Arguments
+    ---------
+    msg: str
+        Message to log.
+    mpi_rank: int
+        Rank of the MPI process.
+    """
+
+    if mpi_rank == 0:
+        warnings.warn(msg, RuntimeWarning)
 
 
 def balance_load(split_catalog, mpi_size, mpi_rank):
@@ -31,11 +69,9 @@ def balance_load(split_catalog, mpi_size, mpi_rank):
     Arguments
     ---------
     split_catalog: list of named ndarray
-        List of catalog. Each element is a ndarray with the same healpix
-
+        List of catalog. Each element is a ndarray with the same healpix.
     mpi_size: int
         Number of MPI tasks running.
-
     mpi_rank: int
         Rank of the MPI process.
 
@@ -63,7 +99,7 @@ class MPISaver(object):
     Parameters
     ----------
     fname: str
-        Filename. Does not create if empty string
+        Filename. Does not create if empty string.
     mpi_rank: int
         Rank of the MPI process. Creates FITS if 0.
     """
@@ -75,9 +111,21 @@ class MPISaver(object):
             self.fts = None
 
     def close(self):
+        """ Close FITS file."""
         if self.fts is not None:
             self.fts.close()
 
     def write(self, data, names, extname):
+        """ Write to FITS file.
+
+        Arguments
+        ---------
+        data: list of numpy arrays
+            Data to write to extention.
+        names: list of str
+            Column names for data.
+        extname: str
+            Extention name.
+        """
         if self.fts is not None:
             self.fts.write(data, names=names, extname=extname)
