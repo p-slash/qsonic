@@ -56,7 +56,7 @@ class SkyMask():
             Spectrum object to mask.
         """
         for arm, wave_arm in spec.forestwave.items():
-            w = np.ones(wave_arm.size, dtype=bool)
+            w = np.zeros(wave_arm.size, dtype=bool)
 
             m1 = np.searchsorted(
                 wave_arm,
@@ -72,9 +72,9 @@ class SkyMask():
 
             mask_idx_ranges = np.concatenate((m1, m2))
             for idx1, idx2 in mask_idx_ranges:
-                w[idx1:idx2] = 0
+                w[idx1:idx2] = 1
 
-            spec.forestivar[arm][~w] = 0
+            spec.forestivar[arm][w] = 0
 
 
 class BALMask():
@@ -137,7 +137,7 @@ class BALMask():
         mask['wave_max'] = np.outer(bal_obs_lines, min_velocities).ravel()
 
         for arm, wave_arm in spec.forestwave.items():
-            w = np.ones(wave_arm.size, dtype=bool)
+            w = np.zeros(wave_arm.size, dtype=bool)
 
             mask_idx_ranges = np.searchsorted(
                 wave_arm,
@@ -146,9 +146,9 @@ class BALMask():
             # Make sure first index comes before the second
             mask_idx_ranges.sort(axis=1)
             for idx1, idx2 in mask_idx_ranges:
-                w[idx1:idx2] = 0
+                w[idx1:idx2] = 1
 
-            spec.forestivar[arm][~w] = 0
+            spec.forestivar[arm][w] = 0
 
 
 class DLAMask():
