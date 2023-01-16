@@ -1,5 +1,3 @@
-import warnings
-
 import numpy as np
 import fitsio
 from scipy.optimize import minimize, curve_fit
@@ -9,7 +7,7 @@ from scipy.special import legendre
 from mpi4py import MPI
 
 from qcfitter.spectrum import valid_spectra
-from qcfitter.mpi_utils import logging_mpi, MPISaver
+from qcfitter.mpi_utils import logging_mpi, warn_mpi, MPISaver
 from qcfitter.mathtools import Fast1DInterpolator, mypoly1d
 
 
@@ -36,17 +34,17 @@ class PiccaContinuumFitter(object):
         Rest-frame wavelength centers for the mean continuum.
     _denom: float
         Denominator for the slope term in the continuum model.
-    meancont_interp: Fast1DInterpolator
+    meancont_interp: qcfitter.mathtools.Fast1DInterpolator
         Fast linear interpolator object for the mean continuum.
     comm: MPI.COMM_WORLD
         MPI comm object to reduce, broadcast etc.
     mpi_rank: int
         Rank of the MPI process.
-    meanflux_interp: Fast1DInterpolator
+    meanflux_interp: qcfitter.mathtools.Fast1DInterpolator
         Interpolator for mean flux. If fiducial is not set, this equals to 1.
     varlss_fitter: VarLSSFitter or None
         None if fiducials are set for var_lss.
-    varlss_interp: Fast1DInterpolator
+    varlss_interp: qcfitter.mathtools.Fast1DInterpolator
         Interpolator for var_lss.
     niterations: int
         Number of iterations from `args.no_iterations`.
@@ -80,6 +78,19 @@ class PiccaContinuumFitter(object):
             help="Order of continuum fitting polynomial.")
 
     def _set_fiducials(self, fiducial_fits):
+        """ Set fiducial interpolators for mean flux and var_lss.
+
+        FITS file must have a 'STATS' extention, which must have 'LAMBDA',
+        'MEANFLUX' and 'VAR' columns. This is the same format as raw_io output
+        from picca. 'LAMBDA' must be linearly and equally spaced.
+        This function sets `self.meanflux_interp` and `self.varlss_interp` as
+        `Fast1DInterpolator` objects.
+
+        Arguments
+        ---------
+        fiducial_fits: str
+            Filename of the FITS file.
+        """
         if self.mpi_rank == 0:
             with fitsio.FITS(fiducial_fits) as fts:
                 data = fts['STATS'].read()
@@ -145,6 +156,29 @@ class PiccaContinuumFitter(object):
         self.outdir = args.outdir
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
+        """ Cost function to minimize for each quasar.
+
+        This is a modified chi2 where amplitude is also part of minimization.
+        Cost of each arm is simply added to the total cost.
+
+        Arguments
+        ---------
+        x: ndarray
+            Polynomial coefficients for quasar diversity.
+        wave: dict of ndarray
+            Observed-frame wavelengths.
+        flux: dict of ndarray
+            Flux.
+        ivar_sm: dict of ndarray
+            Smooth inverse variance.
+        z_qso: float
+            Quasar redshift.
+
+        Returns
+        ---------
+        cost: float
+            Cost (modified chi2) for a given `x`.
+        """
         cost = 0
 
         for arm, wave_arm in wave.items():
@@ -165,6 +199,20 @@ class PiccaContinuumFitter(object):
         return cost
 
     def get_continuum_model(self, x, wave_rf_arm):
+        """ Returns interpolated continuum model.
+
+        Arguments
+        ---------
+        x: ndarray
+            Polynomial coefficients for quasar diversity.
+        wave_rf_arm: ndarray
+            Rest-frame wavelength per arm.
+
+        Returns
+        ---------
+        cont: ndarray
+            Continuum at `wave_rf_arm` values given `x`.
+        """
         slope = np.log(wave_rf_arm / self.rfwave[0]) / self._denom
 
         cont = self.meancont_interp(wave_rf_arm) * mypoly1d(x, 2 * slope - 1)
@@ -185,7 +233,7 @@ class PiccaContinuumFitter(object):
 
         Arguments
         ---------
-        spec: Spectrum
+        spec: qcfitter.spectrum.Spectrum
             Spectrum object to fit.
         """
         # We can precalculate meanflux and varlss here,
@@ -238,7 +286,7 @@ class PiccaContinuumFitter(object):
 
         Arguments
         ---------
-        spectra_list: list of Spectrum
+        spectra_list: list of qcfitter.spectrum.Spectrum
             Spectrum objects to fit.
         """
         no_valid_fits = 0
@@ -293,15 +341,17 @@ class PiccaContinuumFitter(object):
         return new_meancont, mean_
 
     def update_mean_cont(self, spectra_list, noupdate):
-        """ Update the global mean continuum. Uses `forestivar_sm` in inverse
-        variance. Must be smoothed beforehand. Raw mean continuum estimates are
-        smoothed with a weighted `UnivariateSpline`. The mean continuum is
-        removed from higher Legendre polynomials and normalized by the mean.
-        This function updates `self.meancont_interp.fp` if noupdate is False.
+        """ Update the global mean continuum.
+
+        Uses `forestivar_sm` in inverse variance, but must be set beforehand.
+        Raw mean continuum estimates are smoothed with a weighted
+        `UnivariateSpline`. The mean continuum is removed from higher Legendre
+        polynomials and normalized by the mean. This function updates
+        `self.meancont_interp.fp` if noupdate is False.
 
         Arguments
         ---------
-        spectra_list: list of Spectrum
+        spectra_list: list of qcfitter.spectrum.Spectrum
             Spectrum objects to fit.
         noupdate: bool
             Does not update `self.meancont_interp.fp` if True (last iteration).
@@ -313,13 +363,15 @@ class PiccaContinuumFitter(object):
             times the error estimates.
         """
         norm_flux = np.zeros(self.nbins)
+        std_flux = np.empty(self.nbins)
         counts = np.zeros(self.nbins)
 
         for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
                 wave_rf_arm = wave_arm / (1 + spec.z_qso)
-                bin_idx = ((wave_rf_arm - self.rfwave[0]) / self.dwrf
-                           + 0.5).astype(int)
+                bin_idx = (
+                    (wave_rf_arm - self.rfwave[0]) / self.dwrf + 0.5
+                ).astype(int)
 
                 cont = spec.cont_params['cont'][arm]
                 flux_ = spec.forestflux[arm] / cont
@@ -329,19 +381,24 @@ class PiccaContinuumFitter(object):
                 weight = spec.forestivar_sm[arm] * cont**2
                 weight = weight / (1 + weight * var_lss)
 
-                norm_flux += np.bincount(bin_idx, weights=flux_ * weight,
-                                         minlength=self.nbins)
-                counts += np.bincount(bin_idx, weights=weight,
-                                      minlength=self.nbins)
+                norm_flux += np.bincount(
+                    bin_idx, weights=flux_ * weight, minlength=self.nbins)
+                counts += np.bincount(
+                    bin_idx, weights=weight, minlength=self.nbins)
 
         self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
         self.comm.Allreduce(MPI.IN_PLACE, counts)
         w = counts > 0
-        std_flux = np.empty(self.nbins)
+
+        if w.sum() != self.nbins:
+            warn_mpi(
+                "Extrapolating empty bins in the mean continuum.",
+                self.mpi_rank)
+
         norm_flux[w] /= counts[w]
         norm_flux[~w] = np.mean(norm_flux[w])
         std_flux[w] = 1 / np.sqrt(counts[w])
-        std_flux[~w] = 2 * np.mean(std_flux[w])
+        std_flux[~w] = 10 * np.mean(std_flux[w])
 
         # Smooth new estimates
         spl = UnivariateSpline(self.rfwave, norm_flux, w=1 / std_flux)
@@ -358,13 +415,21 @@ class PiccaContinuumFitter(object):
             self.meancont_interp.fp = new_meancont
             self.meancont_interp.ep = std_flux
 
-        logging_mpi("Continuum updates", self.mpi_rank)
-        sl = np.s_[::max(1, int(self.nbins / 10))]
-        logging_mpi("wave_rf \t| update \t| error", self.mpi_rank)
-        for w, n, e in zip(self.rfwave[sl], norm_flux[sl], std_flux[sl]):
-            logging_mpi(f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}", self.mpi_rank)
+        all_pt_test = np.all(np.abs(norm_flux) < 0.33 * std_flux)
+        chi2_change = np.sum((norm_flux / std_flux)**2) / self.nbins
+        has_converged = (chi2_change < 1e-3) | all_pt_test
 
-        has_converged = np.all(np.abs(norm_flux) < 0.33 * std_flux)
+        if self.mpi_rank != 0:
+            return has_converged
+
+        text = ("Continuum updates\n" "rfwave\t| update\t| error\n")
+
+        sl = np.s_[::max(1, int(self.nbins / 10))]
+        for w, n, e in zip(self.rfwave[sl], norm_flux[sl], std_flux[sl]):
+            text += f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}\n"
+
+        text += f"Change in chi2: {chi2_change*100:.4e}%"
+        logging_mpi(text, 0)
 
         return has_converged
 
@@ -373,7 +438,7 @@ class PiccaContinuumFitter(object):
 
         Arguments
         ---------
-        spectra_list: list of Spectrum
+        spectra_list: list of qcfitter.spectrum.Spectrum
             Spectrum objects to fit.
         noupdate: bool
             Does not update `self.varlss_interp.fp` if True (last iteration).
@@ -386,10 +451,10 @@ class PiccaContinuumFitter(object):
         for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
                 cont = spec.cont_params['cont'][arm]
-                flux_ = spec.forestflux[arm] / cont
+                delta = spec.forestflux[arm] / cont - 1
+                ivar = spec.forestivar[arm] * cont**2
 
-                self.varlss_fitter.add(
-                    wave_arm, flux_ - 1, spec.forestivar[arm] * cont**2)
+                self.varlss_fitter.add(wave_arm, delta, ivar)
 
         # Else, fit for var_lss
         logging_mpi("Fitting var_lss", self.mpi_rank)
@@ -399,12 +464,40 @@ class PiccaContinuumFitter(object):
             self.varlss_interp.fp = y
             self.varlss_interp.ep = ep
 
+        if self.mpi_rank != 0:
+            return
+
         sl = np.s_[::max(1, int(y.size / 10))]
-        logging_mpi("wave_obs \t| var_lss \t| error", self.mpi_rank)
+        text = "wave_obs \t| var_lss \t| error\n"
         for w, v, e in zip(self.varlss_fitter.waveobs[sl], y[sl], ep[sl]):
-            logging_mpi(f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}", self.mpi_rank)
+            text += f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}"
+
+        logging_mpi(text, 0)
 
     def iterate(self, spectra_list):
+        """ Main function to fit continua and iterate.
+
+        Consists of three major steps: initializing, fitting, updating global
+        variables. The initialization sets `cont_params` variable of every
+        Spectrum object. Continuum polynomial order is carried by setting
+        `cont_params[x]`. At each iteration:
+            - Global variables (mean continuum, var_lss) are saved to file
+            (attributes.fits) file. This ensures the order of what is used in
+            each iteration.
+            - All spectra are fit.
+            - Mean continuum is updated by stacking, smoothing and removing
+            degenarate modes. Check for convergence if update is small.
+            - If fitting for var_lss, fit and update by calculating variance
+            statistics.
+        At the end of requested iterations or convergence, a chi2 catalog is
+        created that includes information regarding chi2, mean_snr, targetid,
+        etc.
+
+        Arguments
+        ---------
+        spectra_list: list of qcfitter.spectrum.Spectrum
+            Spectrum objects to fit.
+        """
         has_converged = False
 
         for spec in spectra_list:
@@ -418,8 +511,8 @@ class PiccaContinuumFitter(object):
         fattr = MPISaver(fname, self.mpi_rank)
 
         for it in range(self.niterations):
-            logging_mpi(f"Fitting iteration {it+1}/{self.niterations}",
-                        self.mpi_rank)
+            logging_mpi(
+                f"Fitting iteration {it+1}/{self.niterations}", self.mpi_rank)
 
             self.save(fattr, it + 1)
 
@@ -436,8 +529,8 @@ class PiccaContinuumFitter(object):
                 logging_mpi("Iteration has converged.", self.mpi_rank)
                 break
 
-        if not has_converged and self.mpi_rank == 0:
-            warnings.warn("Iteration has NOT converged.", RuntimeWarning)
+        if not has_converged:
+            warn_mpi("Iteration has NOT converged.", self.mpi_rank)
 
         fattr.close()
         logging_mpi("All continua are fit.", self.mpi_rank)
@@ -445,6 +538,14 @@ class PiccaContinuumFitter(object):
         self.save_contchi2_catalog(spectra_list)
 
     def save(self, fattr, it):
+        """ Save mean continuum and var_lss (if fitting) to a fits file.
+        Arguments
+        ---------
+        fattr: qcfitter.mpi_utils.MPISaver
+            File handler to save only on master node.
+        it: int
+            Current iteration number.
+        """
         fattr.write(
             [self.rfwave, self.meancont_interp.fp, self.meancont_interp.ep],
             names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
@@ -459,6 +560,14 @@ class PiccaContinuumFitter(object):
             names=['lambda', 'var_lss', 'e_var_lss'], extname=f'VAR_FUNC-{it}')
 
     def save_contchi2_catalog(self, spectra_list):
+        """ Save chi2 catalog if `self.outdir` is set. All values are gathered
+        and saved on the master node.
+
+        Arguments
+        ---------
+        spectra_list: list of qcfitter.spectrum.Spectrum
+            Spectrum objects to fit.
+        """
         if not self.outdir:
             return
 
@@ -663,11 +772,11 @@ class VarLSSFitter(object):
             w = self.num_pixels[wbinslice] > VarLSSFitter.min_no_pix
             w &= self.num_qso[wbinslice] > VarLSSFitter.min_no_qso
 
-            if w.sum() == 0 and mpi_rank == 0:
-                warnings.warn(
+            if w.sum() == 0:
+                warn_mpi(
                     "Not enough statistics for VarLSSFitter at"
                     f" wave_obs: {self.waveobs[iwave]:.2f}.",
-                    RuntimeWarning)
+                    mpi_rank)
                 continue
 
             try:
@@ -682,12 +791,11 @@ class VarLSSFitter(object):
                     bounds=(0, 2)
                 )
             except Exception as e:
-                if mpi_rank == 0:
-                    warnings.warn(
-                        "VarLSSFitter failed at wave_obs: "
-                        f"{self.waveobs[iwave]:.2f}. "
-                        f"Reason: {e}. Extrapolating.",
-                        RuntimeWarning)
+                warn_mpi(
+                    "VarLSSFitter failed at wave_obs: "
+                    f"{self.waveobs[iwave]:.2f}. "
+                    f"Reason: {e}. Extrapolating.",
+                    mpi_rank)
             else:
                 var_lss[iwave] = pfit[0]
                 std_var_lss[iwave] = np.sqrt(pcov[0, 0])
@@ -698,9 +806,9 @@ class VarLSSFitter(object):
             self.waveobs[w], var_lss[w], w=1 / std_var_lss[w])
 
         nfails = np.sum(var_lss == 0)
-        if nfails > 0 and mpi_rank == 0:
-            warnings.warn(
+        if nfails > 0:
+            warn_mpi(
                 f"VarLSSFitter failed and extrapolated at {nfails} points.",
-                RuntimeWarning)
+                mpi_rank)
 
         return spl(self.waveobs), std_var_lss
