@@ -29,7 +29,7 @@ def get_parser(add_help=True):
     return parser
 
 
-def read_spectra_local_queue(local_queue, args):
+def read_spectra_local_queue(comm, local_queue, args, mpi_rank):
     """ Read local spectra for the MPI rank. Set forest and observed wavelength
     range.
 
@@ -171,7 +171,7 @@ def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank):
     return spectra_list
 
 
-if __name__ == '__main__':
+def main():
     comm = MPI.COMM_WORLD
     mpi_rank = comm.Get_rank()
     mpi_size = comm.Get_size()
@@ -193,7 +193,8 @@ if __name__ == '__main__':
     maskers = read_masks(comm, local_queue, args, mpi_rank)
 
     try:
-        spectra_list = read_spectra_local_queue(local_queue, args)
+        spectra_list = read_spectra_local_queue(
+            comm, local_queue, args, mpi_rank)
     except Exception as e:
         logging_mpi(f"{e}", 0, "error")
         comm.Abort()
