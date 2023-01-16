@@ -36,7 +36,8 @@ def read_spectra_local_queue(comm, local_queue, args, mpi_rank):
     Arguments
     ---------
     local_queue: list of ndarray
-        Catalog from `qcfitter.spectrum.read_local_qso_catalog`.
+        Catalog from `qcfitter.spectrum.read_local_qso_catalog`. Each element
+        is a catalog for one healpix.
     args: Namespace obtained by argparse
         Options passed to script.
 
@@ -51,7 +52,7 @@ def read_spectra_local_queue(comm, local_queue, args, mpi_rank):
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
-        local_specs = qcfitter.io.read_spectra(
+        local_specs = qcfitter.io.read_spectra_onehealpix(
             cat, args.input_dir, args.arms,
             args.mock_analysis, args.skip_resomat
         )

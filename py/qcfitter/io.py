@@ -57,10 +57,11 @@ def add_io_parser(parser):
         help="Keeps non forest wavelengths. Memory intensive!")
 
 
-def read_spectra(
+def read_spectra_onehealpix(
         catalog_hpx, input_dir, arms_to_keep, mock_analysis, skip_resomat,
         program="dark"):
-    """ Returns a list of Spectrum objects for a given catalog.
+    """ Returns a list of Spectrum objects for a given catalog of a single
+    healpix.
 
     Arguments
     ---------
