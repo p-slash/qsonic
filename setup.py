@@ -2,7 +2,7 @@ from setuptools import setup
 import os
 
 binscripts = [os.path.join("bin", f) for f in os.listdir("bin")
-              if f.endswith(".py")]
+              if not f.startswith(".")]
 with open("requirements.txt") as file_reqs:
     requirements = file_reqs.read().splitlines()
 
