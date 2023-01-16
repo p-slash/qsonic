@@ -68,8 +68,7 @@ def read_local_qso_catalog(
 
     catalog = comm.bcast(catalog, root=0)
     if catalog is None:
-        logging_mpi("Error while reading catalog.", mpi_rank, "error")
-        exit(0)
+        raise Exception("Error while reading catalog.")
 
     return _get_local_queue(catalog, mpi_rank, mpi_size)
 

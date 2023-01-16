@@ -28,8 +28,8 @@ def add_io_parser(parser):
         "--outdir", '-o',
         help="Output directory to save deltas.")
     iogroup.add_argument(
-        "--mock-analysis", action="store_true",
-        help="Input folder is mock. Uses nside=16")
+        "--mock-analysis", action="store_const", const=16, default=64,
+        dest="nside", help="Input folder is mock. Uses nside=16")
     iogroup.add_argument(
         "--keep-surveys", nargs='+', default=['sv3', 'main'],
         help="Surveys to keep.")

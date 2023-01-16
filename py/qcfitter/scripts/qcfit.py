@@ -97,36 +97,31 @@ def read_masks(comm, local_queue, args, mpi_rank):
     """
     maskers = []
 
-    try:
-        if args.sky_mask:
-            logging_mpi("Reading sky mask.", mpi_rank)
-            skymasker = qcfitter.masks.SkyMask(args.sky_mask)
+    if args.sky_mask:
+        logging_mpi("Reading sky mask.", mpi_rank)
+        skymasker = qcfitter.masks.SkyMask(args.sky_mask)
 
-            maskers.append(skymasker)
+        maskers.append(skymasker)
 
-        # BAL mask
-        if args.bal_mask:
-            logging_mpi("Checking BAL mask.", mpi_rank)
-            qcfitter.masks.BALMask.check_catalog(local_queue[0])
+    # BAL mask
+    if args.bal_mask:
+        logging_mpi("Checking BAL mask.", mpi_rank)
+        qcfitter.masks.BALMask.check_catalog(local_queue[0])
 
-            maskers.append(qcfitter.masks.BALMask)
+        maskers.append(qcfitter.masks.BALMask)
 
-        # DLA mask
-        if args.dla_mask:
-            logging_mpi("Reading DLA mask.", mpi_rank)
-            local_targetids = np.concatenate(
-                [cat['TARGETID'] for cat in local_queue])
+    # DLA mask
+    if args.dla_mask:
+        logging_mpi("Reading DLA mask.", mpi_rank)
+        local_targetids = np.concatenate(
+            [cat['TARGETID'] for cat in local_queue])
 
-            # Read catalog
-            dlamasker = qcfitter.masks.DLAMask(
-                args.dla_mask, local_targetids, comm, mpi_rank,
-                dla_mask_limit=0.8)
+        # Read catalog
+        dlamasker = qcfitter.masks.DLAMask(
+            args.dla_mask, local_targetids, comm, mpi_rank,
+            dla_mask_limit=0.8)
 
-            maskers.append(dlamasker)
-
-    except Exception as e:
-        logging_mpi(f"{e}", mpi_rank, "error")
-        comm.Abort()
+        maskers.append(dlamasker)
 
     return maskers
 
@@ -184,20 +179,15 @@ def main():
         os_makedirs(args.outdir, exist_ok=True)
 
     # read catalog
-    n_side = 16 if args.mock_analysis else 64
     local_queue = qcfitter.catalog.read_local_qso_catalog(
         args.catalog, comm, mpi_rank, mpi_size, is_mock=args.mock_analysis,
-        n_side=n_side, keep_surveys=args.keep_surveys)
+        n_side=args.nside, keep_surveys=args.keep_surveys)
 
     # Read masks before data
     maskers = read_masks(comm, local_queue, args, mpi_rank)
 
-    try:
-        spectra_list = read_spectra_local_queue(
-            comm, local_queue, args, mpi_rank)
-    except Exception as e:
-        logging_mpi(f"{e}", 0, "error")
-        comm.Abort()
+    spectra_list = read_spectra_local_queue(
+        comm, local_queue, args, mpi_rank)
 
     apply_masks(maskers, spectra_list, mpi_rank)
 
@@ -214,12 +204,7 @@ def main():
     # Initialize continuum fitter & global functions
     logging_mpi("Initializing continuum fitter.", mpi_rank)
     start_time = time.time()
-    try:
-        qcfit = PiccaContinuumFitter(args)
-    except Exception as e:
-        logging_mpi(f"{e}", 0, "error")
-        comm.Abort()
-
+    qcfit = PiccaContinuumFitter(args)
     logging_mpi("Fitting continuum.", mpi_rank)
 
     # Fit continua
