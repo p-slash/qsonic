@@ -99,18 +99,23 @@ class PiccaContinuumFitter(object):
             dwave = waves[1] - waves[0]
             nsize = waves.size
             if not np.allclose(np.diff(waves), dwave):
-                raise Exception(
-                    "Failed to construct fiducial mean flux and varlss from "
-                    f"{fiducial_fits}::LAMBDA is not equally spaced.")
-
-            meanflux = np.array(data['MEANFLUX'], dtype='d')
-            varlss = np.array(data['VAR'], dtype='d')
+                # Set nsize to 0, later will be used to diagnose and exit
+                # for uneven wavelength array.
+                nsize = 0
+            else:
+                meanflux = np.array(data['MEANFLUX'], dtype='d')
+                varlss = np.array(data['VAR'], dtype='d')
         else:
             waves_0 = 0.
             dwave = 0.
             nsize = 0
 
         nsize, waves_0, dwave = self.comm.bcast([nsize, waves_0, dwave])
+
+        if nsize == 0:
+            raise Exception(
+                "Failed to construct fiducial mean flux and varlss from "
+                f"{fiducial_fits}::LAMBDA is not equally spaced.")
 
         if self.mpi_rank != 0:
             meanflux = np.empty(nsize, dtype='d')
