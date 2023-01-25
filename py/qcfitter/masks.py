@@ -169,6 +169,8 @@ class DLAMask():
     f12_lyb = 7.9142e-02
     A12_lyb = 1.6725e+08
 
+    accepted_zcolnames = ["Z_DLA", "Z"]
+
     @staticmethod
     def H_tepper_garcia(a, u):
         P = u**2 + 1e-12
@@ -216,34 +218,45 @@ class DLAMask():
 
         return transmission
 
+    @staticmethod
+    def _read_catalog(fname):
+        """Read and return catalog. Should be run on master. If error occurs,
+        returns None."""
+        z_colname = DLAMask.accepted_zcolnames[0]
+        fts = fitsio.FITS(fname)
+
+        fts_colnames = set(fts["DLACAT"].get_colnames())
+        z_colname = fts_colnames.intersection(DLAMask.accepted_zcolnames)
+
+        if not z_colname:
+            fts.close()
+            return None
+
+        z_colname = z_colname.pop()
+        columns_list = ["TARGETID", z_colname, "NHI"]
+        catalog = fts['DLACAT'].read(columns=columns_list)
+
+        if z_colname != 'Z_DLA':
+            catalog = rename_fields(catalog, {z_colname: 'Z_DLA'})
+
+        fts.close()
+
+        return catalog
+
     def __init__(
             self, fname, local_targetids, comm, mpi_rank, dla_mask_limit=0.8):
         catalog = None
         self.dla_mask_limit = dla_mask_limit
 
         if mpi_rank == 0:
-            accepted_zcolnames = ["Z_DLA", "Z"]
-            z_colname = accepted_zcolnames[0]
-            fts = fitsio.FITS(fname)
-
-            fts_colnames = set(fts["DLACAT"].get_colnames())
-            z_colname = fts_colnames.intersection(accepted_zcolnames)
-
-            if not z_colname:
-                raise ValueError(
-                    "Z colname has to be one of "
-                    f"{', '.join(accepted_zcolnames)}")
-
-            z_colname = z_colname.pop()
-            columns_list = ["TARGETID", z_colname, "NHI"]
-            catalog = fts['DLACAT'].read(columns=columns_list)
-
-            if z_colname != 'Z_DLA':
-                catalog = rename_fields(catalog, {z_colname: 'Z_DLA'})
-
-            fts.close()
+            catalog = DLAMask._read_catalog(fname)
 
         catalog = comm.bcast(catalog)
+        if catalog is None:
+            raise ValueError(
+                "DLA mask error::Z colname has to be one of "
+                f"{', '.join(DLAMask.accepted_zcolnames)}")
+
         w = np.isin(catalog['TARGETID'], local_targetids)
         catalog = catalog[w]
         catalog.sort(order='TARGETID')
