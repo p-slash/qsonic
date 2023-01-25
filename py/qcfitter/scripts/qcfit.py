@@ -184,6 +184,9 @@ def main():
         args.catalog, comm, mpi_rank, mpi_size, is_mock=args.mock_analysis,
         n_side=args.nside, keep_surveys=args.keep_surveys)
 
+    # Blinding
+    qcfitter.spectrum.Spectrum.set_blinding(local_queue, args)
+
     # Read masks before data
     maskers = read_masks(comm, local_queue, args, mpi_rank)
 

@@ -80,6 +80,8 @@ class Spectrum(object):
     WAVE_LYA_A = 1215.67
     _wave = None  # Dictionary of ndarrays
     _dwave = None  # Float
+    _blinding = None
+    _fits_colnames = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT']
 
     @staticmethod
     def _set_wave(wave, check_consistency=False):
@@ -92,6 +94,32 @@ class Spectrum(object):
             for arm, wave_arm in Spectrum._wave.items():
                 assert (arm in wave.keys())
                 assert (np.allclose(Spectrum._wave[arm], wave_arm))
+
+    @staticmethod
+    def set_blinding(catalog, args):
+        # do not blind mocks or metal forests
+        if args.mock_analysis or args.forest_w1 > Spectrum.WAVE_LYA_A:
+            Spectrum._blinding = "none"
+        # sv data, no blinding
+        elif all(catalog['LASTNIGHT'] < 20210514):
+            Spectrum._blinding = "none"
+        elif all(catalog['LASTNIGHT'] < 20210801):
+            Spectrum._blinding = "desi_m2"
+        elif all(catalog['LASTNIGHT'] < 20220801):
+            Spectrum._blinding = "desi_y1"
+        else:
+            Spectrum._blinding = "desi_y3"
+
+        if Spectrum._blinding != "none":
+            Spectrum._fits_colnames[1] = 'DELTA_BLIND'
+
+        if not args.skip_resomat:
+            Spectrum._fits_colnames.append('RESOMAT')
+
+    @staticmethod
+    def blinding_not_set():
+        """Return `True` if blinding is not set."""
+        return Spectrum._blinding is None
 
     def __init__(self, catrow, wave, flux, ivar, mask, reso, idx):
         self.catrow = catrow
@@ -166,7 +194,6 @@ class Spectrum(object):
             if real_size_arm == 0:
                 continue
 
-            # if larger than skip ratio, add to dict
             self._f1[arm], self._f2[arm] = ii1, ii2
 
             # Does this create a view or copy array?
@@ -353,7 +380,7 @@ class Spectrum(object):
             'TARGETID': self.targetid,
             'RA': self.ra, 'DEC': self.dec,
             'Z': self.z_qso,
-            'BLINDING': "none",
+            'BLINDING': Spectrum._blinding,
             'WAVE_SOLUTION': "lin",
             'MEANSNR': 0.,
             'RSNR': self.rsnr,
@@ -377,13 +404,11 @@ class Spectrum(object):
             weight = ivar / (1 + ivar * var_lss)
 
             cols = [wave_arm, delta, ivar, weight, cont_est]
-            names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT']
             if self.forestreso:
                 cols.append(self.forestreso[arm].T.astype('f8'))
-                names.append('RESOMAT')
 
             fts_file.write(
-                cols, names=names, header=hdr_dict,
+                cols, names=Spectrum._fits_colnames, header=hdr_dict,
                 extname=f"{self.targetid}-{arm}")
 
     @property
