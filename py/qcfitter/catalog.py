@@ -12,12 +12,15 @@ _required_columns = [
     set(['TARGETID']), set(['Z']), set(['TARGET_RA', 'RA']),
     set(['TARGET_DEC', 'DEC'])
 ]
+_required_data_columns = [set(['SURVEY']), set(['LAST_NIGHT', 'LASTNIGHT'])]
 _optional_columns = [
-    'SURVEY', 'HPXPIXEL', 'VMIN_CIV_450', 'VMAX_CIV_450', 'VMIN_CIV_2000',
+    'HPXPIXEL', 'VMIN_CIV_450', 'VMAX_CIV_450', 'VMIN_CIV_2000',
     'VMAX_CIV_2000'
 ]
 _all_columns = [
-    col for reqset in (_required_columns + _optional_columns) for col in reqset
+    col for reqset in (
+        _required_columns + _required_data_columns + _optional_columns
+    ) for col in reqset
 ]
 
 
@@ -105,6 +108,15 @@ def _get_local_queue(catalog, mpi_rank, mpi_size):
     return balance_load(split_catalog, mpi_size, mpi_rank)
 
 
+def _check_required_columns(required_cols, colnames):
+    for reqset in required_cols:
+        if reqset.intersection(colnames):
+            continue
+        raise Exception(
+            "One of these columns must be present in the catalog: "
+            f"{', '.join(reqset)}!")
+
+
 def _validate_adjust_column_names(catalog, is_mock):
     """ Validate `catalog` for required columns in `_required_columns`.
     'SURVEY' is also required for data. 'TARGET_{RA, DEC}' is transformed to
@@ -124,15 +136,9 @@ def _validate_adjust_column_names(catalog, is_mock):
     """
     colnames = catalog.dtype.names
     # Check if required columns are present
-    for reqset in _required_columns:
-        if not reqset.intersection(colnames):
-            raise Exception(
-                "One of these columns must be present in the catalog: "
-                f"{', '.join(reqset)}!")
-
-    if not is_mock and 'SURVEY' not in colnames:
-        raise Exception(
-            "SURVEY column must be present in the catalog for data!")
+    _check_required_columns(_required_columns, colnames)
+    if not is_mock:
+        _check_required_columns(_required_data_columns, colnames)
 
     logging_mpi(f"There are {catalog.size} quasars in the catalog.", 0)
 
@@ -144,6 +150,8 @@ def _validate_adjust_column_names(catalog, is_mock):
     for x in ['RA', 'DEC']:
         if f'TARGET_{x}' in colnames and x not in colnames:
             colname_map[f'TARGET_{x}'] = x
+    if 'LAST_NIGHT' in colnames:
+        colname_map['LAST_NIGHT'] = 'LASTNIGHT'
 
     if colname_map:
         catalog = rename_fields(catalog, colname_map)
