@@ -100,16 +100,15 @@ class Spectrum(object):
         # do not blind mocks or metal forests
         if args.mock_analysis or args.forest_w1 > Spectrum.WAVE_LYA_A:
             Spectrum._blinding = "none"
-        # figure out blinding
+        # sv data, no blinding
+        elif all(catalog['LASTNIGHT'] < 20210514):
+            Spectrum._blinding = "none"
+        elif all(catalog['LASTNIGHT'] < 20210801):
+            Spectrum._blinding = "desi_m2"
+        elif all(catalog['LASTNIGHT'] < 20220801):
+            Spectrum._blinding = "desi_y1"
         else:
-            if all(catalog['LASTNIGHT'] < 20210514):  # sv data, no blinding
-                Spectrum._blinding = "none"
-            elif all(catalog['LASTNIGHT'] < 20210801):
-                Spectrum._blinding = "desi_m2"
-            elif all(catalog['LASTNIGHT'] < 20220801):
-                Spectrum._blinding = "desi_y1"
-            else:
-                Spectrum._blinding = "desi_y3"
+            Spectrum._blinding = "desi_y3"
 
         if Spectrum._blinding != "none":
             Spectrum._fits_colnames[1] = 'DELTA_BLIND'
