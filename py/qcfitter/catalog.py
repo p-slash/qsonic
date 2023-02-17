@@ -12,7 +12,10 @@ _required_columns = [
     set(['TARGETID']), set(['Z']), set(['TARGET_RA', 'RA']),
     set(['TARGET_DEC', 'DEC'])
 ]
-_required_data_columns = [set(['SURVEY']), set(['LAST_NIGHT', 'LASTNIGHT'])]
+_required_data_columns = [
+    set(['SURVEY']),
+    set(['COADD_LASTNIGHT', 'LAST_NIGHT', 'LASTNIGHT'])
+]
 _optional_columns = [
     'HPXPIXEL', 'VMIN_CIV_450', 'VMAX_CIV_450', 'VMIN_CIV_2000',
     'VMAX_CIV_2000'
@@ -148,9 +151,11 @@ def _validate_adjust_column_names(catalog, is_mock):
     # Adjust column names
     colname_map = {}
     for x in ['RA', 'DEC']:
-        if f'TARGET_{x}' in colnames and x not in colnames:
+        if (f'TARGET_{x}' in colnames) and (x not in colnames):
             colname_map[f'TARGET_{x}'] = x
-    if 'LAST_NIGHT' in colnames:
+    if ('LASTNIGHT' not in colnames) and ('COADD_LASTNIGHT' in colnames):
+        colname_map['COADD_LASTNIGHT'] = 'LASTNIGHT'
+    elif ('LASTNIGHT' not in colnames) and ('LAST_NIGHT' in colnames):
         colname_map['LAST_NIGHT'] = 'LASTNIGHT'
 
     if colname_map:
