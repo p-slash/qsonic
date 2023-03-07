@@ -29,17 +29,21 @@ def get_parser(add_help=True):
     return parser
 
 
-def read_spectra_local_queue(comm, local_queue, args, mpi_rank):
+def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     """ Read local spectra for the MPI rank. Set forest and observed wavelength
     range.
 
     Arguments
     ---------
     local_queue: list of ndarray
-        Catalog from `qcfitter.spectrum.read_local_qso_catalog`. Each element
-        is a catalog for one healpix.
+        Catalog from `qcfitter.spectrum.mpi_read_local_qso_catalog`. Each
+        element is a catalog for one healpix.
     args: Namespace obtained by argparse
         Options passed to script.
+    comm: MPI.COMM_WORLD
+        Communication object for reducing data.
+    mpi_rank: int
+        Rank of the MPI process
 
     Returns
     ---------
@@ -76,18 +80,18 @@ def read_spectra_local_queue(comm, local_queue, args, mpi_rank):
     return spectra_list
 
 
-def read_masks(comm, local_queue, args, mpi_rank):
+def mpi_read_masks(local_queue, args, comm, mpi_rank):
     """ Read and set masking objects. Broadcast from the master process if
     necessary. See `qcfitter.masks` for `SkyMask`, `BALMask` and `DLAMask`.
 
     Arguments
     ---------
-    comm: MPI.COMM_WORLD
-        Communication object for broadcasting data.
     local_queue: list of ndarray
-        Catalog from `qcfitter.spectrum.read_local_qso_catalog`.
+        Catalog from `qcfitter.spectrum.mpi_read_local_qso_catalog`.
     args: Namespace obtained by argparse
         Options passed to script.
+    comm: MPI.COMM_WORLD
+        Communication object for broadcasting data.
     mpi_rank: int
         Rank of the MPI process
 
@@ -127,7 +131,7 @@ def read_masks(comm, local_queue, args, mpi_rank):
     return maskers
 
 
-def apply_masks(maskers, spectra_list, mpi_rank):
+def apply_masks(maskers, spectra_list, mpi_rank=0):
     """ Apply masks in `maskers` to the local `spectra_list`. See
     `qcfitter.masks` for `SkyMask`, `BALMask` and `DLAMask`. Masking is set by
     setting `forestivar=0`. `DLAMask` further corrects for Lya and Lyb damping
@@ -155,7 +159,7 @@ def apply_masks(maskers, spectra_list, mpi_rank):
     logging_mpi(f"Masks are applied in {etime:.1f} mins.", mpi_rank)
 
 
-def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank):
+def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank=0):
     if not skip_ratio:
         return spectra_list
 
@@ -180,7 +184,7 @@ def main():
         os_makedirs(args.outdir, exist_ok=True)
 
     # read catalog
-    local_queue = qcfitter.catalog.read_local_qso_catalog(
+    local_queue = qcfitter.catalog.mpi_read_local_qso_catalog(
         args.catalog, comm, mpi_rank, mpi_size, is_mock=args.mock_analysis,
         n_side=args.nside, keep_surveys=args.keep_surveys)
 
@@ -188,10 +192,10 @@ def main():
     qcfitter.spectrum.Spectrum.set_blinding(local_queue, args)
 
     # Read masks before data
-    maskers = read_masks(comm, local_queue, args, mpi_rank)
+    maskers = mpi_read_masks(local_queue, args, comm, mpi_rank)
 
-    spectra_list = read_spectra_local_queue(
-        comm, local_queue, args, mpi_rank)
+    spectra_list = mpi_read_spectra_local_queue(
+        local_queue, args, comm, mpi_rank)
 
     apply_masks(maskers, spectra_list, mpi_rank)
 

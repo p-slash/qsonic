@@ -47,7 +47,8 @@ class TestCatalog(object):
         assert ('DEC' in colnames)
         assert ('TARGET_RA' not in colnames)
 
-        expected_msg = "SURVEY column must be present in the catalog for data!"
+        expected_msg = (
+            "One of these columns must be present in the catalog: SURVEY!")
         with pytest.raises(Exception, match=expected_msg):
             qcfitter.catalog._validate_adjust_column_names(
                 catalog, is_mock=False)
@@ -100,7 +101,7 @@ class TestCatalog(object):
             input_catalog.copy(), nside, keep_surveys, zmin, zmax)
         npt.assert_array_equal(catalog1, expected_catalog)
 
-    def test_get_local_queue(self):
+    def test_mpi_get_local_queue(self):
         cat_dtype = np.dtype([
             ('TARGETID', '>i8'), ('Z', '>f8'), ('RA', '>f8'), ('DEC', '>f8'),
             ('HPXPIXEL', '>i8'), ('SURVEY', '<U4')])
@@ -117,8 +118,8 @@ class TestCatalog(object):
             dtype=cat_dtype)
 
         mpi_size = 2
-        q0 = qcfitter.catalog._get_local_queue(input_catalog, 0, mpi_size)
-        q1 = qcfitter.catalog._get_local_queue(input_catalog, 1, mpi_size)
+        q0 = qcfitter.catalog._mpi_get_local_queue(input_catalog, 0, mpi_size)
+        q1 = qcfitter.catalog._mpi_get_local_queue(input_catalog, 1, mpi_size)
         assert (len(q0) == 2)
         assert (len(q1) == 2)
         npt.assert_equal(q0[0]['TARGETID'], [666, 667, 668])
