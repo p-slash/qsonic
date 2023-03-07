@@ -24,7 +24,42 @@ _all_columns = [
 ]
 
 
-def read_local_qso_catalog(
+def read_quasar_catalog(
+        filename, is_mock=False, n_side=64, keep_surveys=None,
+        zmin=0, zmax=100.0):
+    """ Returns a quasar catalog object (ndarray).
+
+    It is sorted in the following order: HPXPIXEL, SURVEY (if applicable),
+    TARGETID. BAL info included if available. It is required for BAL masking.
+
+    Arguments
+    ----------
+    filename: str
+        Filename to catalog.
+    is_mock: bool (default: False)
+        If the catalog is for mocks.
+    n_side: int (default: 64)
+        Healpix nside. Required if 'HPXPIXEL' column is not present.
+    keep_surveys: list (default: all)
+        List of surveys to subselect.
+    zmin: float (default: 2.1)
+        Minimum quasar redshift
+    zmax: float (default: 6.0)
+        Maximum quasar redshift
+
+    Returns
+    ----------
+    catalog: ndarray
+        Sorted catalog.
+    """
+    catalog = _read(filename)
+    catalog = _validate_adjust_column_names(catalog, is_mock)
+    catalog = _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax)
+
+    return catalog
+
+
+def mpi_read_local_qso_catalog(
         filename, comm, mpi_rank, mpi_size, is_mock,
         n_side=64, keep_surveys=None, zmin=2.1, zmax=6.0):
     """ Returns quasar catalog object for mpi_rank.
@@ -45,7 +80,7 @@ def read_local_qso_catalog(
     is_mock: bool
         If the catalog is for mocks.
     n_side: int (default: 64)
-        Healpix nside.
+        Healpix nside. Required if 'HPXPIXEL' column is not present.
     keep_surveys: list (default: all)
         List of surveys to subselect.
     zmin: float (default: 2.1)
@@ -62,9 +97,8 @@ def read_local_qso_catalog(
 
     if mpi_rank == 0:
         try:
-            catalog = _read(filename)
-            catalog = _validate_adjust_column_names(catalog, is_mock)
-            catalog = _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax)
+            catalog = read_quasar_catalog(
+                filename, is_mock, n_side, keep_surveys, zmin, zmax)
         except Exception as e:
             logging_mpi(f"{e}", 0, "error")
             catalog = None
@@ -73,10 +107,10 @@ def read_local_qso_catalog(
     if catalog is None:
         raise Exception("Error while reading catalog.")
 
-    return _get_local_queue(catalog, mpi_rank, mpi_size)
+    return _mpi_get_local_queue(catalog, mpi_rank, mpi_size)
 
 
-def _get_local_queue(catalog, mpi_rank, mpi_size):
+def _mpi_get_local_queue(catalog, mpi_rank, mpi_size):
     """ Take a 'HPXPIXEL' sorted `catalog` and assign a list of catalogs to
     mpi_rank
 

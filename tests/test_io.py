@@ -57,10 +57,10 @@ class TestIOReading(object):
         with pytest.raises(Exception, match=expected_msg):
             qcfitter.io.save_deltas([], "outdir", None)
 
-    def test_read_spectra(self, my_setup_fits):
+    def test_read_spectra_onehealpix(self, my_setup_fits):
         cat_by_survey, input_dir, xarms, data = my_setup_fits
 
-        slist = qcfitter.io.read_spectra(
+        slist = qcfitter.io.read_spectra_onehealpix(
             cat_by_survey, input_dir, xarms, False, True)
 
         assert (len(slist) == cat_by_survey.size)
@@ -76,7 +76,7 @@ class TestIOReading(object):
         cat_by_survey2[-ens_:]['TARGETID'] += 20
         npt.assert_array_equal(cat_by_survey, cat_by_survey2[:-ens_])
         with pytest.warns(RuntimeWarning):
-            slist = qcfitter.io.read_spectra(
+            slist = qcfitter.io.read_spectra_onehealpix(
                 cat_by_survey2, input_dir, xarms, False, True)
 
         assert (len(slist) == cat_by_survey.size)

@@ -244,14 +244,17 @@ class DLAMask():
         return catalog
 
     def __init__(
-            self, fname, local_targetids, comm, mpi_rank, dla_mask_limit=0.8):
+            self, fname, local_targetids, comm=None, mpi_rank=0,
+            dla_mask_limit=0.8):
         catalog = None
         self.dla_mask_limit = dla_mask_limit
 
         if mpi_rank == 0:
             catalog = DLAMask._read_catalog(fname)
 
-        catalog = comm.bcast(catalog)
+        if comm is not None:
+            catalog = comm.bcast(catalog)
+
         if catalog is None:
             raise ValueError(
                 "DLA mask error::Z colname has to be one of "
