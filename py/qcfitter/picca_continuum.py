@@ -62,6 +62,7 @@ class PiccaContinuumFitter():
         Arguments
         ---------
         parser: argparse.ArgumentParser
+            parser to be modified.
         """
         cont_group = parser.add_argument_group('Continuum fitting options')
 
@@ -84,7 +85,7 @@ class PiccaContinuumFitter():
         'MEANFLUX' and 'VAR' columns. This is the same format as raw_io output
         from picca. 'LAMBDA' must be linearly and equally spaced.
         This function sets `self.meanflux_interp` and `self.varlss_interp` as
-        `Fast1DInterpolator` objects.
+        Fast1DInterpolator objects.
 
         Arguments
         ---------
@@ -316,7 +317,7 @@ class PiccaContinuumFitter():
         """ Project out higher order Legendre polynomials from the new mean
         continuum, since these are degenerate with the free fitting parameters.
         Returns a normalized mean continuum. Integrals are calculated using
-        `np.trapz` with `ln lambda_RF` as x array.
+        ``np.trapz`` with ``ln lambda_RF`` as x array.
 
         Arguments
         ---------
@@ -348,18 +349,19 @@ class PiccaContinuumFitter():
     def update_mean_cont(self, spectra_list, noupdate):
         """ Update the global mean continuum.
 
-        Uses `forestivar_sm` in inverse variance, but must be set beforehand.
+        Uses ``forestivar_sm`` in inverse variance, but must be set beforehand.
         Raw mean continuum estimates are smoothed with a weighted
-        `UnivariateSpline`. The mean continuum is removed from higher Legendre
-        polynomials and normalized by the mean. This function updates
-        `self.meancont_interp.fp` if noupdate is False.
+        `scipy.interpolate.UnivariateSpline`. The mean continuum is removed
+        from higher Legendre polynomials and normalized by the mean. This
+        function updates ``self.meancont_interp.fp`` if noupdate is False.
 
         Arguments
         ---------
         spectra_list: list of qcfitter.spectrum.Spectrum
             Spectrum objects to fit.
         noupdate: bool
-            Does not update `self.meancont_interp.fp` if True (last iteration).
+            Does not update ``self.meancont_interp.fp`` if True
+            (last iteration).
 
         Returns
         ---------
@@ -439,7 +441,7 @@ class PiccaContinuumFitter():
         return has_converged
 
     def update_var_lss(self, spectra_list, noupdate):
-        """ Fit for var_lss. See `VarLSSFitter` for implementation details.
+        """ Fit for var_lss. See VarLSSFitter for implementation details.
 
         Arguments
         ---------
@@ -483,17 +485,19 @@ class PiccaContinuumFitter():
         """ Main function to fit continua and iterate.
 
         Consists of three major steps: initializing, fitting, updating global
-        variables. The initialization sets `cont_params` variable of every
+        variables. The initialization sets ``cont_params`` variable of every
         Spectrum object. Continuum polynomial order is carried by setting
-        `cont_params[x]`. At each iteration:
-            - Global variables (mean continuum, var_lss) are saved to file
-            (attributes.fits) file. This ensures the order of what is used in
-            each iteration.
-            - All spectra are fit.
-            - Mean continuum is updated by stacking, smoothing and removing
-            degenarate modes. Check for convergence if update is small.
-            - If fitting for var_lss, fit and update by calculating variance
-            statistics.
+        ``cont_params[x]``. At each iteration:
+
+        1. Global variables (mean continuum, var_lss) are saved to file
+           (attributes.fits) file. This ensures the order of what is used in
+           each iteration.
+        2. All spectra are fit.
+        3. Mean continuum is updated by stacking, smoothing and removing
+           degenarate modes. Check for convergence if update is small.
+        4. If fitting for var_lss, fit and update by calculating variance
+           statistics.
+
         At the end of requested iterations or convergence, a chi2 catalog is
         created that includes information regarding chi2, mean_snr, targetid,
         etc.
@@ -544,6 +548,7 @@ class PiccaContinuumFitter():
 
     def save(self, fattr, it):
         """ Save mean continuum and var_lss (if fitting) to a fits file.
+
         Arguments
         ---------
         fattr: qcfitter.mpi_utils.MPISaver

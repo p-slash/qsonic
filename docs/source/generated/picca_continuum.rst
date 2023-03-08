@@ -1,5 +1,5 @@
-picca\_continuum module
-=======================
+qcfitter.picca\_continuum module
+================================
 
 .. automodule:: qcfitter.picca_continuum
    :members:

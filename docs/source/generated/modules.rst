@@ -1,6 +1,9 @@
 API Reference
 =============
 
+Modules
+-------
+
 .. toctree::
    :maxdepth: 4
 
@@ -11,3 +14,11 @@ API Reference
    mpi_utils
    picca_continuum
    spectrum
+
+Scripts
+-------
+
+.. toctree::
+   :maxdepth: 4
+
+   scripts.qcfit

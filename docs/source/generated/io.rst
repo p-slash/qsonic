@@ -1,5 +1,5 @@
-io module
-=========
+qcfitter.io module
+==================
 
 .. automodule:: qcfitter.io
    :members:
