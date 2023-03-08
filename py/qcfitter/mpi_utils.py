@@ -11,11 +11,12 @@ def mpi_parse(parser, comm, mpi_rank, options=None):
     Arguments
     ---------
     parser: argparse.ArgumentParser
-    comm: MPI comm object
+    comm: MPI.COMM_WORLD
         MPI comm object for bcast
     mpi_rank: int
         Rank of the MPI process.
-    options: list. Default is None, which parses sys.argv
+    options: None or list, default: None
+        Options to parse. None parses sys.argv
     """
     if mpi_rank == 0:
         try:
@@ -68,7 +69,7 @@ def balance_load(split_catalog, mpi_size, mpi_rank):
 
     Arguments
     ---------
-    split_catalog: list of named ndarray
+    split_catalog: list(ndarray)
         List of catalog. Each element is a ndarray with the same healpix.
     mpi_size: int
         Number of MPI tasks running.
@@ -77,7 +78,7 @@ def balance_load(split_catalog, mpi_size, mpi_rank):
 
     Returns
     ---------
-    local_queue: list of named ndarray
+    local_queue: list(ndarray)
         Spectra that current rank is reponsible for in `split_catalog` format.
     """
     number_of_spectra = np.zeros(mpi_size, dtype=int)
@@ -120,9 +121,9 @@ class MPISaver():
 
         Arguments
         ---------
-        data: list of numpy arrays
+        data: list(ndarray)
             Data to write to extention.
-        names: list of str
+        names: list(str)
             Column names for data.
         extname: str
             Extention name.
