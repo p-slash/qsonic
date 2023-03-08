@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_namespace_packages
 import os
 
 binscripts = [os.path.join("bin", f) for f in os.listdir("bin")
@@ -9,7 +9,7 @@ with open("requirements.txt") as file_reqs:
 setup(
     name="qcfitter",
     version="1.0",
-    packages=['qcfitter'],
+    packages=find_namespace_packages(where='py'),
     package_dir={'': 'py/'},
     scripts=binscripts,
     install_requires=requirements,
