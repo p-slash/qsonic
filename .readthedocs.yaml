@@ -3,3 +3,8 @@ version: 2
 build:
   apt_packages:
     - libopenmpi-dev
+
+python:
+  install:
+    - method: pip
+      path: .
