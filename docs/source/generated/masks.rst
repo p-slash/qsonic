@@ -1,5 +1,5 @@
-masks module
-============
+qcfitter.masks module
+=====================
 
 .. automodule:: qcfitter.masks
    :members:
