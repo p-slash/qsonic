@@ -1,3 +1,6 @@
+""" This module contains functions to read spectra and save deltas. Can be
+imported without a need for MPI."""
+
 import argparse
 import warnings
 

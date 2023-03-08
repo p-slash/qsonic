@@ -45,8 +45,8 @@ def valid_spectra(spectra_list):
     return (spec for spec in spectra_list if spec.cont_params['valid'])
 
 
-class Spectrum(object):
-    """Represents one spectrum.
+class Spectrum():
+    """An object to represent one spectrum.
 
     Parameters
     ----------
