@@ -2,6 +2,14 @@
 qcfitter
 ========
 
+.. image:: https://github.com/github/p-slash/qcfitter/actions/workflows/main.yml/badge.svg
+    :target: https://github.com/github/p-slash/qcfitter/actions/workflows/main.yml
+    :alt: Tests Status
+
+.. image:: https://readthedocs.org/projects/qcfitter/badge/?version=latest
+    :target: https://qcfitter.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
+
 **qcfitter** is an MPI parallelized, highly optimized quasar continuum fitter package built on the same algorithm as `picca <https://github.com/igmhub/picca>`_.
 
 The key differences
