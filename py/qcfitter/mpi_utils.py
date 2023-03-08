@@ -93,8 +93,8 @@ def balance_load(split_catalog, mpi_size, mpi_rank):
     return local_queue
 
 
-class MPISaver(object):
-    """ A simple object to write to a FITS file on master node.
+class MPISaver():
+    """ A simple class to write to a FITS file on master node.
 
     Parameters
     ----------

@@ -1,37 +1,7 @@
-﻿masks
-=====
+masks module
+============
 
-.. automodule:: masks
-
-   
-   
-   
-
-   
-   
-   .. rubric:: Functions
-
-   .. autosummary::
-   
-      add_mask_parser
-   
-   
-
-   
-   
-   .. rubric:: Classes
-
-   .. autosummary::
-   
-      BALMask
-      DLAMask
-      SkyMask
-   
-   
-
-   
-   
-   
-
-
-
+.. automodule:: qcfitter.masks
+   :members:
+   :undoc-members:
+   :show-inheritance:
