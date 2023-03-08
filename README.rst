@@ -2,8 +2,8 @@
 qcfitter
 ========
 
-.. image:: https://github.com/github/p-slash/qcfitter/actions/workflows/main.yml/badge.svg
-    :target: https://github.com/github/p-slash/qcfitter/actions/workflows/main.yml
+.. image:: https://github.com/p-slash/qcfitter/actions/workflows/main.yml/badge.svg
+    :target: https://github.com/p-slash/qcfitter/actions/workflows/main.yml
     :alt: Tests Status
 
 .. image:: https://readthedocs.org/projects/qcfitter/badge/?version=latest
