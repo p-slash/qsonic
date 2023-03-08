@@ -1,30 +1,7 @@
-﻿picca\_continuum
-================
+picca\_continuum module
+=======================
 
-.. automodule:: picca_continuum
-
-   
-   
-   
-
-   
-   
-   
-
-   
-   
-   .. rubric:: Classes
-
-   .. autosummary::
-   
-      PiccaContinuumFitter
-      VarLSSFitter
-   
-   
-
-   
-   
-   
-
-
-
+.. automodule:: qcfitter.picca_continuum
+   :members:
+   :undoc-members:
+   :show-inheritance:

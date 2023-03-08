@@ -26,12 +26,12 @@ Scripts under ``bin`` folder are executable. Pass ``--help`` for arguments. The 
 
 Source
 ------
-+ `catalog.py <py/qcfitter/catalog.py>`_ provides function to read catalog and broadcast from master pe. Needs following columns: ``TARGETID, Z, TARGET_RA, RA, TARGET_DEC, DEC, SURVEY, HPXPIXEL, VMIN_CIV_450, VMAX_CIV_450, VMIN_CIV_2000, VMAX_CIV_2000``.
-+ `masks.py <py/qcfitter/masks.py>`_ provides maskers for sky, BAL and DLA. Sky mask is a simple text file, where colums are  *type* (unused), *wave_min* mininum wavelength, *wave_max* maximum wavelength, *frame* rest-frame (RF) or observed (OBS). BAL mask assumes related ``VMIN_CIV_450, VMAX_CIV_450, VMIN_CIV_2000, VMAX_CIV_2000`` values are already present in `catalog`. DLA masking takes both Lya and Lyb profiles into account, masks ``F<0.8`` and corrects for the wings.
-+ `mathtools.py <py/qcfitter/mathtools.py>`_ hosts some functions and classes that are purely numerical.
-+ `mpi_utils.py <py/qcfitter/mpi_utils.py>`_ hosts MPI related functions such as logging.
-+ `picca_continuum.py <py/qcfitter/picca_continuum.py>`_ fits each quasar continuum with a global mean as done in picca.
-+ `spectrum.py <py/qcfitter/spectrum.py>`_ has ``Spectrum`` class that stores each quasar spectrum and provides io functions such as ``read_spectra_onehealpix`` and ``save_deltas``.
++ `catalog.py` provides function to read catalog and broadcast from master pe. Needs following columns: ``TARGETID, Z, TARGET_RA, RA, TARGET_DEC, DEC, SURVEY, HPXPIXEL, VMIN_CIV_450, VMAX_CIV_450, VMIN_CIV_2000, VMAX_CIV_2000``.
++ `masks.py` provides maskers for sky, BAL and DLA. Sky mask is a simple text file, where colums are  *type* (unused), *wave_min* mininum wavelength, *wave_max* maximum wavelength, *frame* rest-frame (RF) or observed (OBS). BAL mask assumes related ``VMIN_CIV_450, VMAX_CIV_450, VMIN_CIV_2000, VMAX_CIV_2000`` values are already present in `catalog`. DLA masking takes both Lya and Lyb profiles into account, masks ``F<0.8`` and corrects for the wings.
++ `mathtools.py` hosts some functions and classes that are purely numerical.
++ `mpi_utils.py` hosts MPI related functions such as logging.
++ `picca_continuum.py` fits each quasar continuum with a global mean as done in picca.
++ `spectrum.py` has ``Spectrum`` class that stores each quasar spectrum and provides io functions such as ``read_spectra_onehealpix`` and ``save_deltas``.
 
 Installation
 ------------

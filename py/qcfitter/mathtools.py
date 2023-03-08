@@ -2,9 +2,9 @@ import numpy as np
 from numba import njit
 
 
-class Fast1DInterpolator(object):
-    """ Fast interpolator for equally spaced data. Out of domain points are
-    linearly extrapolated without producing any warnings or errors.
+class Fast1DInterpolator():
+    """ Fast interpolator class for equally spaced data. Out of domain points
+    are linearly extrapolated without producing any warnings or errors.
 
     Parameters
     ----------

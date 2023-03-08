@@ -1,3 +1,6 @@
+# I ran `sphinx-apidoc -o docs/source/generated py/qcfitter`
+# and changed every file in generated directory to have qcfitter.io etc
+
 # Configuration file for the Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
@@ -6,7 +9,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath('../../py/qcfitter'))
+sys.path.insert(0, os.path.abspath('../../py/'))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
@@ -30,6 +33,15 @@ extensions = [
     # 'nbsphinx',
     # 'autoapi.extension'
 ]
+
+autodoc_default_options = {
+    # 'members': 'var1, var2',
+    # 'member-order': 'bysource',
+    # 'special-members': '__init__',
+    # 'undoc-members': True,
+    # 'exclude-members': '__weakref__',
+    'private-members': True
+}
 
 exclude_patterns = []
 

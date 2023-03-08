@@ -1,38 +1,7 @@
-﻿mpi\_utils
-==========
+mpi\_utils module
+=================
 
-.. automodule:: mpi_utils
-
-   
-   
-   
-
-   
-   
-   .. rubric:: Functions
-
-   .. autosummary::
-   
-      balance_load
-      logging_mpi
-      mpi_parse
-      warn_mpi
-   
-   
-
-   
-   
-   .. rubric:: Classes
-
-   .. autosummary::
-   
-      MPISaver
-   
-   
-
-   
-   
-   
-
-
-
+.. automodule:: qcfitter.mpi_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -7,11 +7,13 @@ Welcome to qcfitter's documentation!
 ====================================
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :glob:
 
    readme
-   api
+   installation
+   example
+   generated/modules
 
 
 
