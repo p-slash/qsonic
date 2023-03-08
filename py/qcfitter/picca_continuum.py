@@ -11,8 +11,8 @@ from qcfitter.mpi_utils import logging_mpi, warn_mpi, MPISaver
 from qcfitter.mathtools import Fast1DInterpolator, mypoly1d
 
 
-class PiccaContinuumFitter(object):
-    """ Picca continuum fitter.
+class PiccaContinuumFitter():
+    """ Picca continuum fitter class.
 
     Fits spectra without coadding. Pipeline ivar is smoothed before using in
     weights. Mean continuum is smoothed using inverse weights and cubic spline.
