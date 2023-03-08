@@ -1,5 +1,5 @@
-spectrum module
-===============
+qcfitter.spectrum module
+========================
 
 .. automodule:: qcfitter.spectrum
    :members:

@@ -1,5 +1,5 @@
-mathtools module
-================
+qcfitter.mathtools module
+=========================
 
 .. automodule:: qcfitter.mathtools
    :members:

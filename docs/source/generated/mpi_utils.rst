@@ -1,5 +1,5 @@
-mpi\_utils module
-=================
+qcfitter.mpi\_utils module
+==========================
 
 .. automodule:: qcfitter.mpi_utils
    :members:

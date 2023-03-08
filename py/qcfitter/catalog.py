@@ -1,3 +1,6 @@
+""" This module contains functions to read, validate and make necessary changes
+to DESI quasar catalogs. Can be imported without a need for MPI. """
+
 import warnings
 
 import fitsio

@@ -6,6 +6,11 @@ class Fast1DInterpolator():
     """ Fast interpolator class for equally spaced data. Out of domain points
     are linearly extrapolated without producing any warnings or errors.
 
+    Example::
+
+        one_interp = Fast1DInterpolator(0., 1., np.ones(3))
+        one_interp(5) # = 1
+
     Parameters
     ----------
     xp0: float
@@ -18,11 +23,6 @@ class Fast1DInterpolator():
         Error on fp points. Not used! Bookkeeping purposes only.
     copy: bool (default: False)
         Copy input data, specifically fp
-
-    Methods
-    ----------
-    __call__(x)
-
     """
 
     def __init__(self, xp0, dxp, fp, copy=False, ep=None):
