@@ -5,3 +5,4 @@ qcfitter.catalog module
    :members:
    :undoc-members:
    :show-inheritance:
+   :exclude-members: _all_columns
