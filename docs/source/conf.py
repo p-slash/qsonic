@@ -34,6 +34,8 @@ extensions = [
     # 'autoapi.extension'
 ]
 
+autodoc_mock_imports = ["mpi4py"]
+
 autodoc_default_options = {
     # 'members': 'var1, var2',
     # 'member-order': 'bysource',
