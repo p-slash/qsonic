@@ -10,7 +10,9 @@ qcfitter
     :target: https://qcfitter.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
-**qcfitter** is an MPI parallelized, highly optimized quasar continuum fitter package built on the same algorithm as `picca <https://github.com/igmhub/picca>`_.
+*Lightining-fast continuum fitting*
+
+**qcfitter** is an MPI-parallelized, highly optimized quasar continuum fitting package built on the same algorithm as `picca <https://github.com/igmhub/picca>`_, but *faster*. It also provides efficient API to read DESI quasar spectra.
 
 The key differences
 -------------------
@@ -34,6 +36,8 @@ Scripts under ``bin`` folder are executable. Pass ``--help`` for arguments. The 
 
 Source
 ------
+See :doc:`generated/modules` for details.
+
 + `catalog.py` provides function to read catalog and broadcast from master pe. Needs following columns: ``TARGETID, Z, TARGET_RA, RA, TARGET_DEC, DEC, SURVEY, HPXPIXEL, VMIN_CIV_450, VMAX_CIV_450, VMIN_CIV_2000, VMAX_CIV_2000``.
 + `masks.py` provides maskers for sky, BAL and DLA. Sky mask is a simple text file, where colums are  *type* (unused), *wave_min* mininum wavelength, *wave_max* maximum wavelength, *frame* rest-frame (RF) or observed (OBS). BAL mask assumes related ``VMIN_CIV_450, VMAX_CIV_450, VMIN_CIV_2000, VMAX_CIV_2000`` values are already present in `catalog`. DLA masking takes both Lya and Lyb profiles into account, masks ``F<0.8`` and corrects for the wings.
 + `mathtools.py` hosts some functions and classes that are purely numerical.

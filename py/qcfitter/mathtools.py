@@ -1,9 +1,10 @@
+"""Mathematical utility objects and functions."""
 import numpy as np
 from numba import njit
 
 
 class Fast1DInterpolator():
-    """ Fast interpolator class for equally spaced data. Out of domain points
+    """Fast interpolator class for equally spaced data. Out of domain points
     are linearly extrapolated without producing any warnings or errors.
 
     Example::
@@ -17,12 +18,12 @@ class Fast1DInterpolator():
         Initial x point for interpolation data.
     dxp0: float
         Spacing of x points.
-    fp: numpy array
-        Function calculated at interpolation points
-    ep: numpy array (optional)
+    fp: ndarray
+        Function calculated at interpolation points.
+    ep: ndarray, optional
         Error on fp points. Not used! Bookkeeping purposes only.
-    copy: bool (default: False)
-        Copy input data, specifically fp
+    copy: bool, default: False
+        Copy input data, specifically fp.
     """
 
     def __init__(self, xp0, dxp, fp, copy=False, ep=None):
@@ -47,7 +48,6 @@ def _fast_eval_interp1d(x, xp0, dxp, fp):
     y1, y2 = fp[idx], fp[idx + 1]
 
     return y1 * (1 - d_idx) + y2 * d_idx
-# ===================================================
 
 
 @njit("f8[:](f8[:], f8[:])")
@@ -56,14 +56,14 @@ def mypoly1d(coef, x):
 
     Arguments
     ---------
-    coef: ndarray of floats
+    coef: ndarray
         Coefficient array in increasing power starting with the constant.
-    x: ndarray of floats
+    x: ndarray
         Array to calculate polynomial.
 
     Returns
     ---------
-    results: ndarray of floats
+    results: ndarray
         Polynomial calculated at x.
     """
     results = np.zeros_like(x)
@@ -78,19 +78,19 @@ def fft_gaussian_smooth(x, sigma_pix=20, pad_size=25, mode='edge'):
 
     Arguments
     ---------
-    x: 1D array of floats
-        Array to smooth.
-    sigma_pix: int or float (default: 20)
+    x: ndarray
+        1D array to smooth.
+    sigma_pix: float, default: 20
         Smoothing Gaussian sigma
-    pad_size: int (default: 25)
-        Number of pixels to pad the array `x` at the boundary.
-    mode: string
-        Padding method. See `np.pad` for options.
+    pad_size: int, default: 25
+        Number of pixels to pad the array x at the boundary.
+    mode: str
+        Padding method. See ``numpy.pad`` for options.
 
     Returns
     ---------
-    y: 1D array of floats
-        Smoothed `x` values. Same size as `x`
+    y: ndarray
+        Smoothed x values. Same size as x.
     """
     # Pad the input array to get rid of annoying edge effects
     # Pad values are set to the edge value
@@ -106,24 +106,27 @@ def fft_gaussian_smooth(x, sigma_pix=20, pad_size=25, mode='edge'):
 
 
 def get_smooth_ivar(ivar, sigma_pix=20, pad_size=25, esigma=3.5):
-    """ Smoothing `ivar` values to reduce signal-noise coupling. Smoothing
-    is done on `error=1/sqrt(ivar)`, while replacing `ivar=0` and outliers in
-    `error`values with the median. These replaced values are put back in in the
-    final result.
+    """ Smoothing ``ivar`` values to reduce signal-noise coupling.
+
+    Smoothing is done on ``error=1/sqrt(ivar)``, while replacing ``ivar=0`` and
+    outliers in ``error`` values with the median. These replaced values are put
+    back in in the final result.
 
     Arguments
     ---------
-    ivar: 1D array of floats
+    ivar: ndarray
         Inverse variance array.
-    sigma_pix: int or float (default: 20)
+    sigma_pix: float, default: 20
         Smoothing Gaussian sigma.
-    esigma: float (default: 3.5)
+    pad_size: int, default: 25
+        Number of pixels to pad the array at the boundary.
+    esigma: float, default: 3.5
         Sigma to identify outliers via MAD.
 
     Returns
     ---------
-    ivar2: 1D array of floats
-        Smoothed `ivar` values. Outliers and masked values are put back in.
+    ivar2: ndarray
+        Smoothed ivar values. Outliers and masked values are put back in.
     """
     error = np.empty_like(ivar)
     w1 = ivar > 0
