@@ -197,7 +197,7 @@ def main():
     # read catalog
     local_queue = qcfitter.catalog.mpi_read_local_qso_catalog(
         args.catalog, comm, mpi_rank, mpi_size, is_mock=args.mock_analysis,
-        n_side=args.nside, keep_surveys=args.keep_surveys)
+        keep_surveys=args.keep_surveys)
 
     # Blinding
     qcfitter.spectrum.Spectrum.set_blinding(local_queue, args)
