@@ -30,12 +30,13 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
+    'sphinxarg.ext'
     # 'nbsphinx',
     # 'autoapi.extension'
 ]
 
 # autodoc_mock_imports = ["mpi4py"]
-autodoc_member_order = "groupwise"
+autodoc_member_order = "bysource"
 # autodoc_class_signature = "separated"
 autodoc_default_options = {
     # 'members': 'var1, var2',
@@ -50,9 +51,11 @@ exclude_patterns = []
 
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
-    'sphinx': ('https://www.sphinx-doc.org/en/master/', None),
+    'numpy': ('https://numpy.org/doc/stable', None),
+    'scipy': ('https://docs.scipy.org/doc/scipy/', None)
 }
 intersphinx_disabled_domains = ['std']
+# intersphinx_disabled_reftypes = ["*"]
 
 templates_path = ['_templates']
 

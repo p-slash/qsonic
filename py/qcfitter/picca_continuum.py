@@ -1,3 +1,6 @@
+"""Continuum fitting module."""
+import argparse
+
 import numpy as np
 import fitsio
 from scipy.optimize import minimize, curve_fit
@@ -9,6 +12,42 @@ from mpi4py import MPI
 from qcfitter.spectrum import valid_spectra
 from qcfitter.mpi_utils import logging_mpi, warn_mpi, MPISaver
 from qcfitter.mathtools import Fast1DInterpolator, mypoly1d
+
+
+def add_picca_continuum_parser(parser=None):
+    """ Adds PiccaContinuumFitter related arguments to parser. These
+    arguments are grouped under 'Continuum fitting options'. All of them
+    come with defaults, none are required.
+
+    Arguments
+    ---------
+    parser: argparse.ArgumentParser, default: None
+
+    Returns
+    ---------
+    parser: argparse.ArgumentParser
+    """
+    if parser is None:
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    cont_group = parser.add_argument_group('Continuum fitting options')
+
+    cont_group.add_argument(
+        "--rfdwave", type=float, default=0.8,
+        help="Rest-frame wave steps. Complies with forest limits")
+    cont_group.add_argument(
+        "--no-iterations", type=int, default=5,
+        help="Number of iterations for continuum fitting.")
+    cont_group.add_argument(
+        "--fiducial-meanflux", help="Fiducial mean flux FITS file.")
+    cont_group.add_argument(
+        "--fiducial-varlss", help="Fiducial var_lss FITS file.")
+    cont_group.add_argument(
+        "--cont-order", type=int, default=1,
+        help="Order of continuum fitting polynomial.")
+
+    return parser
 
 
 class PiccaContinuumFitter():
@@ -53,32 +92,6 @@ class PiccaContinuumFitter():
     outdir: str or None
         Directory to save catalogs. If None or empty, does not save.
     """
-    @staticmethod
-    def add_parser(parser):
-        """ Adds PiccaContinuumFitter related arguments to parser. These
-        arguments are grouped under 'Continuum fitting options'. All of them
-        come with defaults, none are required.
-
-        Arguments
-        ---------
-        parser: argparse.ArgumentParser
-            parser to be modified.
-        """
-        cont_group = parser.add_argument_group('Continuum fitting options')
-
-        cont_group.add_argument(
-            "--rfdwave", type=float, default=0.8,
-            help="Rest-frame wave steps. Complies with forest limits")
-        cont_group.add_argument(
-            "--no-iterations", type=int, default=5,
-            help="Number of iterations for continuum fitting.")
-        cont_group.add_argument(
-            "--fiducial-meanflux", help="Fiducial mean flux FITS file.")
-        cont_group.add_argument(
-            "--fiducial-varlss", help="Fiducial var_lss FITS file.")
-        cont_group.add_argument(
-            "--cont-order", type=int, default=1,
-            help="Order of continuum fitting polynomial.")
 
     def _get_fiducial_interp(self, fname, col2read):
         """ Return an interpolator for mean flux or var_lss.
@@ -366,19 +379,21 @@ class PiccaContinuumFitter():
     def update_mean_cont(self, spectra_list, noupdate):
         """ Update the global mean continuum.
 
-        Uses ``forestivar_sm`` in inverse variance, but must be set beforehand.
+        Uses :attr:`forestivar_sm <qcfitter.spectrum.Spectrum.forestivar_sm>`
+        in inverse variance, but must be set beforehand.
         Raw mean continuum estimates are smoothed with a weighted
-        `scipy.interpolate.UnivariateSpline`. The mean continuum is removed
-        from higher Legendre polynomials and normalized by the mean. This
-        function updates ``self.meancont_interp.fp`` if noupdate is False.
+        :external+scipy:py:class:`scipy.interpolate.UnivariateSpline`. The mean
+        continuum is removed from higher Legendre polynomials and normalized by
+        the mean. This function updates
+        :attr:`meancont_interp.fp <.meancont_interp>` if noupdate is False.
 
         Arguments
         ---------
         spectra_list: list(Spectrum)
             Spectrum objects to fit.
         noupdate: bool
-            Does not update ``self.meancont_interp.fp`` if True
-            (last iteration).
+            Does not update :attr:`meancont_interp.fp <.meancont_interp>` if
+            True (last iteration).
 
         Returns
         ---------
