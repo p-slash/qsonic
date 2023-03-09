@@ -1,8 +1,7 @@
 qcfitter.masks module
 =====================
 
-Parsers
--------
+
 
 .. autofunction:: qcfitter.masks.add_mask_parser
 
@@ -10,8 +9,7 @@ Parsers
    :ref: qcfitter.masks.add_mask_parser
    :prog: foo
 
-Module reference
------------------
+
 
 .. automodule:: qcfitter.masks
    :members:

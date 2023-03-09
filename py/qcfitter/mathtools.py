@@ -18,9 +18,9 @@ class Fast1DInterpolator():
         Initial x point for interpolation data.
     dxp0: float
         Spacing of x points.
-    fp: ndarray
+    fp: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Function calculated at interpolation points.
-    ep: ndarray, optional
+    ep: :external+numpy:py:class:`ndarray <numpy.ndarray>`, optional
         Error on fp points. Not used! Bookkeeping purposes only.
     copy: bool, default: False
         Copy input data, specifically fp.
@@ -56,14 +56,14 @@ def mypoly1d(coef, x):
 
     Arguments
     ---------
-    coef: ndarray
+    coef: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Coefficient array in increasing power starting with the constant.
-    x: ndarray
+    x: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Array to calculate polynomial.
 
     Returns
     ---------
-    results: ndarray
+    results: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Polynomial calculated at x.
     """
     results = np.zeros_like(x)
@@ -78,18 +78,18 @@ def fft_gaussian_smooth(x, sigma_pix=20, pad_size=25, mode='edge'):
 
     Arguments
     ---------
-    x: ndarray
+    x: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         1D array to smooth.
     sigma_pix: float, default: 20
         Smoothing Gaussian sigma
     pad_size: int, default: 25
         Number of pixels to pad the array x at the boundary.
     mode: str
-        Padding method. See ``numpy.pad`` for options.
+        Padding method. See :external+numpy:func:`numpy.pad` for options.
 
     Returns
     ---------
-    y: ndarray
+    y: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Smoothed x values. Same size as x.
     """
     # Pad the input array to get rid of annoying edge effects
@@ -114,7 +114,7 @@ def get_smooth_ivar(ivar, sigma_pix=20, pad_size=25, esigma=3.5):
 
     Arguments
     ---------
-    ivar: ndarray
+    ivar: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Inverse variance array.
     sigma_pix: float, default: 20
         Smoothing Gaussian sigma.
@@ -125,7 +125,7 @@ def get_smooth_ivar(ivar, sigma_pix=20, pad_size=25, esigma=3.5):
 
     Returns
     ---------
-    ivar2: ndarray
+    ivar2: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Smoothed ivar values. Outliers and masked values are put back in.
     """
     error = np.empty_like(ivar)

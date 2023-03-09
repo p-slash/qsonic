@@ -323,7 +323,7 @@ class Spectrum():
 
         Arguments
         ---------
-        varlss_interp: mathtools.Fast1DInterpolator or any other interpolator.
+        varlss_interp: Fast1DInterpolator or any other interpolator.
             LSS variance interpolator.
         """
         if not self.cont_params['valid'] or not self.cont_params['cont']:
@@ -397,7 +397,7 @@ class Spectrum():
         Arguments
         ---------
         fts_file: FITS file
-        varlss_interp: mathtools.Fast1DInterpolator or any other interpolator.
+        varlss_interp: Fast1DInterpolator or any other interpolator.
             LSS variance interpolator.
         """
         hdr_dict = {
