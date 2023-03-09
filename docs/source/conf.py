@@ -35,13 +35,14 @@ extensions = [
 ]
 
 # autodoc_mock_imports = ["mpi4py"]
-
+autodoc_member_order = "groupwise"
+# autodoc_class_signature = "separated"
 autodoc_default_options = {
     # 'members': 'var1, var2',
     # 'member-order': 'bysource',
     # 'special-members': '__call__',
     # 'undoc-members': True,
-    # 'exclude-members': '__weakref__',
+    'exclude-members': '__init__',
     'private-members': True
 }
 
