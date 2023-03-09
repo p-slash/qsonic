@@ -1,8 +1,6 @@
 ﻿qcfitter.io module
 ==================
 
-Parsers
--------
 
 .. autofunction:: qcfitter.io.add_io_parser
 
@@ -10,8 +8,7 @@ Parsers
    :ref: qcfitter.io.add_io_parser
    :prog: foo
 
-Module reference
------------------
+
 .. automodule:: qcfitter.io
    :members:
    :undoc-members:
