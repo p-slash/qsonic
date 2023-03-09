@@ -52,15 +52,15 @@ class Spectrum():
     ----------
     catrow: ndarray
         Catalog row.
-    wave: dict of numpy array
+    wave: dict(ndarray)
         Dictionary of arrays specifying the wavelength grid. Static variable!
-    flux: dict
+    flux: dict(ndarray)
         Dictionary of arrays specifying the flux.
-    ivar: dict
+    ivar: dict(ndarray)
         Dictionary of arrays specifying the inverse variance.
-    mask: dict
+    mask: dict(ndarray)
         Dictionary of arrays specifying the bitmask. Not stored
-    reso: dict
+    reso: dict(ndarray)
         Dictionary of 2D arrays specifying the resolution matrix.
     idx: int
         Index to access in flux, ivar, mask and reso that corresponds to the
@@ -70,21 +70,33 @@ class Spectrum():
     ----------
     rsnr: float
         Average SNR above Lya. Calculated in set_forest_region.
-    _f1, _f2: dict of int
+    _f1, _f2: dict(int)
         Forest indices. Set up using `set_forest_region` method. Then use
         property functions to access forest wave, flux, ivar instead.
     cont_params: dict
-        Initial estimates are constructed.
+        Continuum parameters. Initial estimates are constructed.
 
     """
     WAVE_LYA_A = 1215.67
-    _wave = None  # Dictionary of ndarrays
-    _dwave = None  # Float
+    """float: Lya wavelength in A."""
+    _wave = None
+    """dict(ndarray): Common wavelength grid for **all** Spectra."""
+    _dwave = None
+    """float: Wavelength spacing."""
     _blinding = None
+    """str or None: Blinding. Must be set for certain data."""
     _fits_colnames = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT']
+    """list(str): Column names to save in delta files."""
 
     @staticmethod
     def _set_wave(wave, check_consistency=False):
+        """Set the common wavelength grid.
+
+        Arguments
+        ---------
+        check_consistency: bool
+            Asserts each time key and values are the same if True.
+        """
         if not Spectrum._wave:
             Spectrum._wave = wave.copy()
             arm = list(wave.keys())[0]
@@ -97,6 +109,7 @@ class Spectrum():
 
     @staticmethod
     def set_blinding(catalog, args):
+        """Set the blinding strategy."""
         # do not blind mocks or metal forests
         if args.mock_analysis or args.forest_w1 > Spectrum.WAVE_LYA_A:
             Spectrum._blinding = "none"
@@ -118,7 +131,7 @@ class Spectrum():
 
     @staticmethod
     def blinding_not_set():
-        """Return `True` if blinding is not set."""
+        """bool: ``True`` if blinding is not set."""
         return Spectrum._blinding is None
 
     def __init__(self, catrow, wave, flux, ivar, mask, reso, idx):
@@ -169,9 +182,9 @@ class Spectrum():
 
         Arguments
         ---------
-        w1, w2: floats
+        w1, w2: float
             Observed wavelength range
-        lya1, lya2: floats
+        lya1, lya2: float
             Rest-frame wavelength for the forest
         """
         l1 = max(w1, (1 + self.z_qso) * lya1)
@@ -253,8 +266,7 @@ class Spectrum():
         self._forestreso = self.reso
 
     def get_real_size(self):
-        """Returns the sum of number of pixels with `forestivar > 0` for all
-        arms."""
+        """int: Sum of number of pixels with `forestivar > 0` for all arms."""
         size = 0
         for ivar_arm in self.forestivar.values():
             size += np.sum(ivar_arm > 0)
@@ -296,6 +308,7 @@ class Spectrum():
 
         Replaces `forest` variables and `cont_params['cont']`with a dictionary
         that has a single arm `brz` as key to access coadded data.
+
         Arguments
         ---------
         varlss_interp: mathtools.Fast1DInterpolator or any other interpolator.
@@ -348,7 +361,7 @@ class Spectrum():
             self._coadd_arms_reso(nwaves, idxes)
 
     def mean_snr(self):
-        """Mean signal-to-noise ratio in the forest."""
+        """float: Mean signal-to-noise ratio in the forest."""
         snr = 0
         npix = 1e-6
         for arm, ivar_arm in self.forestivar.items():
@@ -413,57 +426,57 @@ class Spectrum():
 
     @property
     def z_qso(self):
-        """Quasar redshift."""
+        """float: Quasar redshift."""
         return self.catrow['Z']
 
     @property
     def targetid(self):
-        """Unique TARGETID identifier."""
+        """int: Unique TARGETID identifier."""
         return self.catrow['TARGETID']
 
     @property
     def hpix(self):
-        """Healpix."""
+        """int: Healpix."""
         return self.catrow['HPXPIXEL']
 
     @property
     def ra(self):
-        """Right ascension."""
+        """float: Right ascension."""
         return self.catrow['RA']
 
     @property
     def dec(self):
-        """Declination"""
+        """float: Declination"""
         return self.catrow['DEC']
 
     @property
     def wave(self):
-        """Original wavelength grid in A."""
+        """dict(ndarray): Original wavelength grid in A."""
         return Spectrum._wave
 
     @property
     def dwave(self):
-        """Wavelength step size in A."""
+        """float: Wavelength step size in A."""
         return Spectrum._dwave
 
     @property
     def forestwave(self):
-        """Forest wavelength field in A."""
+        """dict(ndarray): Forest wavelength field in A."""
         return self._forestwave
 
     @property
     def forestflux(self):
-        """Forest flux field."""
+        """dict(ndarray): Forest flux field."""
         return self._forestflux
 
     @property
     def forestivar(self):
-        """Forest inverse variance field."""
+        """dict(ndarray): Forest inverse variance field."""
         return self._forestivar
 
     @property
     def forestivar_sm(self):
-        """Forest smoothed inverse variance field.
+        """dict(ndarray): Forest smoothed inverse variance field.
 
         Initially equal to `forestivar`. Smoothed if `set_smooth_ivar` is
         called."""
@@ -471,5 +484,5 @@ class Spectrum():
 
     @property
     def forestreso(self):
-        """Resolution matrix in the forest."""
+        """dict(ndarray): Resolution matrix in the forest."""
         return self._forestreso
