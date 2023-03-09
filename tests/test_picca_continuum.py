@@ -78,7 +78,9 @@ class TestPiccaContinuum(object):
         else:
             fname = ""
 
-        args = mpi_parse(parser, comm, mpi_rank, ["--fiducials", fname])
+        args = mpi_parse(
+            parser, comm, mpi_rank,
+            ["--fiducial-meanflux", fname, "--fiducial-varlss", fname])
         qcfit = PiccaContinuumFitter(args)
         if mpi_rank == 0:
             os.remove(fname)
