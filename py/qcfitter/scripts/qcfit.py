@@ -16,7 +16,17 @@ from qcfitter.picca_continuum import PiccaContinuumFitter
 
 
 def get_parser(add_help=True):
-    # Arguments passed to run the script
+    """Constructs the parser needed for the script.
+
+    Arguments
+    ---------
+    add_help: bool, default: True
+        Add help to parser.
+
+    Returns
+    -------
+    parser: argparse.ArgumentParser
+    """
     parser = argparse.ArgumentParser(
         add_help=add_help,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -35,10 +45,10 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
 
     Arguments
     ---------
-    local_queue: list of ndarray
+    local_queue: list(ndarray)
         Catalog from `qcfitter.spectrum.mpi_read_local_qso_catalog`. Each
         element is a catalog for one healpix.
-    args: Namespace obtained by argparse
+    args: argparse.Namespace
         Options passed to script.
     comm: MPI.COMM_WORLD
         Communication object for reducing data.
@@ -47,7 +57,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
 
     Returns
     ---------
-    spectra_list: list of Spectrum
+    spectra_list: list(Spectrum)
         Spectrum objects for the local MPI rank.
     """
     start_time = time.time()
@@ -86,9 +96,9 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
 
     Arguments
     ---------
-    local_queue: list of ndarray
+    local_queue: list(ndarray)
         Catalog from `qcfitter.spectrum.mpi_read_local_qso_catalog`.
-    args: Namespace obtained by argparse
+    args: argparse.Namespace
         Options passed to script.
     comm: MPI.COMM_WORLD
         Communication object for broadcasting data.
@@ -97,7 +107,7 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
 
     Returns
     ---------
-    maskers: list of Masks
+    maskers: list(Masks)
         Mask objects from `qcfitter.masks`.
     """
     maskers = []
@@ -139,9 +149,9 @@ def apply_masks(maskers, spectra_list, mpi_rank=0):
 
     Arguments
     ---------
-    maskers: list of Masks
+    maskers: list(Masks)
         Mask objects from `qcfitter.masks`.
-    spectra_list: list of Spectrum
+    spectra_list: list(Spectrum)
         Spectrum objects for the local MPI rank.
     mpi_rank: int
         Rank of the MPI process

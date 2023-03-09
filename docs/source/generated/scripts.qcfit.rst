@@ -1,4 +1,4 @@
-qcfitter.scripts.qcfit module script
+qcfitter.scripts.qcfit script module
 ====================================
 
 .. automodule:: qcfitter.scripts.qcfit

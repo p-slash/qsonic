@@ -30,21 +30,21 @@ class PiccaContinuumFitter():
     ----------
     nbins: int
         Number of bins for the mean continuum in the rest frame.
-    rfwave: float ndarray
+    rfwave: ndarray
         Rest-frame wavelength centers for the mean continuum.
     _denom: float
         Denominator for the slope term in the continuum model.
-    meancont_interp: qcfitter.mathtools.Fast1DInterpolator
+    meancont_interp: Fast1DInterpolator
         Fast linear interpolator object for the mean continuum.
     comm: MPI.COMM_WORLD
         MPI comm object to reduce, broadcast etc.
     mpi_rank: int
         Rank of the MPI process.
-    meanflux_interp: qcfitter.mathtools.Fast1DInterpolator
+    meanflux_interp: Fast1DInterpolator
         Interpolator for mean flux. If fiducial is not set, this equals to 1.
     varlss_fitter: VarLSSFitter or None
         None if fiducials are set for var_lss.
-    varlss_interp: qcfitter.mathtools.Fast1DInterpolator
+    varlss_interp: Fast1DInterpolator
         Interpolator for var_lss.
     niterations: int
         Number of iterations from `args.no_iterations`.
@@ -171,11 +171,11 @@ class PiccaContinuumFitter():
         ---------
         x: ndarray
             Polynomial coefficients for quasar diversity.
-        wave: dict of ndarray
+        wave: dict(ndarray)
             Observed-frame wavelengths.
-        flux: dict of ndarray
+        flux: dict(ndarray)
             Flux.
-        ivar_sm: dict of ndarray
+        ivar_sm: dict(ndarray)
             Smooth inverse variance.
         z_qso: float
             Quasar redshift.
@@ -239,7 +239,7 @@ class PiccaContinuumFitter():
 
         Arguments
         ---------
-        spec: qcfitter.spectrum.Spectrum
+        spec: Spectrum
             Spectrum object to fit.
         """
         # We can precalculate meanflux and varlss here,
@@ -292,7 +292,7 @@ class PiccaContinuumFitter():
 
         Arguments
         ---------
-        spectra_list: list of qcfitter.spectrum.Spectrum
+        spectra_list: list(Spectrum)
             Spectrum objects to fit.
         """
         no_valid_fits = 0
@@ -321,12 +321,12 @@ class PiccaContinuumFitter():
 
         Arguments
         ---------
-        new_meancont: 1D ndarray.
+        new_meancont: ndarray
             First estimate of the new mean continuum.
 
         Returns
         ---------
-        new_meancont: 1D ndarray.
+        new_meancont: ndarray
             Legendere polynomials projected out and normalized mean continuum.
         mean_: float
             Normalization of the mean continuum.
@@ -357,7 +357,7 @@ class PiccaContinuumFitter():
 
         Arguments
         ---------
-        spectra_list: list of qcfitter.spectrum.Spectrum
+        spectra_list: list(Spectrum)
             Spectrum objects to fit.
         noupdate: bool
             Does not update ``self.meancont_interp.fp`` if True
@@ -365,7 +365,7 @@ class PiccaContinuumFitter():
 
         Returns
         ---------
-        has_converged: bool.
+        has_converged: bool
             True if all continuum updates on every point are less than 0.33
             times the error estimates.
         """
@@ -445,7 +445,7 @@ class PiccaContinuumFitter():
 
         Arguments
         ---------
-        spectra_list: list of qcfitter.spectrum.Spectrum
+        spectra_list: list(Spectrum)
             Spectrum objects to fit.
         noupdate: bool
             Does not update `self.varlss_interp.fp` if True (last iteration).
@@ -482,7 +482,7 @@ class PiccaContinuumFitter():
         logging_mpi(text, 0)
 
     def iterate(self, spectra_list):
-        """ Main function to fit continua and iterate.
+        """Main function to fit continua and iterate.
 
         Consists of three major steps: initializing, fitting, updating global
         variables. The initialization sets ``cont_params`` variable of every
@@ -504,7 +504,7 @@ class PiccaContinuumFitter():
 
         Arguments
         ---------
-        spectra_list: list of qcfitter.spectrum.Spectrum
+        spectra_list: list(Spectrum)
             Spectrum objects to fit.
         """
         has_converged = False
@@ -547,11 +547,11 @@ class PiccaContinuumFitter():
         self.save_contchi2_catalog(spectra_list)
 
     def save(self, fattr, it):
-        """ Save mean continuum and var_lss (if fitting) to a fits file.
+        """Save mean continuum and var_lss (if fitting) to a fits file.
 
         Arguments
         ---------
-        fattr: qcfitter.mpi_utils.MPISaver
+        fattr: MPISaver
             File handler to save only on master node.
         it: int
             Current iteration number.
@@ -570,12 +570,12 @@ class PiccaContinuumFitter():
             names=['lambda', 'var_lss', 'e_var_lss'], extname=f'VAR_FUNC-{it}')
 
     def save_contchi2_catalog(self, spectra_list):
-        """ Save chi2 catalog if `self.outdir` is set. All values are gathered
+        """Save chi2 catalog if ``self.outdir`` is set. All values are gathered
         and saved on the master node.
 
         Arguments
         ---------
-        spectra_list: list of qcfitter.spectrum.Spectrum
+        spectra_list: list(Spectrum)
             Spectrum objects to fit.
         """
         if not self.outdir:
@@ -639,20 +639,20 @@ class VarLSSFitter(object):
 
     Attributes
     ----------
-    waveobs: float ndarray
+    waveobs: ndarray
         Wavelength centers in the observed frame.
-    ivar_edges: float ndarray
+    ivar_edges: ndarray
         Inverse variance edges.
-    ivar_centers: float ndarray
+    ivar_centers: ndarray
         Inverse variance centers.
     minlength: int
         Minimum size of the combined bin count array. It includes underflow and
         overflow bins for both wavelength and variance bins.
-    var_delta: float ndarray
+    var_delta: ndarray
         Variance delta.
-    mean_delta: float ndarray
+    mean_delta: ndarray
         Mean delta.
-    var2_delta: float ndarray
+    var2_delta: ndarray
         delta^4.
     num_pixels: int ndarray
         Number of pixels in the bin.
@@ -660,11 +660,28 @@ class VarLSSFitter(object):
         Number of quasars in the bin.
     """
     min_no_pix = 500
+    """int: Minimum number of pixels a bin must have to be valid."""
     min_no_qso = 50
+    """int: Minimum number of quasars a bin must have to be valid."""
 
     @staticmethod
     def variance_function(var_pipe, var_lss, eta=1):
-        """ Variance model to be fit. """
+        """Variance model to be fit.
+
+        Arguments
+        ---------
+        var_pipe: ndarray
+            Pipeline variance.
+        var_lss: ndarray
+            Large-scale structure variance.
+        eta: float
+            Pipeline variance calibration scalar.
+
+        Returns
+        -------
+        ndarray
+            Expected variance of deltas.
+        """
         return eta * var_pipe + var_lss
 
     def __init__(self, w1obs, w2obs, nwbins, var1=1e-5, var2=2., nvarbins=100):
@@ -685,7 +702,7 @@ class VarLSSFitter(object):
         self.num_qso = np.zeros_like(self.var_delta, dtype=int)
 
     def reset(self):
-        """ Reset delta and num arrays to zero. """
+        """Reset delta and num arrays to zero."""
         self.var_delta = 0.
         self.mean_delta = 0.
         self.var2_delta = 0.
@@ -693,17 +710,17 @@ class VarLSSFitter(object):
         self.num_qso = 0
 
     def add(self, wave, delta, ivar):
-        """ Add statistics of a single spectrum. Updates delta and num arrays.
+        """Add statistics of a single spectrum. Updates delta and num arrays.
 
         Assumes no spectra has `wave < w1obs` or `wave > w2obs`.
 
         Arguments
         ---------
-        wave: float ndarray
+        wave: ndarray
             Wavelength array.
-        delta: float ndarray
+        delta: ndarray
             Delta array.
-        ivar: float ndarray
+        ivar: ndarray
             Inverse variance array.
         """
         # add 1 to match searchsorted/bincount output/input
@@ -723,12 +740,12 @@ class VarLSSFitter(object):
         self.num_qso += rebin
 
     def _allreduce(self, comm):
-        """ Sums statistics from all MPI process, and calculates mean, variance
+        """Sums statistics from all MPI process, and calculates mean, variance
         and error on the variance.
 
         Arguments
         ---------
-        comm: MPI comm object
+        comm: MPI.COMM_WORLD
             MPI comm object for Allreduce
         """
         comm.Allreduce(MPI.IN_PLACE, self.mean_delta)
@@ -755,19 +772,19 @@ class VarLSSFitter(object):
 
         Arguments
         ---------
-        current_varlss: float ndarray
+        current_varlss: ndarray
             Initial guess for var_lss
-        comm: MPI comm object
+        comm: MPI.COMM_WORLD
             MPI comm object for Allreduce
         mpi_rank: int
             Rank of the MPI process.
 
         Returns
         ---------
-        var_lss: float ndarray
+        var_lss: ndarray
             Smoothed LSS variance at observed wavelengths. Missing values are
             extrapolated.
-        std_var_lss: float ndarray
+        std_var_lss: ndarray
             Error on `var_lss` from sqrt of `curve_fit` output.
         """
         self._allreduce(comm)

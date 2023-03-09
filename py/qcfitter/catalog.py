@@ -11,18 +11,22 @@ from numpy.lib.recfunctions import rename_fields, append_fields
 from qcfitter.mpi_utils import logging_mpi, balance_load
 
 _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
+"""set: Accepted extentions for quasar catalog."""
 _required_columns = [
     set(['TARGETID']), set(['Z']), set(['TARGET_RA', 'RA']),
     set(['TARGET_DEC', 'DEC'])
 ]
+"""list(set): Required columns for all cases."""
 _required_data_columns = [
     set(['SURVEY']),
     set(['COADD_LASTNIGHT', 'LAST_NIGHT', 'LASTNIGHT'])
 ]
+"""list(set): Required columns for real data analysis."""
 _optional_columns = [
     'HPXPIXEL', 'VMIN_CIV_450', 'VMAX_CIV_450', 'VMIN_CIV_2000',
     'VMAX_CIV_2000'
 ]
+"""list(str): Optional columns."""
 _all_columns = [
     col for reqset in (
         _required_columns + _required_data_columns + _optional_columns
@@ -42,15 +46,15 @@ def read_quasar_catalog(
     ----------
     filename: str
         Filename to catalog.
-    is_mock: bool (default: False)
+    is_mock: bool, default: False
         If the catalog is for mocks.
-    n_side: int (default: 64)
+    n_side: int, default: 64
         Healpix nside. Required if 'HPXPIXEL' column is not present.
-    keep_surveys: list (default: all)
-        List of surveys to subselect.
-    zmin: float (default: 2.1)
+    keep_surveys: None or list(str), default: None
+        List of surveys to subselect. None keeps all.
+    zmin: float, default: 2.1
         Minimum quasar redshift
-    zmax: float (default: 6.0)
+    zmax: float, default: 6.0
         Maximum quasar redshift
 
     Returns
@@ -85,19 +89,19 @@ def mpi_read_local_qso_catalog(
         Size of MPI processes
     is_mock: bool
         If the catalog is for mocks.
-    n_side: int (default: 64)
+    n_side: int, default: 64
         Healpix nside. Required if 'HPXPIXEL' column is not present.
-    keep_surveys: list (default: all)
-        List of surveys to subselect.
-    zmin: float (default: 2.1)
+    keep_surveys: None or list(str), default: None
+        List of surveys to subselect. None keeps all.
+    zmin: float, default: 2.1
         Minimum quasar redshift
-    zmax: float (default: 6.0)
+    zmax: float, default: 6.0
         Maximum quasar redshift
 
     Returns
     ----------
-    local_queue: list of ndarray
-        list of sorted catalogs.
+    local_queue: list(ndarray)
+        List of sorted catalogs.
     """
     catalog = None
 
@@ -131,8 +135,8 @@ def _mpi_get_local_queue(catalog, mpi_rank, mpi_size):
 
     Returns
     ----------
-    local_queue: list of ndarray
-        list of sorted catalogs.
+    local_queue: list(ndarray)
+        List of sorted catalogs.
     """
     # We decide forest filename list
     # Group into unique pixels
@@ -149,6 +153,20 @@ def _mpi_get_local_queue(catalog, mpi_rank, mpi_size):
 
 
 def _check_required_columns(required_cols, colnames):
+    """Asserts all required columns are present.
+
+    Arguments
+    ----------
+    required_cols: list(set)
+        Required columns as list of sets.
+    colnames: list(str)
+        Present column names
+
+    Raises
+    ------
+    Exception
+        If none of a required set is in colnames.
+    """
     for reqset in required_cols:
         if reqset.intersection(colnames):
             continue
@@ -235,6 +253,22 @@ def _read(filename):
 
 
 def _add_healpix(catalog, n_side, keep_columns):
+    """ Add 'HPXPIXEL' column to catalog if not present.
+
+    Arguments
+    ----------
+    catalog: ndarray
+        Catalog.
+    n_side: int
+        Healpix nside.
+    keep_columns: list(str)
+        List of surveys to subselect.
+
+    Returns
+    ----------
+    catalog: ndarray
+        'HPXPIXEL' calculated and added catalog.
+    """
     if 'HPXPIXEL' not in keep_columns:
         pixnum = ang2pix(
             n_side, catalog['RA'], catalog['DEC'], lonlat=True, nest=True)
@@ -253,7 +287,7 @@ def _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax):
         Catalog.
     n_side: int
         Healpix nside.
-    keep_surveys: list
+    keep_surveys: list(str)
         List of surveys to subselect.
     zmin: float
         Minimum quasar redshift
