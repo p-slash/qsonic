@@ -30,12 +30,13 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
+    'sphinxarg.ext'
     # 'nbsphinx',
     # 'autoapi.extension'
 ]
 
 # autodoc_mock_imports = ["mpi4py"]
-autodoc_member_order = "groupwise"
+autodoc_member_order = "bysource"
 # autodoc_class_signature = "separated"
 autodoc_default_options = {
     # 'members': 'var1, var2',

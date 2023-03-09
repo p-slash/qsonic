@@ -1,4 +1,5 @@
 """ Masking module with classes for sky, BAL and DLA."""
+import argparse
 
 from astropy.io.ascii import read as asread
 import numpy as np
@@ -13,14 +14,22 @@ sqrt_2 = 1.41421356237
 """float: Square root of 2."""
 
 
-def add_mask_parser(parser):
+def add_mask_parser(parser=None):
     """ Adds masking related arguments to parser. These arguments are grouped
     under 'Masking'.
 
     Arguments
     ---------
+    parser: argparse.ArgumentParser, default: None
+
+    Returns
+    ---------
     parser: argparse.ArgumentParser
     """
+    if parser is None:
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
     mask_group = parser.add_argument_group('Masking')
 
     mask_group.add_argument(
@@ -32,6 +41,8 @@ def add_mask_parser(parser):
     mask_group.add_argument(
         "--dla-mask",
         help="DLA catalog to mask.")
+
+    return parser
 
 
 class SkyMask():
