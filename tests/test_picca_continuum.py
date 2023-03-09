@@ -20,7 +20,7 @@ def setup_parser():
         "--outdir", '-o',
         help="Output directory to save deltas.")
     qcfitter.spectrum.add_wave_region_parser(parser)
-    add_picca_continuum_parser(parser)
+    parser = add_picca_continuum_parser(parser)
 
     return parser
 
