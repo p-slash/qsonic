@@ -73,39 +73,49 @@ class PiccaContinuumFitter():
             "--no-iterations", type=int, default=5,
             help="Number of iterations for continuum fitting.")
         cont_group.add_argument(
-            "--fiducials", help="Fiducial mean flux and var_lss fits file.")
+            "--fiducial-meanflux", help="Fiducial mean flux FITS file.")
+        cont_group.add_argument(
+            "--fiducial-varlss", help="Fiducial var_lss FITS file.")
         cont_group.add_argument(
             "--cont-order", type=int, default=1,
             help="Order of continuum fitting polynomial.")
 
-    def _set_fiducials(self, fiducial_fits):
-        """ Set fiducial interpolators for mean flux and var_lss.
+    def _get_fiducial_interp(self, fname, col2read):
+        """ Return an interpolator for mean flux or var_lss.
 
         FITS file must have a 'STATS' extention, which must have 'LAMBDA',
         'MEANFLUX' and 'VAR' columns. This is the same format as raw_io output
         from picca. 'LAMBDA' must be linearly and equally spaced.
-        This function sets `self.meanflux_interp` and `self.varlss_interp` as
-        Fast1DInterpolator objects.
+        This function sets up ``col2read`` as Fast1DInterpolator object.
 
         Arguments
         ---------
-        fiducial_fits: str
+        fname: str
             Filename of the FITS file.
+        col2read: str
+            Should be 'MEANFLUX' or 'VAR'.
+
+        Returns
+        -------
+        Fast1DInterpolator
         """
         if self.mpi_rank == 0:
-            with fitsio.FITS(fiducial_fits) as fts:
+            with fitsio.FITS(fname) as fts:
                 data = fts['STATS'].read()
+
             waves = data['LAMBDA']
             waves_0 = waves[0]
             dwave = waves[1] - waves[0]
             nsize = waves.size
+
             if not np.allclose(np.diff(waves), dwave):
                 # Set nsize to 0, later will be used to diagnose and exit
                 # for uneven wavelength array.
                 nsize = 0
+            elif col2read not in data.dtype.names:
+                nsize = -1
             else:
-                meanflux = np.array(data['MEANFLUX'], dtype='d')
-                varlss = np.array(data['VAR'], dtype='d')
+                data = np.array(data[col2read], dtype='d')
         else:
             waves_0 = 0.
             dwave = 0.
@@ -115,19 +125,20 @@ class PiccaContinuumFitter():
 
         if nsize == 0:
             raise Exception(
-                "Failed to construct fiducial mean flux and varlss from "
-                f"{fiducial_fits}::LAMBDA is not equally spaced.")
+                "Failed to construct fiducial mean flux or varlss from "
+                f"{fname}::LAMBDA is not equally spaced.")
+
+        if nsize == -1:
+            raise Exception(
+                "Failed to construct fiducial mean flux or varlss from "
+                f"{fname}::{col2read} is not in file.")
 
         if self.mpi_rank != 0:
-            meanflux = np.empty(nsize, dtype='d')
-            varlss = np.empty(nsize, dtype='d')
+            data = np.empty(nsize, dtype='d')
 
-        self.comm.Bcast([meanflux, MPI.DOUBLE])
-        self.comm.Bcast([varlss, MPI.DOUBLE])
+        self.comm.Bcast([data, MPI.DOUBLE])
 
-        self.meanflux_interp = Fast1DInterpolator(waves_0, dwave, meanflux)
-        self.varlss_interp = Fast1DInterpolator(
-            waves_0, dwave, varlss, ep=np.zeros(nsize))
+        return Fast1DInterpolator(waves_0, dwave, data, ep=np.zeros(nsize))
 
     def __init__(self, args, nwbins=20):
         # We first decide how many bins will approximately satisfy
@@ -147,11 +158,17 @@ class PiccaContinuumFitter():
         self.comm = MPI.COMM_WORLD
         self.mpi_rank = self.comm.Get_rank()
 
-        if args.fiducials:
-            self._set_fiducials(args.fiducials)
-            self.varlss_fitter = None
+        if args.fiducial_meanflux:
+            self.meanflux_interp = self._get_fiducial_interp(
+                args.fiducial_meanflux, 'MEANFLUX')
         else:
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
+
+        if args.fiducial_varlss:
+            self.varlss_fitter = None
+            self.varlss_interp = self._get_fiducial_interp(
+                args.fiducial_varlss, 'VAR')
+        else:
             self.varlss_fitter = VarLSSFitter(args.wave1, args.wave2, nwbins)
             self.varlss_interp = Fast1DInterpolator(
                 self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
