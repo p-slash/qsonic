@@ -167,7 +167,7 @@ class PiccaContinuumFitter():
         if args.fiducial_varlss:
             self.varlss_fitter = None
             self.varlss_interp = self._get_fiducial_interp(
-                args.fiducial_meanflux, 'VAR')
+                args.fiducial_varlss, 'VAR')
         else:
             self.varlss_fitter = VarLSSFitter(args.wave1, args.wave2, nwbins)
             self.varlss_interp = Fast1DInterpolator(
