@@ -361,19 +361,21 @@ class PiccaContinuumFitter():
     def update_mean_cont(self, spectra_list, noupdate):
         """ Update the global mean continuum.
 
-        Uses ``forestivar_sm`` in inverse variance, but must be set beforehand.
+        Uses :attr:`forestivar_sm <qcfitter.spectrum.Spectrum.forestivar_sm>`
+        in inverse variance, but must be set beforehand.
         Raw mean continuum estimates are smoothed with a weighted
-        `scipy.interpolate.UnivariateSpline`. The mean continuum is removed
-        from higher Legendre polynomials and normalized by the mean. This
-        function updates ``self.meancont_interp.fp`` if noupdate is False.
+        :external+scipy:py:class:`scipy.interpolate.UnivariateSpline`. The mean
+        continuum is removed from higher Legendre polynomials and normalized by
+        the mean. This function updates
+        :attr:`meancont_interp.fp <.meancont_interp>` if noupdate is False.
 
         Arguments
         ---------
         spectra_list: list(Spectrum)
             Spectrum objects to fit.
         noupdate: bool
-            Does not update ``self.meancont_interp.fp`` if True
-            (last iteration).
+            Does not update :attr:`meancont_interp.fp <.meancont_interp>` if
+            True (last iteration).
 
         Returns
         ---------
