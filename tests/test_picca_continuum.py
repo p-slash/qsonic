@@ -8,7 +8,8 @@ import numpy.testing as npt
 
 from qcfitter.mpi_utils import mpi_parse
 import qcfitter.spectrum
-from qcfitter.picca_continuum import PiccaContinuumFitter, VarLSSFitter
+from qcfitter.picca_continuum import (
+    PiccaContinuumFitter, VarLSSFitter, add_picca_continuum_parser)
 
 
 @pytest.fixture
@@ -19,7 +20,7 @@ def setup_parser():
         "--outdir", '-o',
         help="Output directory to save deltas.")
     qcfitter.spectrum.add_wave_region_parser(parser)
-    PiccaContinuumFitter.add_parser(parser)
+    parser = add_picca_continuum_parser(parser)
 
     return parser
 

@@ -1,17 +1,27 @@
+import argparse
+
 import numpy as np
 
 from qcfitter.mathtools import get_smooth_ivar
 
 
-def add_wave_region_parser(parser):
+def add_wave_region_parser(parser=None):
     """ Adds wavelength analysis related arguments to parser. These
     arguments are grouped under 'Wavelength analysis region'. All of them
     come with defaults, none are required.
 
     Arguments
     ---------
+    parser: argparse.ArgumentParser, default: None
+
+    Returns
+    ---------
     parser: argparse.ArgumentParser
     """
+    if parser is None:
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
     wave_group = parser.add_argument_group('Wavelength analysis region')
     wave_group.add_argument(
         "--wave1", type=float, default=3600.,
@@ -25,6 +35,8 @@ def add_wave_region_parser(parser):
     wave_group.add_argument(
         "--forest-w2", type=float, default=1200.,
         help="Last forest wavelength edge.")
+
+    return parser
 
 
 def generate_spectra_list_from_data(cat_by_survey, data):
@@ -311,7 +323,7 @@ class Spectrum():
 
         Arguments
         ---------
-        varlss_interp: mathtools.Fast1DInterpolator or any other interpolator.
+        varlss_interp: Fast1DInterpolator or any other interpolator.
             LSS variance interpolator.
         """
         if not self.cont_params['valid'] or not self.cont_params['cont']:
@@ -385,7 +397,7 @@ class Spectrum():
         Arguments
         ---------
         fts_file: FITS file
-        varlss_interp: mathtools.Fast1DInterpolator or any other interpolator.
+        varlss_interp: Fast1DInterpolator or any other interpolator.
             LSS variance interpolator.
         """
         hdr_dict = {

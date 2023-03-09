@@ -12,7 +12,8 @@ import qcfitter.io
 import qcfitter.spectrum
 import qcfitter.masks
 from qcfitter.mpi_utils import logging_mpi, mpi_parse
-from qcfitter.picca_continuum import PiccaContinuumFitter
+from qcfitter.picca_continuum import (
+    PiccaContinuumFitter, add_picca_continuum_parser)
 
 
 def get_parser(add_help=True):
@@ -31,10 +32,10 @@ def get_parser(add_help=True):
         add_help=add_help,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    qcfitter.io.add_io_parser(parser)
-    qcfitter.spectrum.add_wave_region_parser(parser)
-    qcfitter.masks.add_mask_parser(parser)
-    PiccaContinuumFitter.add_parser(parser)
+    parser = qcfitter.io.add_io_parser(parser)
+    parser = qcfitter.spectrum.add_wave_region_parser(parser)
+    parser = qcfitter.masks.add_mask_parser(parser)
+    parser = add_picca_continuum_parser(parser)
 
     return parser
 
