@@ -10,15 +10,23 @@ import numpy as np
 import qcfitter.spectrum
 
 
-def add_io_parser(parser):
+def add_io_parser(parser=None):
     """ Adds IO related arguments to parser. These arguments are grouped under
     'Input/output parameters and selections'. ``--input-dir`` and ``--catalog``
     are required.
 
     Arguments
     ---------
+    parser: argparse.ArgumentParser, default: None
+
+    Returns
+    ---------
     parser: argparse.ArgumentParser
     """
+    if parser is None:
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
     iogroup = parser.add_argument_group(
         'Input/output parameters and selections')
     iogroup.add_argument(
@@ -58,6 +66,8 @@ def add_io_parser(parser):
     iogroup.add_argument(
         "--keep-nonforest-pixels", action="store_true",
         help="Keeps non forest wavelengths. Memory intensive!")
+
+    return parser
 
 
 def read_spectra_onehealpix(

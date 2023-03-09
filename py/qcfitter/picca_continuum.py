@@ -1,3 +1,6 @@
+"""Continuum fitting module."""
+import argparse
+
 import numpy as np
 import fitsio
 from scipy.optimize import minimize, curve_fit
@@ -9,6 +12,40 @@ from mpi4py import MPI
 from qcfitter.spectrum import valid_spectra
 from qcfitter.mpi_utils import logging_mpi, warn_mpi, MPISaver
 from qcfitter.mathtools import Fast1DInterpolator, mypoly1d
+
+
+def add_picca_continuum_parser(parser=None):
+    """ Adds PiccaContinuumFitter related arguments to parser. These
+    arguments are grouped under 'Continuum fitting options'. All of them
+    come with defaults, none are required.
+
+    Arguments
+    ---------
+    parser: argparse.ArgumentParser, default: None
+
+    Returns
+    ---------
+    parser: argparse.ArgumentParser
+    """
+    if parser is None:
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    cont_group = parser.add_argument_group('Continuum fitting options')
+
+    cont_group.add_argument(
+        "--rfdwave", type=float, default=0.8,
+        help="Rest-frame wave steps. Complies with forest limits")
+    cont_group.add_argument(
+        "--no-iterations", type=int, default=5,
+        help="Number of iterations for continuum fitting.")
+    cont_group.add_argument(
+        "--fiducials", help="Fiducial mean flux and var_lss fits file.")
+    cont_group.add_argument(
+        "--cont-order", type=int, default=1,
+        help="Order of continuum fitting polynomial.")
+
+    return parser
 
 
 class PiccaContinuumFitter():
@@ -53,31 +90,6 @@ class PiccaContinuumFitter():
     outdir: str or None
         Directory to save catalogs. If None or empty, does not save.
     """
-    @staticmethod
-    def add_parser(parser):
-        """ Adds PiccaContinuumFitter related arguments to parser. These
-        arguments are grouped under 'Continuum fitting options'. All of them
-        come with defaults, none are required.
-
-        Arguments
-        ---------
-        parser: argparse.ArgumentParser
-            parser to be modified.
-        """
-        cont_group = parser.add_argument_group('Continuum fitting options')
-
-        cont_group.add_argument(
-            "--rfdwave", type=float, default=0.8,
-            help="Rest-frame wave steps. Complies with forest limits")
-        cont_group.add_argument(
-            "--no-iterations", type=int, default=5,
-            help="Number of iterations for continuum fitting.")
-        cont_group.add_argument(
-            "--fiducials", help="Fiducial mean flux and var_lss fits file.")
-        cont_group.add_argument(
-            "--cont-order", type=int, default=1,
-            help="Order of continuum fitting polynomial.")
-
     def _set_fiducials(self, fiducial_fits):
         """ Set fiducial interpolators for mean flux and var_lss.
 
