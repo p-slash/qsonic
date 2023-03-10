@@ -1,18 +1,18 @@
 ========
-qcfitter
+QSONIC
 ========
 
-.. image:: https://github.com/p-slash/qcfitter/actions/workflows/main.yml/badge.svg
-    :target: https://github.com/p-slash/qcfitter/actions/workflows/main.yml
+.. image:: https://github.com/p-slash/qsonic/actions/workflows/main.yml/badge.svg
+    :target: https://github.com/p-slash/qsonic/actions/workflows/main.yml
     :alt: Tests Status
 
-.. image:: https://readthedocs.org/projects/qcfitter/badge/?version=latest
-    :target: https://qcfitter.readthedocs.io/en/latest/?badge=latest
+.. image:: https://readthedocs.org/projects/qsonic/badge/?version=latest
+    :target: https://qsonic.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
 *Lightining-fast continuum fitting*
 
-**qcfitter** is an MPI-parallelized, highly optimized quasar continuum fitting package built on the same algorithm as `picca <https://github.com/igmhub/picca>`_, but *faster*. It also provides efficient API to read DESI quasar spectra.
+**QSONIC** is an MPI-parallelized, highly optimized quasar continuum fitting package built on the same algorithm as `picca <https://github.com/igmhub/picca>`_, but *faster*. It also provides efficient API to read DESI quasar spectra.
 
 The key differences
 -------------------
@@ -32,7 +32,7 @@ Programs
 --------
 Scripts under ``bin`` folder are executable. Pass ``--help`` for arguments. The most important ones are these four scripts:
 
-+ ``qcfit`` performs picca-like continuum fitting. Runs on MPI, so on some machines you need to execute ``srun -n 1 qcfit.py --help`` for help.
++ ``qsonic-fit`` performs picca-like continuum fitting. Runs on MPI, so on some machines you need to execute ``srun -n 1 qsonic-fit.py --help`` for help.
 
 Source
 ------

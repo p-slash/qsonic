@@ -8,7 +8,7 @@ from healpy import ang2pix
 import numpy as np
 from numpy.lib.recfunctions import rename_fields, append_fields
 
-from qcfitter.mpi_utils import logging_mpi, balance_load
+from qsonic.mpi_utils import logging_mpi, balance_load
 
 _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
 """set: Accepted extentions for quasar catalog."""

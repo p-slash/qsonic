@@ -7,7 +7,7 @@ import warnings
 import fitsio
 import numpy as np
 
-import qcfitter.spectrum
+import qsonic.spectrum
 
 
 def add_io_parser(parser=None):
@@ -112,7 +112,7 @@ def read_spectra_onehealpix(
             catalog_hpx = catalog_hpx[idx_cat]
 
         spectra_list.extend(
-            qcfitter.spectrum.generate_spectra_list_from_data(
+            qsonic.spectrum.generate_spectra_list_from_data(
                 catalog_hpx, data)
         )
     else:
@@ -132,7 +132,7 @@ def read_spectra_onehealpix(
                 cat_by_survey = cat_by_survey[idx_cat]
 
             spectra_list.extend(
-                qcfitter.spectrum.generate_spectra_list_from_data(
+                qsonic.spectrum.generate_spectra_list_from_data(
                     cat_by_survey, data
                 )
             )
@@ -180,14 +180,14 @@ def save_deltas(
     else:
         raise Exception("save_by_hpx and mpi_rank can't both be None.")
 
-    if qcfitter.spectrum.Spectrum.blinding_not_set():
+    if qsonic.spectrum.Spectrum.blinding_not_set():
         raise Exception("Blinding is not set. Cannot save deltas.")
 
     for healpix, hp_specs in zip(unique_pix, split_spectra):
         results = fitsio.FITS(
             f"{outdir}/deltas-{healpix}.fits", 'rw', clobber=True)
 
-        for spec in qcfitter.spectrum.valid_spectra(hp_specs):
+        for spec in qsonic.spectrum.valid_spectra(hp_specs):
             spec.write(results, varlss_interp)
 
         results.close()

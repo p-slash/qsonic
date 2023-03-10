@@ -2,7 +2,7 @@ import argparse
 
 import numpy as np
 
-from qcfitter.mathtools import get_smooth_ivar
+from qsonic.mathtools import get_smooth_ivar
 
 
 def add_wave_region_parser(parser=None):
