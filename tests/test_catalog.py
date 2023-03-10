@@ -6,7 +6,7 @@ import numpy as np
 from numpy.lib.recfunctions import drop_fields
 import numpy.testing as npt
 
-import qcfitter.catalog
+import qsonic.catalog
 
 
 class TestCatalog(object):
@@ -25,9 +25,9 @@ class TestCatalog(object):
         with fitsio.FITS(fname, 'rw', clobber=True) as fts:
             fts.write(
                 input_catalog,
-                extname=list(qcfitter.catalog._accepted_extnames)[0])
+                extname=list(qsonic.catalog._accepted_extnames)[0])
 
-        catalog = qcfitter.catalog._read(fname)
+        catalog = qsonic.catalog._read(fname)
         os.remove(fname)
 
         colnames = catalog.dtype.names
@@ -39,7 +39,7 @@ class TestCatalog(object):
         npt.assert_equal(input_catalog['TARGETID'], catalog['TARGETID'])
         npt.assert_almost_equal(input_catalog['Z'], catalog['Z'])
 
-        catalog1 = qcfitter.catalog._validate_adjust_column_names(
+        catalog1 = qsonic.catalog._validate_adjust_column_names(
             catalog.copy(), is_mock=True)
         colnames = catalog1.dtype.names
         assert ('SURVEY' not in colnames)
@@ -50,7 +50,7 @@ class TestCatalog(object):
         expected_msg = (
             "One of these columns must be present in the catalog: SURVEY!")
         with pytest.raises(Exception, match=expected_msg):
-            qcfitter.catalog._validate_adjust_column_names(
+            qsonic.catalog._validate_adjust_column_names(
                 catalog, is_mock=False)
 
     def test_prime_catalog(self):
@@ -82,7 +82,7 @@ class TestCatalog(object):
             (667, 3.1, 63.1, 63.1, 2000, b'main'),
             (668, 3.1, 63.1, 63.1, 2000, b'main')],
             dtype=cat_dtype)
-        catalog1 = qcfitter.catalog._prime_catalog(
+        catalog1 = qsonic.catalog._prime_catalog(
             input_catalog.copy(), nside, keep_surveys, zmin, zmax)
         npt.assert_array_equal(catalog1, expected_catalog)
 
@@ -97,7 +97,7 @@ class TestCatalog(object):
             (667, 3.1, 63.1, 63.1, 2000),
             (668, 3.1, 63.1, 63.1, 2000)],
             dtype=input_catalog.dtype)
-        catalog1 = qcfitter.catalog._prime_catalog(
+        catalog1 = qsonic.catalog._prime_catalog(
             input_catalog.copy(), nside, keep_surveys, zmin, zmax)
         npt.assert_array_equal(catalog1, expected_catalog)
 
@@ -118,8 +118,8 @@ class TestCatalog(object):
             dtype=cat_dtype)
 
         mpi_size = 2
-        q0 = qcfitter.catalog._mpi_get_local_queue(input_catalog, 0, mpi_size)
-        q1 = qcfitter.catalog._mpi_get_local_queue(input_catalog, 1, mpi_size)
+        q0 = qsonic.catalog._mpi_get_local_queue(input_catalog, 0, mpi_size)
+        q1 = qsonic.catalog._mpi_get_local_queue(input_catalog, 1, mpi_size)
         assert (len(q0) == 2)
         assert (len(q1) == 2)
         npt.assert_equal(q0[0]['TARGETID'], [666, 667, 668])
