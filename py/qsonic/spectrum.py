@@ -403,7 +403,8 @@ class Spectrum():
         hdr_dict = {
             'LOS_ID': self.targetid,
             'TARGETID': self.targetid,
-            'RA': self.ra, 'DEC': self.dec,
+            'RA': np.radians(self.ra),
+            'DEC': np.radians(self.dec),
             'Z': self.z_qso,
             'BLINDING': Spectrum._blinding,
             'WAVE_SOLUTION': "lin",
