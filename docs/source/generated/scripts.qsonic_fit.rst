@@ -1,5 +1,5 @@
 qsonic.scripts.qsonic_fit script module
-====================================
+=======================================
 
 
 .. autofunction:: qsonic.scripts.qsonic_fit.get_parser
