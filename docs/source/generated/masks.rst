@@ -1,17 +1,17 @@
-qcfitter.masks module
+qsonic.masks module
 =====================
 
 
 
-.. autofunction:: qcfitter.masks.add_mask_parser
+.. autofunction:: qsonic.masks.add_mask_parser
 
 .. argparse::
-   :ref: qcfitter.masks.add_mask_parser
+   :ref: qsonic.masks.add_mask_parser
    :prog: foo
 
 
 
-.. automodule:: qcfitter.masks
+.. automodule:: qsonic.masks
    :members:
    :undoc-members:
    :show-inheritance:

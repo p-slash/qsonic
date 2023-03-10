@@ -1,15 +1,15 @@
-﻿qcfitter.io module
+﻿qsonic.io module
 ==================
 
 
-.. autofunction:: qcfitter.io.add_io_parser
+.. autofunction:: qsonic.io.add_io_parser
 
 .. argparse::
-   :ref: qcfitter.io.add_io_parser
+   :ref: qsonic.io.add_io_parser
    :prog: foo
 
 
-.. automodule:: qcfitter.io
+.. automodule:: qsonic.io
    :members:
    :undoc-members:
    :show-inheritance:

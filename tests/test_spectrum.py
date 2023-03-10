@@ -5,15 +5,15 @@ import pytest
 import numpy as np
 import numpy.testing as npt
 
-import qcfitter.spectrum
-from qcfitter.mathtools import Fast1DInterpolator
+import qsonic.spectrum
+from qsonic.mathtools import Fast1DInterpolator
 
 
 class TestSpecParsers(object):
     def test_add_wave_region_parser(self):
         parser = argparse.ArgumentParser()
 
-        qcfitter.spectrum.add_wave_region_parser(parser)
+        qsonic.spectrum.add_wave_region_parser(parser)
         assert parser.parse_args([])
 
         args = parser.parse_args(["--forest-w1", "1050"])
@@ -23,7 +23,7 @@ class TestSpecParsers(object):
 class TestSpectrum(object):
     def test_generate_spectra_list_from_data(self, setup_data):
         cat_by_survey, _, data = setup_data(2)
-        spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
+        spectra_list = qsonic.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
         assert (len(spectra_list) == 2)
@@ -42,7 +42,7 @@ class TestSpectrum(object):
 
     def test_set_forest_region(self, setup_data):
         cat_by_survey, _, data = setup_data(1)
-        spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
+        spectra_list = qsonic.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
         spec = spectra_list[0]
@@ -58,7 +58,7 @@ class TestSpectrum(object):
 
     def test_drop_short_arms(self, setup_data):
         cat_by_survey, _, data = setup_data(1)
-        spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
+        spectra_list = qsonic.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
         spec = spectra_list[0]
@@ -72,7 +72,7 @@ class TestSpectrum(object):
 
     def test_get_real_size(self, setup_data):
         cat_by_survey, npix, data = setup_data(1)
-        spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
+        spectra_list = qsonic.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
         spec = spectra_list[0]
@@ -86,7 +86,7 @@ class TestSpectrum(object):
 
     def test_is_long(self, setup_data):
         cat_by_survey, _, data = setup_data(1)
-        spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
+        spectra_list = qsonic.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
         dforest_wave = 1180. - 1050.
@@ -104,7 +104,7 @@ class TestSpectrum(object):
 
     def test_coadd_arms_forest(self, setup_data):
         cat_by_survey, _, data = setup_data(1)
-        spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
+        spectra_list = qsonic.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
         # var_lss zero

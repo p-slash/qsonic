@@ -1,7 +1,7 @@
-qcfitter.catalog module
+qsonic.catalog module
 =======================
 
-.. automodule:: qcfitter.catalog
+.. automodule:: qsonic.catalog
    :members:
    :undoc-members:
    :show-inheritance:

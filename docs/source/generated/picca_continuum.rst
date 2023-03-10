@@ -1,16 +1,16 @@
-qcfitter.picca\_continuum module
+qsonic.picca\_continuum module
 ================================
 
 
-.. autofunction:: qcfitter.picca_continuum.add_picca_continuum_parser
+.. autofunction:: qsonic.picca_continuum.add_picca_continuum_parser
 
 .. argparse::
-   :module: qcfitter.picca_continuum
+   :module: qsonic.picca_continuum
    :func: add_picca_continuum_parser
    :prog: foo
 
 
-.. automodule:: qcfitter.picca_continuum
+.. automodule:: qsonic.picca_continuum
    :members:
    :undoc-members:
    :show-inheritance:
