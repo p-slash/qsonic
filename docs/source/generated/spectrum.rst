@@ -1,14 +1,14 @@
-qcfitter.spectrum module
+qsonic.spectrum module
 ========================
 
 
-.. autofunction:: qcfitter.spectrum.add_wave_region_parser
+.. autofunction:: qsonic.spectrum.add_wave_region_parser
 
 .. argparse::
-   :ref: qcfitter.spectrum.add_wave_region_parser
+   :ref: qsonic.spectrum.add_wave_region_parser
    :prog: foo
 
-.. automodule:: qcfitter.spectrum
+.. automodule:: qsonic.spectrum
    :members:
    :undoc-members:
    :show-inheritance:

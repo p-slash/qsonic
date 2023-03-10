@@ -1,5 +1,5 @@
-# I ran `sphinx-apidoc -o docs/source/generated py/qcfitter`
-# and changed every file in generated directory to have qcfitter.io etc
+# I ran `sphinx-apidoc -o docs/source/generated py/qsonic`
+# and changed every file in generated directory to have qsonic.io etc
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -14,7 +14,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'qcfitter'
+project = 'qsonic'
 copyright = '2023, Naim Goksel Karacayli'
 author = 'Naim Goksel Karacayli'
 release = '1.0'

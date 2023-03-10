@@ -6,9 +6,9 @@ import fitsio
 import numpy as np
 import numpy.testing as npt
 
-from qcfitter.mpi_utils import mpi_parse
-import qcfitter.spectrum
-from qcfitter.picca_continuum import (
+from qsonic.mpi_utils import mpi_parse
+import qsonic.spectrum
+from qsonic.picca_continuum import (
     PiccaContinuumFitter, VarLSSFitter, add_picca_continuum_parser)
 
 
@@ -19,7 +19,7 @@ def setup_parser():
     parser.add_argument(
         "--outdir", '-o',
         help="Output directory to save deltas.")
-    qcfitter.spectrum.add_wave_region_parser(parser)
+    qsonic.spectrum.add_wave_region_parser(parser)
     parser = add_picca_continuum_parser(parser)
 
     return parser
@@ -130,7 +130,7 @@ class TestPiccaContinuum(object):
         cat_by_survey, npix, data = setup_data(1)
         data['ivar']['B'] *= 10
         data['ivar']['R'] *= 10
-        spec = qcfitter.spectrum.generate_spectra_list_from_data(
+        spec = qsonic.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)[0]
         spec.set_forest_region(3600., 6000., args.forest_w1, args.forest_w2)
 
@@ -174,7 +174,7 @@ class TestPiccaContinuum(object):
         qcfit = PiccaContinuumFitter(args)
 
         cat_by_survey, npix, data = setup_data(3)
-        spectra_list = qcfitter.spectrum.generate_spectra_list_from_data(
+        spectra_list = qsonic.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)
 
         for spec in spectra_list:
