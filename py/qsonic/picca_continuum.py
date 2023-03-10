@@ -9,9 +9,9 @@ from scipy.special import legendre
 
 from mpi4py import MPI
 
-from qcfitter.spectrum import valid_spectra
-from qcfitter.mpi_utils import logging_mpi, warn_mpi, MPISaver
-from qcfitter.mathtools import Fast1DInterpolator, mypoly1d
+from qsonic.spectrum import valid_spectra
+from qsonic.mpi_utils import logging_mpi, warn_mpi, MPISaver
+from qsonic.mathtools import Fast1DInterpolator, mypoly1d
 
 
 def add_picca_continuum_parser(parser=None):
@@ -379,7 +379,7 @@ class PiccaContinuumFitter():
     def update_mean_cont(self, spectra_list, noupdate):
         """ Update the global mean continuum.
 
-        Uses :attr:`forestivar_sm <qcfitter.spectrum.Spectrum.forestivar_sm>`
+        Uses :attr:`forestivar_sm <qsonic.spectrum.Spectrum.forestivar_sm>`
         in inverse variance, but must be set beforehand.
         Raw mean continuum estimates are smoothed with a weighted
         :external+scipy:py:class:`scipy.interpolate.UnivariateSpline`. The mean
