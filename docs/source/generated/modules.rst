@@ -21,4 +21,4 @@ Scripts
 .. toctree::
    :maxdepth: 4
 
-   scripts.qcfit
+   scripts.qsonic_fit

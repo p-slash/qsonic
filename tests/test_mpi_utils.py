@@ -5,9 +5,9 @@ from unittest import TestCase
 import numpy as np
 import numpy.testing as npt
 
-from qcfitter.io import add_io_parser
-import qcfitter.mpi_utils
-import qcfitter.spectrum
+from qsonic.io import add_io_parser
+import qsonic.mpi_utils
+import qsonic.spectrum
 
 
 class TestMPIUtils(TestCase):
@@ -22,20 +22,20 @@ class TestMPIUtils(TestCase):
         add_io_parser(parser)
 
         options = "--input-dir indir --catalog incat -o outdir".split(' ')
-        args = qcfitter.mpi_utils.mpi_parse(parser, comm, mpi_rank, options)
+        args = qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options)
         assert (args.input_dir == "indir")
         assert (args.catalog == "incat")
         assert (args.outdir == "outdir")
 
         with pytest.raises(SystemExit):
             options = "--catalog incat -o outdir".split(' ')
-            qcfitter.mpi_utils.mpi_parse(parser, comm, mpi_rank, options)
+            qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options)
 
     def test_logging_mpi(self):
         with self.assertLogs(level='INFO') as cm:
-            qcfitter.mpi_utils.logging_mpi("test1", 0)
-            qcfitter.mpi_utils.logging_mpi("test2", 1)
-            qcfitter.mpi_utils.logging_mpi("test3", 0, "error")
+            qsonic.mpi_utils.logging_mpi("test1", 0)
+            qsonic.mpi_utils.logging_mpi("test2", 1)
+            qsonic.mpi_utils.logging_mpi("test3", 0, "error")
         self.assertEqual(cm.output, ["INFO:root:test1", "ERROR:root:test3"])
 
     def test_balance_load(self):
@@ -46,9 +46,9 @@ class TestMPIUtils(TestCase):
             3 * np.ones(5), 2 * np.ones(4), np.ones(3), 4 * np.ones(1)]
 
         mpi_size = 3
-        q0 = qcfitter.mpi_utils.balance_load(split_catalog, mpi_size, 0)
-        q1 = qcfitter.mpi_utils.balance_load(split_catalog, mpi_size, 1)
-        q2 = qcfitter.mpi_utils.balance_load(split_catalog, mpi_size, 2)
+        q0 = qsonic.mpi_utils.balance_load(split_catalog, mpi_size, 0)
+        q1 = qsonic.mpi_utils.balance_load(split_catalog, mpi_size, 1)
+        q2 = qsonic.mpi_utils.balance_load(split_catalog, mpi_size, 2)
         for idx in range(len(split_catalog)):
             npt.assert_allclose(split_catalog[idx], sorted_catalog[idx])
         assert (len(q0) == 1)

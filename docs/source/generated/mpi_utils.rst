@@ -1,7 +1,7 @@
-qcfitter.mpi\_utils module
+qsonic.mpi\_utils module
 ==========================
 
-.. automodule:: qcfitter.mpi_utils
+.. automodule:: qsonic.mpi_utils
    :members:
    :undoc-members:
    :show-inheritance:

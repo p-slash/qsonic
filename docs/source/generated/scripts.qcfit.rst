@@ -1,15 +1,15 @@
-qcfitter.scripts.qcfit script module
+qsonic.scripts.qsonic_fit script module
 ====================================
 
 
-.. autofunction:: qcfitter.scripts.qcfit.get_parser
+.. autofunction:: qsonic.scripts.qsonic_fit.get_parser
 
 .. argparse::
-   :ref: qcfitter.scripts.qcfit.get_parser
-   :prog: qcfit
+   :ref: qsonic.scripts.qsonic_fit.get_parser
+   :prog: qsonic-fit
 
 
-.. automodule:: qcfitter.scripts.qcfit
+.. automodule:: qsonic.scripts.qsonic_fit
    :members:
    :undoc-members:
    :show-inheritance:
