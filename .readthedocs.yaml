@@ -6,7 +6,6 @@ build:
 
 python:
   install:
+    - requirements: docs/requirements_doc.txt
     - method: pip
       path: .
-    - method: pip
-      path: sphinxarg
