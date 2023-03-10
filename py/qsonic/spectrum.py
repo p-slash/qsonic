@@ -409,7 +409,7 @@ class Spectrum():
             'WAVE_SOLUTION': "lin",
             'MEANSNR': 0.,
             'RSNR': self.rsnr,
-            'DLAMBDA': self.dwave,
+            'DELTA_LAMBDA': self.dwave,
         }
 
         for arm, wave_arm in self.forestwave.items():
