@@ -1,12 +1,12 @@
 Examples
 ========
 
-Running qcfit
+Running qsonic-fit
 -------------------------
 .. code-block::
     :caption: For an imaginary Y5 DESI quickquasars mock
 
-    srun -n 128 -c 2 qcfit \
+    srun -n 128 -c 2 qsonic-fit \
     --input-dir desi-y5-1000/spectra-16/ \
     --catalog desi-y5-1000/zcat.fits \
     -o desi-y5-1000/deltas/ \
@@ -24,8 +24,8 @@ Reading spectra
     :caption: Here's an example code snippet to use IO interface.
 
     import numpy as np
-    import qcfitter.catalog
-    import qcfitter.io
+    import qsonic.catalog
+    import qsonic.io
 
     fname = "iron_catalog_v0.fits"
     indir = "desi_redux"
@@ -39,7 +39,7 @@ Reading spectra
     fw2 = 1180.
     remove_nonforest_pixels = True # Less memory use
 
-    catalog = qcfitter.catalog.read_quasar_catalog(fname)
+    catalog = qsonic.catalog.read_quasar_catalog(fname)
 
     # Group into unique pixels
     unique_pix, s = np.unique(catalog['HPXPIXEL'], return_index=True)
@@ -51,7 +51,7 @@ Reading spectra
     # You can parallelize this such that each process reads a healpix.
     # e.g., pool.map(parallel_reading, split_catalog)
     for cat in split_catalog:
-        local_specs = qcfitter.io.read_spectra_onehealpix(
+        local_specs = qsonic.io.read_spectra_onehealpix(
             cat, indir, arms, is_mock, skip_resomat
         )
         for spec in local_specs:

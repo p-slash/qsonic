@@ -1,7 +1,7 @@
-qcfitter.mathtools module
+qsonic.mathtools module
 =========================
 
-.. automodule:: qcfitter.mathtools
+.. automodule:: qsonic.mathtools
    :members:
    :undoc-members:
    :show-inheritance:

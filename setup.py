@@ -7,7 +7,7 @@ with open("requirements.txt") as file_reqs:
     requirements = file_reqs.read().splitlines()
 
 setup(
-    name="qcfitter",
+    name="qsonic",
     version="1.0",
     packages=find_namespace_packages(where='py'),
     package_dir={'': 'py/'},

@@ -7,12 +7,12 @@ from os import makedirs as os_makedirs
 import numpy as np
 from mpi4py import MPI
 
-import qcfitter.catalog
-import qcfitter.io
-import qcfitter.spectrum
-import qcfitter.masks
-from qcfitter.mpi_utils import logging_mpi, mpi_parse
-from qcfitter.picca_continuum import (
+import qsonic.catalog
+import qsonic.io
+import qsonic.spectrum
+import qsonic.masks
+from qsonic.mpi_utils import logging_mpi, mpi_parse
+from qsonic.picca_continuum import (
     PiccaContinuumFitter, add_picca_continuum_parser)
 
 
@@ -32,9 +32,9 @@ def get_parser(add_help=True):
         add_help=add_help,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser = qcfitter.io.add_io_parser(parser)
-    parser = qcfitter.spectrum.add_wave_region_parser(parser)
-    parser = qcfitter.masks.add_mask_parser(parser)
+    parser = qsonic.io.add_io_parser(parser)
+    parser = qsonic.spectrum.add_wave_region_parser(parser)
+    parser = qsonic.masks.add_mask_parser(parser)
     parser = add_picca_continuum_parser(parser)
 
     return parser
@@ -47,7 +47,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     Arguments
     ---------
     local_queue: list(ndarray)
-        Catalog from `qcfitter.spectrum.mpi_read_local_qso_catalog`. Each
+        Catalog from `qsonic.spectrum.mpi_read_local_qso_catalog`. Each
         element is a catalog for one healpix.
     args: argparse.Namespace
         Options passed to script.
@@ -67,7 +67,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
-        local_specs = qcfitter.io.read_spectra_onehealpix(
+        local_specs = qsonic.io.read_spectra_onehealpix(
             cat, args.input_dir, args.arms,
             args.mock_analysis, args.skip_resomat
         )
@@ -93,12 +93,12 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
 
 def mpi_read_masks(local_queue, args, comm, mpi_rank):
     """ Read and set masking objects. Broadcast from the master process if
-    necessary. See `qcfitter.masks` for `SkyMask`, `BALMask` and `DLAMask`.
+    necessary. See `qsonic.masks` for `SkyMask`, `BALMask` and `DLAMask`.
 
     Arguments
     ---------
     local_queue: list(ndarray)
-        Catalog from `qcfitter.spectrum.mpi_read_local_qso_catalog`.
+        Catalog from `qsonic.spectrum.mpi_read_local_qso_catalog`.
     args: argparse.Namespace
         Options passed to script.
     comm: MPI.COMM_WORLD
@@ -109,22 +109,22 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
     Returns
     ---------
     maskers: list(Masks)
-        Mask objects from `qcfitter.masks`.
+        Mask objects from `qsonic.masks`.
     """
     maskers = []
 
     if args.sky_mask:
         logging_mpi("Reading sky mask.", mpi_rank)
-        skymasker = qcfitter.masks.SkyMask(args.sky_mask)
+        skymasker = qsonic.masks.SkyMask(args.sky_mask)
 
         maskers.append(skymasker)
 
     # BAL mask
     if args.bal_mask:
         logging_mpi("Checking BAL mask.", mpi_rank)
-        qcfitter.masks.BALMask.check_catalog(local_queue[0])
+        qsonic.masks.BALMask.check_catalog(local_queue[0])
 
-        maskers.append(qcfitter.masks.BALMask)
+        maskers.append(qsonic.masks.BALMask)
 
     # DLA mask
     if args.dla_mask:
@@ -133,7 +133,7 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
             [cat['TARGETID'] for cat in local_queue])
 
         # Read catalog
-        dlamasker = qcfitter.masks.DLAMask(
+        dlamasker = qsonic.masks.DLAMask(
             args.dla_mask, local_targetids, comm, mpi_rank,
             dla_mask_limit=0.8)
 
@@ -144,14 +144,14 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
 
 def apply_masks(maskers, spectra_list, mpi_rank=0):
     """ Apply masks in `maskers` to the local `spectra_list`. See
-    `qcfitter.masks` for `SkyMask`, `BALMask` and `DLAMask`. Masking is set by
+    `qsonic.masks` for `SkyMask`, `BALMask` and `DLAMask`. Masking is set by
     setting `forestivar=0`. `DLAMask` further corrects for Lya and Lyb damping
     wings. Empty arms are removed after masking.
 
     Arguments
     ---------
     maskers: list(Masks)
-        Mask objects from `qcfitter.masks`.
+        Mask objects from `qsonic.masks`.
     spectra_list: list(Spectrum)
         Spectrum objects for the local MPI rank.
     mpi_rank: int
@@ -195,12 +195,12 @@ def main():
         os_makedirs(args.outdir, exist_ok=True)
 
     # read catalog
-    local_queue = qcfitter.catalog.mpi_read_local_qso_catalog(
+    local_queue = qsonic.catalog.mpi_read_local_qso_catalog(
         args.catalog, comm, mpi_rank, mpi_size, is_mock=args.mock_analysis,
         keep_surveys=args.keep_surveys)
 
     # Blinding
-    qcfitter.spectrum.Spectrum.set_blinding(local_queue, args)
+    qsonic.spectrum.Spectrum.set_blinding(local_queue, args)
 
     # Read masks before data
     maskers = mpi_read_masks(local_queue, args, comm, mpi_rank)
@@ -233,7 +233,7 @@ def main():
     qcfit.iterate(spectra_list)
 
     # Keep only valid spectra
-    spectra_list = list(qcfitter.spectrum.valid_spectra(spectra_list))
+    spectra_list = list(qsonic.spectrum.valid_spectra(spectra_list))
     if args.coadd_arms:
         logging_mpi("Coadding arms.", mpi_rank)
         for spec in spectra_list:
@@ -249,6 +249,6 @@ def main():
 
     # Save deltas
     logging_mpi("Saving deltas.", mpi_rank)
-    qcfitter.io.save_deltas(
+    qsonic.io.save_deltas(
         spectra_list, args.outdir, qcfit.varlss_interp,
         save_by_hpx=args.save_by_hpx, mpi_rank=mpi_rank)

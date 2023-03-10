@@ -6,13 +6,13 @@ import fitsio
 import numpy as np
 import numpy.testing as npt
 
-import qcfitter.io
+import qsonic.io
 
 
 class TestIOParsers(object):
     def test_add_io_parser(self):
         parser = argparse.ArgumentParser()
-        qcfitter.io.add_io_parser(parser)
+        qsonic.io.add_io_parser(parser)
         text = "--input-dir indir --catalog incat -o outdir"
         args = parser.parse_args(text.split(' '))
         assert (args.input_dir == "indir")
@@ -36,7 +36,7 @@ class TestIOReading(object):
     def test_read_onehealpix_file_data(self, my_setup_fits):
         cat_by_survey, input_dir, xarms, indata = my_setup_fits
 
-        outdata, _ = qcfitter.io.read_onehealpix_file_data(
+        outdata, _ = qsonic.io.read_onehealpix_file_data(
             cat_by_survey, input_dir, xarms, skip_resomat=True)
 
         for key, inval in indata.items():
@@ -51,16 +51,16 @@ class TestIOReading(object):
                 npt.assert_allclose(outdata[key][arm], inval[arm])
 
     def test_save_deltas(self):
-        qcfitter.io.save_deltas([], "", None)
+        qsonic.io.save_deltas([], "", None)
 
         expected_msg = "save_by_hpx and mpi_rank can't both be None."
         with pytest.raises(Exception, match=expected_msg):
-            qcfitter.io.save_deltas([], "outdir", None)
+            qsonic.io.save_deltas([], "outdir", None)
 
     def test_read_spectra_onehealpix(self, my_setup_fits):
         cat_by_survey, input_dir, xarms, data = my_setup_fits
 
-        slist = qcfitter.io.read_spectra_onehealpix(
+        slist = qsonic.io.read_spectra_onehealpix(
             cat_by_survey, input_dir, xarms, False, True)
 
         assert (len(slist) == cat_by_survey.size)
@@ -76,7 +76,7 @@ class TestIOReading(object):
         cat_by_survey2[-ens_:]['TARGETID'] += 20
         npt.assert_array_equal(cat_by_survey, cat_by_survey2[:-ens_])
         with pytest.warns(RuntimeWarning):
-            slist = qcfitter.io.read_spectra_onehealpix(
+            slist = qsonic.io.read_spectra_onehealpix(
                 cat_by_survey2, input_dir, xarms, False, True)
 
         assert (len(slist) == cat_by_survey.size)

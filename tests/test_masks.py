@@ -3,8 +3,8 @@ import pytest
 
 import numpy.testing as npt
 
-import qcfitter.masks
-from qcfitter.spectrum import Spectrum
+import qsonic.masks
+from qsonic.spectrum import Spectrum
 
 
 def test_skymask(tmp_path, setup_data):
@@ -15,7 +15,7 @@ def test_skymask(tmp_path, setup_data):
         file_sky.write("RF\t 1142\t 1150\t RF\n")
         file_sky.write("Ca\t 4150\t 4200\t OBS\n")
 
-    skymask = qcfitter.masks.SkyMask(fname_skymask)
+    skymask = qsonic.masks.SkyMask(fname_skymask)
     os.remove(fname_skymask)
 
     # Create spectrum
