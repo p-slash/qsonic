@@ -62,17 +62,17 @@ class Spectrum():
 
     Parameters
     ----------
-    catrow: ndarray
+    catrow: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog row.
-    wave: dict(ndarray)
+    wave: dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
         Dictionary of arrays specifying the wavelength grid. Static variable!
-    flux: dict(ndarray)
+    flux: dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
         Dictionary of arrays specifying the flux.
-    ivar: dict(ndarray)
+    ivar: dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
         Dictionary of arrays specifying the inverse variance.
-    mask: dict(ndarray)
+    mask: dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
         Dictionary of arrays specifying the bitmask. Not stored
-    reso: dict(ndarray)
+    reso: dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
         Dictionary of 2D arrays specifying the resolution matrix.
     idx: int
         Index to access in flux, ivar, mask and reso that corresponds to the
@@ -92,7 +92,8 @@ class Spectrum():
     WAVE_LYA_A = 1215.67
     """float: Lya wavelength in A."""
     _wave = None
-    """dict(ndarray): Common wavelength grid for **all** Spectra."""
+    """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Common
+    wavelength grid for **all** Spectra."""
     _dwave = None
     """float: Wavelength spacing."""
     _blinding = None
@@ -121,7 +122,18 @@ class Spectrum():
 
     @staticmethod
     def set_blinding(catalog, args):
-        """Set the blinding strategy."""
+        """Set the blinding strategy.
+
+        'LASNIGHT' column, args.mock_analysis, args.forest_w1 decide the
+        blinding strategy. Mock, side band and SV analyses are not blinded.
+
+        Arguments
+        ---------
+        catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Entire quasar catalog.
+        args: argparse.Namespace
+            Should have ``mock_analysis (bool)`` and ``forest_w1 (floar)``.
+        """
         # do not blind mocks or metal forests
         if args.mock_analysis or args.forest_w1 > Spectrum.WAVE_LYA_A:
             Spectrum._blinding = "none"
@@ -239,12 +251,12 @@ class Spectrum():
         self._forestivar_sm = self._forestivar
 
     def drop_short_arms(self, lya1=0, lya2=0, skip_ratio=0):
-        """Arms that have less than skip_ratio pixels are removed
-        from forest dictionary.
+        """Arms that have less than ``skip_ratio`` pixels are removed from
+        forest dictionary.
 
         Arguments
         ---------
-        lya1, lya2: floats
+        lya1, lya2: float
             Rest-frame wavelength for the forest
         skip_ratio: float
             Remove arms if they have less than this ratio of pixels
@@ -318,8 +330,8 @@ class Spectrum():
         """ Coadds different arms using smoothed pipeline ivar and var_lss.
         Resolution matrix is equally weighted!
 
-        Replaces `forest` variables and `cont_params['cont']`with a dictionary
-        that has a single arm `brz` as key to access coadded data.
+        Replaces `forest` variables and ``cont_params['cont']`` with a
+        dictionary that has a single arm ``brz`` as key to access coadded data.
 
         Arguments
         ---------
@@ -464,7 +476,8 @@ class Spectrum():
 
     @property
     def wave(self):
-        """dict(ndarray): Original wavelength grid in A."""
+        """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Original
+        wavelength grid in A."""
         return Spectrum._wave
 
     @property
@@ -474,28 +487,33 @@ class Spectrum():
 
     @property
     def forestwave(self):
-        """dict(ndarray): Forest wavelength field in A."""
+        """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Forest
+        wavelength field in A."""
         return self._forestwave
 
     @property
     def forestflux(self):
-        """dict(ndarray): Forest flux field."""
+        """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Forest
+        flux field."""
         return self._forestflux
 
     @property
     def forestivar(self):
-        """dict(ndarray): Forest inverse variance field."""
+        """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Forest
+        inverse variance field."""
         return self._forestivar
 
     @property
     def forestivar_sm(self):
-        """dict(ndarray): Forest smoothed inverse variance field.
+        """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Forest
+        smoothed inverse variance field.
 
-        Initially equal to `forestivar`. Smoothed if `set_smooth_ivar` is
-        called."""
+        Initially equal to :attr:`.forestivar`. Smoothed if
+        :meth:`.set_smooth_ivar` is called."""
         return self._forestivar_sm
 
     @property
     def forestreso(self):
-        """dict(ndarray): Resolution matrix in the forest."""
+        """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Resolution
+        matrix in the forest."""
         return self._forestreso

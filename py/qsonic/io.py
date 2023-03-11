@@ -78,7 +78,7 @@ def read_spectra_onehealpix(
 
     Arguments
     ---------
-    catalog_hpx: named np.array
+    catalog_hpx: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog of quasars in a single healpix. If for data 'SURVEY' column
         must be present and sorted.
     input_dir: str
@@ -226,7 +226,7 @@ def _read_onehealpix_file(
 
     Arguments
     ---------
-    targetids_by_survey: ndarray
+    targetids_by_survey: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Targetids_by_survey (used to be catalog). If data, split by survey and
         contains only one survey.
     fspec: str
@@ -238,10 +238,10 @@ def _read_onehealpix_file(
 
     Returns
     ---------
-    data: dict(ndarray)
+    data: dict( :external+numpy:py:class:`ndarray <numpy.ndarray>` )
         Only quasar spectra are read into keywords wave, flux etc. Resolution
         is read if present.
-    idx_cat: ndarray
+    idx_cat: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Indices in `targetids_by_survey` there were succesfully read.
 
     Raises
@@ -303,7 +303,7 @@ def read_onehealpix_file_data(
 
     Arguments
     ---------
-    cat_by_survey: ndarray
+    cat_by_survey: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog for a single survey and healpix. Ordered by TARGETID.
     input_dir: str
         Input directory.
@@ -317,7 +317,7 @@ def read_onehealpix_file_data(
     data: dict
         Only quasar spectra are read into keywords wave, flux etc. Resolution
         is read if present.
-    idx_cat: ndarray
+    idx_cat: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Indices in `cat_by_survey` there were succesfully read.
 
     Raises
@@ -342,7 +342,7 @@ def read_onehealpix_file_mock(
 
     Arguments
     ---------
-    catalog_hpx: ndarray
+    catalog_hpx: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog for a single healpix. Ordered by TARGETID.
     input_dir: str
         Input directory.
@@ -356,7 +356,7 @@ def read_onehealpix_file_mock(
     data: dict
         Only quasar spectra are read into keywords wave, flux etc. Resolution
         is read if present.
-    idx_cat: ndarray
+    idx_cat: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Indices in `catalog_hpx` there were succesfully read.
 
     Raises
