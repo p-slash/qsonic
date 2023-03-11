@@ -20,8 +20,10 @@ Running qsonic-fit
 
 Reading spectra
 ---------------
+
+Here's an example code snippet to use IO interface.
+
 .. code-block::
-    :caption: Here's an example code snippet to use IO interface.
 
     import numpy as np
     import qsonic.catalog
@@ -45,21 +47,16 @@ Reading spectra
     unique_pix, s = np.unique(catalog['HPXPIXEL'], return_index=True)
     split_catalog = np.split(catalog, s[1:])
 
-    # List of Spectrum objects
-    spectra_list = []
-
     # You can parallelize this such that each process reads a healpix.
     # e.g., pool.map(parallel_reading, split_catalog)
-    for cat in split_catalog:
-        local_specs = qsonic.io.read_spectra_onehealpix(
-            cat, indir, arms, is_mock, skip_resomat
+    for hpx_cat in split_catalog:
+        healpix = hpx_cat['HPXPIXEL'][0]
+
+        spectra_by_hpx = qsonic.io.read_spectra_onehealpix(
+            hpx_cat, indir, arms, is_mock, skip_resomat
         )
-        for spec in local_specs:
-            spec.set_forest_region(w1, w2, fw1, fw2)
 
-            if remove_nonforest_pixels:
-                spec.remove_nonforest_pixels()
-
-        spectra_list.extend(local_specs)
+        # Do stuff with spectra in this healpix
+        ...
 
 
