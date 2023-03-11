@@ -403,13 +403,14 @@ class Spectrum():
         hdr_dict = {
             'LOS_ID': self.targetid,
             'TARGETID': self.targetid,
-            'RA': self.ra, 'DEC': self.dec,
+            'RA': np.radians(self.ra),
+            'DEC': np.radians(self.dec),
             'Z': self.z_qso,
             'BLINDING': Spectrum._blinding,
             'WAVE_SOLUTION': "lin",
             'MEANSNR': 0.,
             'RSNR': self.rsnr,
-            'DLAMBDA': self.dwave,
+            'DELTA_LAMBDA': self.dwave,
         }
 
         for arm, wave_arm in self.forestwave.items():
