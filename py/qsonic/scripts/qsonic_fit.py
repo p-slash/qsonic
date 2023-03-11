@@ -46,8 +46,8 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
 
     Arguments
     ---------
-    local_queue: list(ndarray)
-        Catalog from `qsonic.spectrum.mpi_read_local_qso_catalog`. Each
+    local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
+        Catalog from :func:`qsonic.catalog.mpi_read_local_qso_catalog`. Each
         element is a catalog for one healpix.
     args: argparse.Namespace
         Options passed to script.
@@ -93,12 +93,15 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
 
 def mpi_read_masks(local_queue, args, comm, mpi_rank):
     """ Read and set masking objects. Broadcast from the master process if
-    necessary. See `qsonic.masks` for `SkyMask`, `BALMask` and `DLAMask`.
+    necessary. See :mod:`qsonic.masks` for
+    :class:`SkyMask <qsonic.masks.SkyMask>`,
+    :class:`BALMask <qsonic.masks.BALMask>` and
+    :class:`DLAMask <qsonic.masks.DLAMask>`.
 
     Arguments
     ---------
-    local_queue: list(ndarray)
-        Catalog from `qsonic.spectrum.mpi_read_local_qso_catalog`.
+    local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
+        Catalog from :func:`qsonic.catalog.mpi_read_local_qso_catalog`.
     args: argparse.Namespace
         Options passed to script.
     comm: MPI.COMM_WORLD
@@ -143,10 +146,14 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
 
 
 def apply_masks(maskers, spectra_list, mpi_rank=0):
-    """ Apply masks in `maskers` to the local `spectra_list`. See
-    `qsonic.masks` for `SkyMask`, `BALMask` and `DLAMask`. Masking is set by
-    setting `forestivar=0`. `DLAMask` further corrects for Lya and Lyb damping
-    wings. Empty arms are removed after masking.
+    """ Apply masks in ``maskers`` to the local ``spectra_list``.
+
+    See :mod:`qsonic.masks` for
+    :class:`SkyMask <qsonic.masks.SkyMask>`,
+    :class:`BALMask <qsonic.masks.BALMask>` and
+    :class:`DLAMask <qsonic.masks.DLAMask>`. Masking is set by setting
+    ``forestivar=0``. :class:`DLAMask <qsonic.masks.DLAMask>` further corrects
+    for Lya and Lyb damping wings. Empty arms are removed after masking.
 
     Arguments
     ---------

@@ -1,6 +1,11 @@
 qsonic.picca\_continuum module
 ================================
 
+.. automodule:: qsonic.picca_continuum
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :exclude-members: add_picca_continuum_parser
 
 .. autofunction:: qsonic.picca_continuum.add_picca_continuum_parser
 
@@ -8,10 +13,3 @@ qsonic.picca\_continuum module
    :module: qsonic.picca_continuum
    :func: add_picca_continuum_parser
    :prog: foo
-
-
-.. automodule:: qsonic.picca_continuum
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :exclude-members: add_picca_continuum_parser

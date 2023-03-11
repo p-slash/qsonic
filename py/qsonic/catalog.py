@@ -59,7 +59,7 @@ def read_quasar_catalog(
 
     Returns
     ----------
-    catalog: ndarray
+    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Sorted catalog.
     """
     n_side = 16 if is_mock else 64
@@ -99,7 +99,7 @@ def mpi_read_local_qso_catalog(
 
     Returns
     ----------
-    local_queue: list(ndarray)
+    local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
         List of sorted catalogs.
     """
     catalog = None
@@ -125,7 +125,7 @@ def _mpi_get_local_queue(catalog, mpi_rank, mpi_size):
 
     Arguments
     ----------
-    catalog: ndarray
+    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         'HPXPIXEL' sorted catalog.
     mpi_rank: int
         Rank of the MPI process
@@ -134,7 +134,7 @@ def _mpi_get_local_queue(catalog, mpi_rank, mpi_size):
 
     Returns
     ----------
-    local_queue: list(ndarray)
+    local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
         List of sorted catalogs.
     """
     # We decide forest filename list
@@ -181,14 +181,14 @@ def _validate_adjust_column_names(catalog, is_mock):
 
     Arguments
     ----------
-    catalog: ndarray
+    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog.
     is_mock: bool
         If the catalog is for mocks, does not perform 'SURVEY' check.
 
     Returns
     ----------
-    catalog: ndarray
+    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog. No checks are performed.
     """
     colnames = catalog.dtype.names
@@ -228,7 +228,7 @@ def _read(filename):
 
     Returns
     ----------
-    catalog: ndarray
+    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog. No checks are performed.
     """
     logging_mpi(f'Reading catalogue from {filename}', 0)
@@ -256,7 +256,7 @@ def _add_healpix(catalog, n_side, keep_columns):
 
     Arguments
     ----------
-    catalog: ndarray
+    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog.
     n_side: int
         Healpix nside.
@@ -265,7 +265,7 @@ def _add_healpix(catalog, n_side, keep_columns):
 
     Returns
     ----------
-    catalog: ndarray
+    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         'HPXPIXEL' calculated and added catalog.
     """
     if 'HPXPIXEL' not in keep_columns:
@@ -282,7 +282,7 @@ def _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax):
 
     Arguments
     ----------
-    catalog: ndarray
+    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog.
     n_side: int
         Healpix nside.
@@ -295,7 +295,7 @@ def _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax):
 
     Returns
     ----------
-    catalog: ndarray
+    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Sorted catalog. BAL info included if available (req. for BAL masking)
     """
     colnames = catalog.dtype.names
