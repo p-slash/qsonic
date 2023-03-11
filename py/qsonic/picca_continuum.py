@@ -69,7 +69,7 @@ class PiccaContinuumFitter():
     ----------
     nbins: int
         Number of bins for the mean continuum in the rest frame.
-    rfwave: ndarray
+    rfwave: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Rest-frame wavelength centers for the mean continuum.
     _denom: float
         Denominator for the slope term in the continuum model.
@@ -199,13 +199,13 @@ class PiccaContinuumFitter():
 
         Arguments
         ---------
-        x: ndarray
+        x: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Polynomial coefficients for quasar diversity.
-        wave: dict(ndarray)
+        wave: dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
             Observed-frame wavelengths.
-        flux: dict(ndarray)
+        flux: dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
             Flux.
-        ivar_sm: dict(ndarray)
+        ivar_sm: dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
             Smooth inverse variance.
         z_qso: float
             Quasar redshift.
@@ -239,14 +239,14 @@ class PiccaContinuumFitter():
 
         Arguments
         ---------
-        x: ndarray
+        x: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Polynomial coefficients for quasar diversity.
-        wave_rf_arm: ndarray
+        wave_rf_arm: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Rest-frame wavelength per arm.
 
         Returns
         ---------
-        cont: ndarray
+        cont: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Continuum at `wave_rf_arm` values given `x`.
         """
         slope = np.log(wave_rf_arm / self.rfwave[0]) / self._denom
@@ -260,12 +260,18 @@ class PiccaContinuumFitter():
     def fit_continuum(self, spec):
         """ Fits the continuum for a single Spectrum.
 
-        This function uses `forestivar_sm` in inverse variance. Must be
-        smoothed beforehand. It also modifies `spec.cont_params` dictionary in
-        `valid, cont, x, xcov, chi2, dof` keys. If the best-fitting continuum
-        is negative at any point, the fit is invalidated. Chi2 is set
-        separately, i.e. not using the cost function. `x` key is the
-        best-fitting parameter, and `xcov` is their inverse Hessian `hess_inv`.
+        This function uses
+        :attr:`forestivar_sm <qsonic.spectrum.Spectrum.forestivar_sm>` in
+        inverse variance, which must be smoothed beforehand.
+        It also modifies
+        :attr:`cont_params <qsonic.spectrum.Spectrum.cont_params>`
+        dictionary's ``valid, cont, x, xcov, chi2, dof`` keys.
+        If the best-fitting continuum is **negative at any point**, the fit is
+        **invalidated**. Chi2 is set separately without using the
+        :meth:`cost function <._continuum_costfn>`.
+        ``x`` key is the best-fitting parameter, and ``xcov`` is their inverse
+        Hessian ``hess_inv`` given by
+        :external+scipy:func:`scipy.optimize.minimize` using 'L-BFGS-B' method.
 
         Arguments
         ---------
@@ -351,14 +357,14 @@ class PiccaContinuumFitter():
 
         Arguments
         ---------
-        new_meancont: ndarray
+        new_meancont: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             First estimate of the new mean continuum.
 
         Returns
         ---------
-        new_meancont: ndarray
+        new_meancont: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Legendere polynomials projected out and normalized mean continuum.
-        mean_: float
+        mean: float
             Normalization of the mean continuum.
         """
         x = np.log(self.rfwave / self.rfwave[0]) / self._denom
@@ -371,10 +377,10 @@ class PiccaContinuumFitter():
             new_meancont -= B * leg_ci
 
         # normalize
-        mean_ = np.trapz(new_meancont, x=x)
-        new_meancont /= mean_
+        mean = np.trapz(new_meancont, x=x)
+        new_meancont /= mean
 
-        return new_meancont, mean_
+        return new_meancont, mean
 
     def update_mean_cont(self, spectra_list, noupdate):
         """ Update the global mean continuum.
@@ -671,24 +677,24 @@ class VarLSSFitter(object):
 
     Attributes
     ----------
-    waveobs: ndarray
+    waveobs: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Wavelength centers in the observed frame.
-    ivar_edges: ndarray
+    ivar_edges: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Inverse variance edges.
-    ivar_centers: ndarray
+    ivar_centers: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Inverse variance centers.
     minlength: int
         Minimum size of the combined bin count array. It includes underflow and
         overflow bins for both wavelength and variance bins.
-    var_delta: ndarray
+    var_delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Variance delta.
-    mean_delta: ndarray
+    mean_delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Mean delta.
-    var2_delta: ndarray
+    var2_delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         delta^4.
-    num_pixels: int ndarray
+    num_pixels: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Number of pixels in the bin.
-    num_qso: int ndarray
+    num_qso: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Number of quasars in the bin.
     """
     min_no_pix = 500
@@ -702,16 +708,16 @@ class VarLSSFitter(object):
 
         Arguments
         ---------
-        var_pipe: ndarray
+        var_pipe: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Pipeline variance.
-        var_lss: ndarray
+        var_lss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Large-scale structure variance.
         eta: float
             Pipeline variance calibration scalar.
 
         Returns
         -------
-        ndarray
+        :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Expected variance of deltas.
         """
         return eta * var_pipe + var_lss
@@ -748,11 +754,11 @@ class VarLSSFitter(object):
 
         Arguments
         ---------
-        wave: ndarray
+        wave: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Wavelength array.
-        delta: ndarray
+        delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Delta array.
-        ivar: ndarray
+        ivar: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Inverse variance array.
         """
         # add 1 to match searchsorted/bincount output/input
@@ -804,7 +810,7 @@ class VarLSSFitter(object):
 
         Arguments
         ---------
-        current_varlss: ndarray
+        current_varlss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Initial guess for var_lss
         comm: MPI.COMM_WORLD
             MPI comm object for Allreduce
@@ -813,10 +819,10 @@ class VarLSSFitter(object):
 
         Returns
         ---------
-        var_lss: ndarray
+        var_lss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Smoothed LSS variance at observed wavelengths. Missing values are
             extrapolated.
-        std_var_lss: ndarray
+        std_var_lss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Error on `var_lss` from sqrt of `curve_fit` output.
         """
         self._allreduce(comm)
