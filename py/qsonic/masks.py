@@ -16,7 +16,7 @@ sqrt_2 = 1.41421356237
 
 def add_mask_parser(parser=None):
     """ Adds masking related arguments to parser. These arguments are grouped
-    under 'Masking'.
+    under 'Masking options'.
 
     Arguments
     ---------
@@ -30,7 +30,7 @@ def add_mask_parser(parser=None):
         parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    mask_group = parser.add_argument_group('Masking')
+    mask_group = parser.add_argument_group('Masking options')
 
     mask_group.add_argument(
         "--sky-mask",
@@ -120,7 +120,8 @@ class BALMask():
         ("lOVI", 1037),
         ("lOI", 1039)],
         dtype=[("name", "U10"), ("value", 'f8')])
-    """ndarray: Ion transition wavelengths in A."""
+    """:external+numpy:py:class:`ndarray <numpy.ndarray>`: Ion transition
+    wavelengths in A."""
 
     expected_columns = [
         'VMIN_CIV_450', 'VMAX_CIV_450',
@@ -134,7 +135,7 @@ class BALMask():
 
         Arguments
         ----------
-        catalog: ndarray
+        catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         """
         if not all(col in catalog.dtype.names
                    for col in BALMask.expected_columns):
@@ -195,7 +196,7 @@ class DLAMask():
     ----------
     fname: str
         FITS filename to read.
-    local_targetids: None or ndarray, default: None
+    local_targetids: :class:`ndarray <numpy.ndarray>` or None, default: None
         Remove DLAs if they are present in these TARGETIDs.
     comm: None or MPI.COMM_WORLD, default: None
     mpi_rank: int, default: 0
@@ -237,12 +238,12 @@ class DLAMask():
         ---------
         a: float
             Gamma / sigma.
-        u: ndarray
+        u: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             (wave / lambda_12 - 1) / sigma.
 
         Returns
         -------
-        ndarray
+        :external+numpy:py:class:`ndarray <numpy.ndarray>`
         """
         P = u**2 + 1e-12
         Q = 1.5 / P
@@ -257,7 +258,7 @@ class DLAMask():
 
         Arguments
         ---------
-        x: ndarray
+        x: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             wave / lambda_12 - 1.
         sigma: float
             b / c.
@@ -265,7 +266,7 @@ class DLAMask():
 
         Returns
         -------
-        ndarray
+        :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Voight profile.
         """
         a = gamma / sigma
@@ -278,7 +279,7 @@ class DLAMask():
 
         Arguments
         ---------
-        wave_A: ndarray
+        wave_A: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Wavelength array in A.
         lambda12_A: float
             Transition wavelength in A.
@@ -293,7 +294,7 @@ class DLAMask():
 
         Returns
         -------
-        tau: ndarray
+        tau: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Optical depth.
         """
         a12 = DLAMask.aij_coeff * f12
@@ -313,7 +314,7 @@ class DLAMask():
 
         Arguments
         ---------
-        wave: ndarray
+        wave: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Wavelength array in A.
         z_dla: float
             DLA redshift
@@ -324,7 +325,7 @@ class DLAMask():
 
         Returns
         -------
-        F: ndarray
+        F: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Normalized flux for DLA.
         """
         wave_rf = wave / (1 + z_dla)
@@ -342,14 +343,14 @@ class DLAMask():
 
         Arguments
         ---------
-        wave: ndarray
+        wave: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Wavelength array in A.
-        spec_dlas: ndarray
+        spec_dlas: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Named ndarray with 'Z_DLA' and 'NHI'.
 
         Returns
         -------
-        F: ndarray
+        F: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Normalized flux.
         """
         transmission = np.ones(wave.size)
@@ -371,7 +372,7 @@ class DLAMask():
 
         Returns
         -------
-        catalog: ndarray
+        catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             DLA catalog.
         """
         z_colname = DLAMask.accepted_zcolnames[0]
