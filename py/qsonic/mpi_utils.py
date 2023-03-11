@@ -69,7 +69,7 @@ def balance_load(split_catalog, mpi_size, mpi_rank):
 
     Arguments
     ---------
-    split_catalog: list(ndarray)
+    split_catalog: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
         List of catalog. Each element is a ndarray with the same healpix.
     mpi_size: int
         Number of MPI tasks running.
@@ -78,7 +78,7 @@ def balance_load(split_catalog, mpi_size, mpi_rank):
 
     Returns
     ---------
-    local_queue: list(ndarray)
+    local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
         Spectra that current rank is reponsible for in `split_catalog` format.
     """
     number_of_spectra = np.zeros(mpi_size, dtype=int)
@@ -121,7 +121,7 @@ class MPISaver():
 
         Arguments
         ---------
-        data: list(ndarray)
+        data: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
             Data to write to extention.
         names: list(str)
             Column names for data.

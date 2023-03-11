@@ -1,6 +1,10 @@
 ========
-QSONIC
+QSOnic
 ========
+
+.. image:: /../../qsonic-logo.png
+    :width: 100
+    :alt: QSOnic logo
 
 .. image:: https://github.com/p-slash/qsonic/actions/workflows/main.yml/badge.svg
     :target: https://github.com/p-slash/qsonic/actions/workflows/main.yml
@@ -12,7 +16,7 @@ QSONIC
 
 *Lightining-fast continuum fitting*
 
-**QSONIC** is an MPI-parallelized, highly optimized quasar continuum fitting package built on the same algorithm as `picca <https://github.com/igmhub/picca>`_, but *faster*. It also provides efficient API to read DESI quasar spectra.
+**QSOnic** is an MPI-parallelized, highly optimized quasar continuum fitting package for DESI built on the same algorithm as `picca <https://github.com/igmhub/picca>`_, but *faster*. It also provides an efficient API to read DESI quasar spectra.
 
 The key differences
 -------------------
@@ -32,11 +36,11 @@ Programs
 --------
 Scripts under ``bin`` folder are executable. Pass ``--help`` for arguments. The most important ones are these four scripts:
 
-+ ``qsonic-fit`` performs picca-like continuum fitting. Runs on MPI, so on some machines you need to execute ``srun -n 1 qsonic-fit.py --help`` for help.
++ ``qsonic-fit`` performs picca-like continuum fitting. See :doc:`here </generated/scripts.qsonic_fit>` or execute ``srun -n 1 qsonic-fit.py --help`` for help.
 
 Source
 ------
-See :doc:`generated/modules` for details.
+See :doc:`/generated/modules` for details.
 
 + `catalog.py` provides function to read catalog and broadcast from master pe. Needs following columns: ``TARGETID, Z, TARGET_RA, RA, TARGET_DEC, DEC, SURVEY, HPXPIXEL, VMIN_CIV_450, VMAX_CIV_450, VMIN_CIV_2000, VMAX_CIV_2000``.
 + `masks.py` provides maskers for sky, BAL and DLA. Sky mask is a simple text file, where colums are  *type* (unused), *wave_min* mininum wavelength, *wave_max* maximum wavelength, *frame* rest-frame (RF) or observed (OBS). BAL mask assumes related ``VMIN_CIV_450, VMAX_CIV_450, VMIN_CIV_2000, VMAX_CIV_2000`` values are already present in `catalog`. DLA masking takes both Lya and Lyb profiles into account, masks ``F<0.8`` and corrects for the wings.
