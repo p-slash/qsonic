@@ -8,16 +8,18 @@
 
 # import os
 # import sys
+import qsonic
 
 # sys.path.insert(0, os.path.abspath('../../py/'))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'qsonic'
+project = 'QSOnic'
 copyright = '2023, Naim Goksel Karacayli'
 author = 'Naim Goksel Karacayli'
-release = '1.0'
+version = qsonic.__version__
+release = qsonic.__version__
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -62,6 +64,8 @@ templates_path = ['_templates']
 # -- Options for HTML output
 
 html_theme = 'sphinx_rtd_theme'
+html_logo = "_static/qsonic-logo.png"
+html_show_sourcelink = False
 
 # -- Options for EPUB output
 epub_show_urls = 'footnote'
