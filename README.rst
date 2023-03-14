@@ -51,7 +51,7 @@ See :doc:`/generated/modules` for details.
 
 Installation
 ------------
-Create a conda environment and run ``pip install "git+https://github.com/p-slash/qsonic.git"``. You may want to install required packages in ``requirements.txt`` while creating your conda environment, but pip should take care of it.
+Create a conda environment and run ``pip install -e "git+https://github.com/p-slash/qsonic.git"``. You may want to install required packages in ``requirements.txt`` while creating your conda environment, but pip should take care of it.
 
 NERSC
 -----
