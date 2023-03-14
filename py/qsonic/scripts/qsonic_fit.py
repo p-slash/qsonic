@@ -5,7 +5,6 @@ import time
 from os import makedirs as os_makedirs
 
 import numpy as np
-from mpi4py import MPI
 
 import qsonic.catalog
 import qsonic.io
@@ -83,7 +82,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
         spectra_list.extend(
             [spec for spec in local_specs if spec.rsnr > args.min_rsnr])
 
-    nspec_all = comm.reduce(len(spectra_list), op=MPI.SUM, root=0)
+    nspec_all = comm.reduce(len(spectra_list))
     etime = (time.time() - start_time) / 60  # min
     logging_mpi(
         f"All {nspec_all} spectra are read in {etime:.1f} mins.", mpi_rank)
@@ -189,14 +188,7 @@ def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank=0):
     return spectra_list
 
 
-def main():
-    comm = MPI.COMM_WORLD
-    mpi_rank = comm.Get_rank()
-    mpi_size = comm.Get_size()
-
-    logging.basicConfig(level=logging.DEBUG)
-    logging.captureWarnings(True)
-
+def mpi_run_all(comm, mpi_rank, mpi_size):
     args = mpi_parse(get_parser(), comm, mpi_rank)
     if mpi_rank == 0 and args.outdir:
         os_makedirs(args.outdir, exist_ok=True)
@@ -259,3 +251,21 @@ def main():
     qsonic.io.save_deltas(
         spectra_list, args.outdir, qcfit.varlss_interp,
         save_by_hpx=args.save_by_hpx, mpi_rank=mpi_rank)
+
+
+def main():
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    mpi_rank = comm.Get_rank()
+    mpi_size = comm.Get_size()
+
+    logging.basicConfig(level=logging.DEBUG)
+    logging.captureWarnings(True)
+
+    try:
+        mpi_run_all(comm, mpi_rank, mpi_size)
+    except Exception as e:
+        logging_mpi(f"{e}", mpi_rank, "error")
+        return 1
+
+    return 0
