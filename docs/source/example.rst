@@ -3,7 +3,10 @@ Examples
 
 Running qsonic-fit
 -------------------------
-.. code-block::
+
+See :ref:`qsonic-fit arguments <qsonic_fit_arguments_label>` for all options.
+
+.. code-block:: shell
     :caption: For an imaginary Y5 DESI quickquasars mock
 
     srun -n 128 -c 2 qsonic-fit \
@@ -23,7 +26,7 @@ Reading spectra
 
 Here's an example code snippet to use IO interface.
 
-.. code-block::
+.. code-block:: python
 
     import numpy as np
     import qsonic.catalog
