@@ -138,12 +138,40 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     i2 = min(len(all_delta_files), i1 + nfiles_per_rank)
     files_this_rank = all_delta_files[i1:i2]
 
-    deltas_list = [qsonic.io.read_deltas(fname) for fname in files_this_rank]
+    deltas_list = (
+        qsonic.io.read_deltas(fname) for fname in files_this_rank)
+
+    def _is_kept(delta):
+        return (
+            (delta.targetid not in ids_to_remove)
+            and (delta.mean_snr > args.min_snr)
+            and (delta.mean_snr < args.max_snr)
+        )
+
+    # Flatten this list of lists and remove quasars
+    deltas_list = (x for alist in deltas_list for x in alist if _is_kept(x))
 
     varfitter = VarLSSFitter(
         args.wave1, args.wave2, args.nwbins,
         args.var1, args.var2, args.nvarbins,
         nsubsamples=100)
+
+    for delta in deltas_list:
+        varfitter.add(delta.wave, delta.delta, delta.ivar)
+
+    logging_mpi("Fitting variance for VarLSS and eta", mpi_rank)
+    fit_results = np.ones((args.nwbins, 2))
+    fit_results[:, 0] = 0.1
+    fit_results, std_results = varfitter.fit(comm, mpi_rank, fit_results)
+
+    # Save variance stats to file
+    # logging.info("Saving variance stats to files")
+    # suffix = (
+    #     f"minpix{args.min_no_pix}_minqso{args.min_no_qso}"
+    #     f"_snr{args.min_snr:.1f}-{args.max_snr:.1f}")
+    # tmpfilename = f"{args.outdir}/{args.fbase}-{suffix}-variance-stats.fits"
+
+    # logging.info(f"Variance stats saved {tmpfilename}.")
 
 
 def main():
