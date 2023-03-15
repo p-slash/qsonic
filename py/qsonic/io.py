@@ -31,13 +31,13 @@ def add_io_parser(parser=None):
         'Input/output parameters and selections')
     iogroup.add_argument(
         "--input-dir", '-i', required=True,
-        help="Input directory to healpix")
+        help="Input directory.")
     iogroup.add_argument(
         "--catalog", required=True,
         help="Catalog filename")
     iogroup.add_argument(
         "--outdir", '-o',
-        help="Output directory to save deltas.")
+        help="Output directory to save files.")
     iogroup.add_argument(
         "--mock-analysis", action="store_true",
         help="Input folder is mock. Uses nside=16")
@@ -140,6 +140,34 @@ def read_spectra_onehealpix(
     return spectra_list
 
 
+def read_deltas(fname):
+    """ Returns a list of all Delta objects in a file.
+
+    Arguments
+    ---------
+    fname: str
+        FITS file name
+
+    Returns
+    ---------
+    deltas_list: list(Delta)
+
+    Raises
+    ---------
+    RuntimeError
+        If the file is missing certain columns and keys. See :class:`Delta`.
+    """
+    deltas_list = []
+    fitsfile = fitsio.FITS(fname)
+
+    for hdu in fitsfile[1:]:
+        deltas_list.append(qsonic.spectrum.Delta(hdu))
+
+    fitsfile.close()
+
+    return deltas_list
+
+
 def save_deltas(
         spectra_list, outdir, varlss_interp, save_by_hpx=False, mpi_rank=None):
     """ Saves given list of spectra as deltas. NO coaddition of arms.
@@ -181,11 +209,11 @@ def save_deltas(
         raise Exception("save_by_hpx and mpi_rank can't both be None.")
 
     if qsonic.spectrum.Spectrum.blinding_not_set():
-        raise Exception("Blinding is not set. Cannot save deltas.")
+        raise Exception("Blinding is not set. Cannot save delta.")
 
     for healpix, hp_specs in zip(unique_pix, split_spectra):
         results = fitsio.FITS(
-            f"{outdir}/deltas-{healpix}.fits", 'rw', clobber=True)
+            f"{outdir}/delta-{healpix}.fits", 'rw', clobber=True)
 
         for spec in qsonic.spectrum.valid_spectra(hp_specs):
             spec.write(results, varlss_interp)
