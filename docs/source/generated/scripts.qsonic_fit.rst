@@ -8,6 +8,11 @@ qsonic.scripts.qsonic_fit script module
    :show-inheritance:
    :exclude-members: get_parser
 
+.. _qsonic_fit_arguments_label:
+
+Arguments
+---------
+
 .. autofunction:: qsonic.scripts.qsonic_fit.get_parser
 
 .. argparse::

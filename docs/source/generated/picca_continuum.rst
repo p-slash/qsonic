@@ -7,6 +7,9 @@ qsonic.picca\_continuum module
    :show-inheritance:
    :exclude-members: add_picca_continuum_parser
 
+Arguments
+---------
+
 .. autofunction:: qsonic.picca_continuum.add_picca_continuum_parser
 
 .. argparse::
