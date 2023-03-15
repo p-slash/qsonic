@@ -7,6 +7,9 @@ qsonic.masks module
    :show-inheritance:
    :exclude-members: add_mask_parser
 
+Arguments
+---------
+
 .. autofunction:: qsonic.masks.add_mask_parser
 
 .. argparse::
