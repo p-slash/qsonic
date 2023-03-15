@@ -199,7 +199,7 @@ class SubsampleCov():
         Mean. 1D array of size ``ndata``
     covariance: :class:`ndarray <numpy.ndarray>` or None
         Covariance. 2D array of shape ``(ndata, ndata)``
-    variance: : :class:`ndarray <numpy.ndarray>` or None
+    variance: :class:`ndarray <numpy.ndarray>` or None
         Variance. 1D array of size ``ndata``
     """
 
