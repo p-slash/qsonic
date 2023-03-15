@@ -827,11 +827,35 @@ class VarLSSFitter(object):
             self.var2_delta_subs.mean
         )
 
-    def fit(self, comm, mpi_rank, current_varlss):
+    def _smooth_fit_results(self, fit_results, std_results):
+        w = fit_results > 0
+
+        # Smooth new estimates
+        if fit_results.ndim == 1:
+            spl = UnivariateSpline(
+                self.waveobs[w], fit_results[w], w=1 / std_results[w])
+
+            nfails = np.sum(fit_results == 0)
+            fit_results = spl(self.waveobs)
+        # else ndim == 2
+        else:
+            w = w[:, 0]
+            spl1 = UnivariateSpline(
+                self.waveobs[w], fit_results[w, 0], w=1 / std_results[w, 0])
+            spl2 = UnivariateSpline(
+                self.waveobs[w], fit_results[w, 1], w=1 / std_results[w, 1])
+
+            nfails = np.sum(fit_results[:, 0] == 0)
+            fit_results[:, 0] = spl1(self.waveobs)
+            fit_results[:, 1] = spl2(self.waveobs)
+
+        return fit_results, nfails
+
+    def fit(self, comm, mpi_rank, current_varlss, current_eta=None):
         """ Syncronize all MPI processes and fit for `var_lss`.
 
         This implemented using :func:`scipy.optimize.curve_fit` with
-        ``sqrt(var2_delta_subs)`` as absolute errors. `var_lss` is bounded to
+        ``sqrt(var2_delta_subs)`` as absolute errors. Domain is bounded to
         ``(0, 2)``. These fits are then smoothed via
         :external+scipy:py:class:`scipy.interpolate.UnivariateSpline`
         using weights from ``curve_fit``,
@@ -839,24 +863,35 @@ class VarLSSFitter(object):
 
         Arguments
         ---------
-        current_varlss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Initial guess for var_lss.
         comm: MPI.COMM_WORLD
             MPI comm object for Allreduce
         mpi_rank: int
             Rank of the MPI process.
+        current_varlss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Initial guess for var_lss.
+        current_eta: :class:`ndarray <numpy.ndarray>` or None, default: None
+            Initial guess for eta. If ``None``, eta is fixed to one.
 
         Returns
         ---------
-        var_lss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Smoothed LSS variance at observed wavelengths. Missing values are
-            extrapolated.
-        std_var_lss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Error on `var_lss` from sqrt of `curve_fit` output.
+        fit_results: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Smoothed fit results at observed wavelengths where missing values
+            are extrapolated. 1D array containing LSS variance if
+            ``current_eta=None``. 2D containing eta values on the second axis
+            if ``current_eta`` is ndarray.
+        std_results: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Error on ``var_lss`` from sqrt of ``curve_fit`` output. Same
+            behavior as ``fit_results``.
         """
         self._allreduce(comm)
-        var_lss = np.zeros(self.nwbins)
-        std_var_lss = np.zeros(self.nwbins)
+        if current_eta is not None:
+            fit_results = np.zeros((self.nwbins, 2))
+            std_results = np.zeros((self.nwbins, 2))
+            initials = np.concatenate([current_varlss, current_eta]).T
+        else:
+            fit_results = np.zeros(self.nwbins)
+            std_results = np.zeros(self.nwbins)
+            initials = current_varlss
 
         for iwave in range(self.nwbins):
             i1 = (iwave + 1) * (self.nvarbins + 2)
@@ -878,7 +913,7 @@ class VarLSSFitter(object):
                     VarLSSFitter.variance_function,
                     1 / self.ivar_centers[w],
                     self.var_delta_subs.mean[wbinslice][w],
-                    p0=current_varlss[iwave],
+                    p0=initials[iwave],
                     sigma=np.sqrt(self.var2_delta_subs.mean[wbinslice][w]),
                     absolute_sigma=True,
                     check_finite=True,
@@ -891,18 +926,15 @@ class VarLSSFitter(object):
                     f"Reason: {e}. Extrapolating.",
                     mpi_rank)
             else:
-                var_lss[iwave] = pfit[0]
-                std_var_lss[iwave] = np.sqrt(pcov[0, 0])
+                fit_results[iwave] = pfit
+                std_results[iwave] = np.sqrt(np.diag(pcov))
 
         # Smooth new estimates
-        w = var_lss > 0
-        spl = UnivariateSpline(
-            self.waveobs[w], var_lss[w], w=1 / std_var_lss[w])
-
-        nfails = np.sum(var_lss == 0)
+        fit_results, nfails = self._smooth_fit_results(
+            fit_results, std_results)
         if nfails > 0:
             warn_mpi(
                 f"VarLSSFitter failed and extrapolated at {nfails} points.",
                 mpi_rank)
 
-        return spl(self.waveobs), std_var_lss
+        return fit_results, std_results
