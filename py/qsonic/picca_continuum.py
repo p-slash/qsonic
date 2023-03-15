@@ -798,10 +798,8 @@ class VarLSSFitter(object):
         """Sums statistics from all MPI process, and calculates mean, variance
         and error on the variance.
 
-        The variance on var_delta is first calculated by delete-one Jackknife
-        over ``nsubsamples``. This is regularized by calculated var2_delta
-        (Gaussian estimates), where if Jackknife variance is smaller than the
-        Gaussian estimate, it is replaced by the Gaussian estimate.
+        It also calculates the delete-one Jackknife variance of var_delta over
+        ``nsubsamples``.
 
         Arguments
         ---------
@@ -824,13 +822,6 @@ class VarLSSFitter(object):
 
         w = self.num_pixels > 0
         self.var2_delta_subs.mean[w] /= self.num_pixels[w]
-
-        # Regularized jackknife errors, saved in var2_delta_subs
-        self.var2_delta_subs.mean = np.where(
-            self.var_delta_subs.variance > self.var2_delta_subs.mean,
-            self.var_delta_subs.variance,
-            self.var2_delta_subs.mean
-        )
 
     def _smooth_fit_results(self, fit_results, std_results):
         w = fit_results > 0
@@ -856,7 +847,50 @@ class VarLSSFitter(object):
 
         return fit_results, nfails
 
-    def fit(self, comm, mpi_rank, initial_guess):
+    def get_var_delta_error(self, method="gauss"):
+        """ Calculate the error (sigma) on var_delta using a given method.
+
+        ``method="gauss"``::
+
+        Observed var2_delta using delta**4 statistics are used as has been done
+        before.
+
+        ``method="regJack"`` and ``method="doubleJack"``::
+
+        The variance on var_delta is first calculated by delete-one Jackknife
+        over ``nsubsamples``. This is regularized by calculated var2_delta
+        (Gaussian estimates), where if Jackknife variance is smaller than the
+        Gaussian estimate, it is replaced by the Gaussian estimate.
+
+        Arguments
+        ---------
+        method: str, default: gauss
+            Method to estimate error on var_delta
+
+        Returns
+        ---------
+        error_estimates: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Error (sigma) on var_delta
+        """
+        assert (
+            method == "gauss" or method == "regJack" or method == "doubleJack")
+
+        if method == "gauss":
+            error_estimates = np.sqrt(self.var2_delta_subs.mean)
+
+        else:
+            # Regularized jackknife errors
+            error_estimates = np.where(
+                self.var_delta_subs.variance > self.var2_delta_subs.mean,
+                self.var_delta_subs.variance,
+                self.var2_delta_subs.mean
+            )
+
+            error_estimates = np.sqrt(error_estimates)
+
+        return error_estimates
+
+    def fit(self, comm, mpi_rank, initial_guess, method="gauss"):
         """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
 
         Second axis always contains ``eta`` values. Example::
@@ -880,6 +914,8 @@ class VarLSSFitter(object):
         initial_guess: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Initial guess for var_lss and eta. If 1D array, eta is fixed to
             one. If 2D, its shape must be ``(nwbins, 2)``.
+        method: str, default: gauss
+            Error estimation method
 
         Returns
         ---------
@@ -895,6 +931,8 @@ class VarLSSFitter(object):
         assert (initial_guess.ndim == 1 or initial_guess.ndim == 2)
 
         self._allreduce(comm)
+
+        error_estimates = self.get_var_delta_error(method)
 
         if initial_guess.ndim == 1:
             fit_results = np.zeros(self.nwbins)
@@ -924,7 +962,7 @@ class VarLSSFitter(object):
                     1 / self.ivar_centers[w],
                     self.var_delta_subs.mean[wbinslice][w],
                     p0=initial_guess[iwave],
-                    sigma=np.sqrt(self.var2_delta_subs.mean[wbinslice][w]),
+                    sigma=error_estimates[wbinslice][w],
                     absolute_sigma=True,
                     check_finite=True,
                     bounds=(0, 2)
