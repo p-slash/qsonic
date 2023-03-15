@@ -11,7 +11,7 @@ from mpi4py import MPI
 
 from qsonic.spectrum import valid_spectra
 from qsonic.mpi_utils import logging_mpi, warn_mpi, MPISaver
-from qsonic.mathtools import Fast1DInterpolator, mypoly1d
+from qsonic.mathtools import mypoly1d, Fast1DInterpolator, SubsampleCov
 
 
 def add_picca_continuum_parser(parser=None):
@@ -668,12 +668,14 @@ class VarLSSFitter(object):
         Upper observed wavelength edge.
     nwbins: int
         Number of wavelength bins.
-    var1: float
+    var1: float, default: 1e-5
         Lower variance edge.
-    var2: float
+    var2: float, default: 2
         Upper variance edge.
-    nvarbins: int
+    nvarbins: int, default: 100
         Number of variance bins.
+    nsubsamples: int, default: 100
+        Number of subsamples for the Jackknife covariance.
 
     Attributes
     ----------
@@ -686,11 +688,11 @@ class VarLSSFitter(object):
     minlength: int
         Minimum size of the combined bin count array. It includes underflow and
         overflow bins for both wavelength and variance bins.
-    var_delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+    var_delta_subs: SubsampleCov
         Variance delta.
-    mean_delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+    mean_delta_subs: SubsampleCov
         Mean delta.
-    var2_delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+    var2_delta_subs: SubsampleCov
         delta^4.
     num_pixels: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Number of pixels in the bin.
@@ -722,7 +724,11 @@ class VarLSSFitter(object):
         """
         return eta * var_pipe + var_lss
 
-    def __init__(self, w1obs, w2obs, nwbins, var1=1e-5, var2=2., nvarbins=100):
+    def __init__(
+            self, w1obs, w2obs, nwbins,
+            var1=1e-5, var2=2., nvarbins=100,
+            nsubsamples=100
+    ):
         self.nwbins = nwbins
         self.nvarbins = nvarbins
         wave_edges, self.dwobs = np.linspace(
@@ -733,17 +739,23 @@ class VarLSSFitter(object):
         self.ivar_centers = (self.ivar_edges[1:] + self.ivar_edges[:-1]) / 2
 
         self.minlength = (self.nvarbins + 2) * (self.nwbins + 2)
-        self.var_delta = np.zeros(self.minlength)
-        self.mean_delta = np.zeros_like(self.var_delta)
-        self.var2_delta = np.zeros_like(self.var_delta)
-        self.num_pixels = np.zeros_like(self.var_delta, dtype=int)
-        self.num_qso = np.zeros_like(self.var_delta, dtype=int)
+
+        self.num_pixels = np.zeros(self.minlength, dtype=int)
+        self.num_qso = np.zeros(self.minlength, dtype=int)
+
+        self.mpi_rank = MPI.COMM_WORLD.Get_rank()
+        self.var_delta_subs = SubsampleCov(
+            self.minlength, nsubsamples, self.mpi_rank)
+        self.mean_delta_subs = SubsampleCov(
+            self.minlength, nsubsamples, self.mpi_rank)
+        self.var2_delta_subs = SubsampleCov(
+            self.minlength, nsubsamples, self.mpi_rank)
 
     def reset(self):
         """Reset delta and num arrays to zero."""
-        self.var_delta = 0.
-        self.mean_delta = 0.
-        self.var2_delta = 0.
+        self.var_delta_subs.reset(self.mpi_rank)
+        self.mean_delta_subs.reset(self.mpi_rank)
+        self.var2_delta_subs.reset(self.mpi_rank)
         self.num_pixels = 0
         self.num_qso = 0
 
@@ -766,16 +778,21 @@ class VarLSSFitter(object):
         ivar_indx = np.searchsorted(self.ivar_edges, ivar)
         all_indx = ivar_indx + wave_indx * (self.nvarbins + 2)
 
-        self.mean_delta += np.bincount(
-            all_indx, weights=delta, minlength=self.minlength)
-        self.var_delta += np.bincount(
-            all_indx, weights=delta**2, minlength=self.minlength)
-        self.var2_delta += np.bincount(
-            all_indx, weights=delta**4, minlength=self.minlength)
-        rebin = np.bincount(all_indx, minlength=self.minlength)
-        self.num_pixels += rebin
-        rebin[rebin > 0] = 1
-        self.num_qso += rebin
+        npix = np.bincount(all_indx, minlength=self.minlength)
+        self.num_pixels += npix
+
+        self.mean_delta_subs.add_measurement(
+            np.bincount(all_indx, weights=delta, minlength=self.minlength),
+            npix)
+        self.var_delta_subs.add_measurement(
+            np.bincount(all_indx, weights=delta**2, minlength=self.minlength),
+            npix)
+        self.var2_delta_subs.add_measurement(
+            np.bincount(all_indx, weights=delta**4, minlength=self.minlength),
+            npix)
+
+        npix[npix > 0] = 1
+        self.num_qso += npix
 
     def _allreduce(self, comm):
         """Sums statistics from all MPI process, and calculates mean, variance
@@ -786,26 +803,38 @@ class VarLSSFitter(object):
         comm: MPI.COMM_WORLD
             MPI comm object for Allreduce
         """
-        comm.Allreduce(MPI.IN_PLACE, self.mean_delta)
-        comm.Allreduce(MPI.IN_PLACE, self.var_delta)
-        comm.Allreduce(MPI.IN_PLACE, self.var2_delta)
+        self.mean_delta_subs.allreduce(comm, MPI.IN_PLACE)
+        self.var_delta_subs.allreduce(comm, MPI.IN_PLACE)
+        self.var2_delta_subs.allreduce(comm, MPI.IN_PLACE)
+
         comm.Allreduce(MPI.IN_PLACE, self.num_pixels)
         comm.Allreduce(MPI.IN_PLACE, self.num_qso)
 
-        w = self.num_pixels > 0
-        self.var_delta[w] /= self.num_pixels[w]
-        self.mean_delta[w] /= self.num_pixels[w]
-        self.var_delta -= self.mean_delta**2
-        self.var2_delta[w] /= self.num_pixels[w]
-        self.var2_delta -= self.var_delta**2
-        self.var2_delta[w] /= self.num_pixels[w]
+        self.var_delta_subs.get_mean_n_var()
+        self.mean_delta_subs.get_mean()
+        self.var2_delta_subs.get_mean()
 
-    def fit(self, comm, mpi_rank, current_varlss, current_eta=None):
+        self.var_delta_subs.mean -= self.mean_delta_subs.mean**2
+        self.var2_delta_subs.mean -= self.var_delta_subs.mean**2
+
+        w = self.num_pixels > 0
+        self.var2_delta_subs.mean[w] /= self.num_pixels[w]
+
+        # Regularized jackknife errors, saved in var2_delta_subs
+        self.var2_delta_subs.mean = np.where(
+            self.var_delta_subs.variance > self.var2_delta_subs.mean,
+            self.var_delta_subs.variance,
+            self.var2_delta_subs.mean
+        )
+
+    def fit(self, comm, mpi_rank, current_varlss):
         """ Syncronize all MPI processes and fit for `var_lss`.
 
-        This implemented using `scipy.optimize.curve_fit` with sqrt(var2_delta)
-        as absolute errors. `var_lss` is bounded to `(0, 2)`. These fits are
-        then smoothed via `UnivariateSpline` using weights from `curve_fit`,
+        This implemented using :func:`scipy.optimize.curve_fit` with
+        ``sqrt(var2_delta_subs)`` as absolute errors. `var_lss` is bounded to
+        ``(0, 2)``. These fits are then smoothed via
+        :external+scipy:py:class:`scipy.interpolate.UnivariateSpline`
+        using weights from ``curve_fit``,
         while missing values or failed wavelength bins are extrapolated.
 
         Arguments
@@ -848,9 +877,9 @@ class VarLSSFitter(object):
                 pfit, pcov = curve_fit(
                     VarLSSFitter.variance_function,
                     1 / self.ivar_centers[w],
-                    self.var_delta[wbinslice][w],
+                    self.var_delta_subs.mean[wbinslice][w],
                     p0=current_varlss[iwave],
-                    sigma=np.sqrt(self.var2_delta[wbinslice][w]),
+                    sigma=np.sqrt(self.var2_delta_subs.mean[wbinslice][w]),
                     absolute_sigma=True,
                     check_finite=True,
                     bounds=(0, 2)
