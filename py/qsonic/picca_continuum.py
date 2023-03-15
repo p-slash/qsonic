@@ -504,7 +504,7 @@ class PiccaContinuumFitter():
         # Else, fit for var_lss
         logging_mpi("Fitting var_lss", self.mpi_rank)
         y, ep = self.varlss_fitter.fit(
-            self.varlss_interp.fp, self.comm, self.mpi_rank)
+            self.comm, self.mpi_rank, self.varlss_interp.fp)
         if not noupdate:
             self.varlss_interp.fp = y
             self.varlss_interp.ep = ep
@@ -800,7 +800,7 @@ class VarLSSFitter(object):
         self.var2_delta -= self.var_delta**2
         self.var2_delta[w] /= self.num_pixels[w]
 
-    def fit(self, current_varlss, comm, mpi_rank):
+    def fit(self, comm, mpi_rank, current_varlss, current_eta=None):
         """ Syncronize all MPI processes and fit for `var_lss`.
 
         This implemented using `scipy.optimize.curve_fit` with sqrt(var2_delta)
@@ -811,7 +811,7 @@ class VarLSSFitter(object):
         Arguments
         ---------
         current_varlss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Initial guess for var_lss
+            Initial guess for var_lss.
         comm: MPI.COMM_WORLD
             MPI comm object for Allreduce
         mpi_rank: int
