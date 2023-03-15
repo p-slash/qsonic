@@ -2,7 +2,7 @@
 
 Programs
 --------
-+ ``qsonic-fit`` performs picca-like continuum fitting. See :doc:`here </generated/scripts.qsonic_fit>` or execute ``srun -n 1 qsonic-fit.py --help`` for help.
++ ``qsonic-fit`` performs picca-like continuum fitting. See :ref:`here <qsonic_fit_arguments_label>` or execute ``srun -n 1 qsonic-fit.py --help`` for help.
 
 Source
 ------
@@ -14,11 +14,3 @@ See :doc:`/generated/modules` for details.
 + `mpi_utils.py` hosts MPI related functions such as logging.
 + `picca_continuum.py` fits each quasar continuum with a global mean as done in picca.
 + `spectrum.py` has ``Spectrum`` class that stores each quasar spectrum and provides io functions such as ``read_spectra_onehealpix`` and ``save_deltas``.
-
-Installation
-------------
-Create a conda environment and run ``pip install -e "git+https://github.com/p-slash/qsonic.git"``. You may want to install required packages in ``requirements.txt`` while creating your conda environment, but pip should take care of it.
-
-NERSC
------
-``mpi4py`` needs special attention. Follow these `instructions <https://docs.nersc.gov/development/languages/python/parallel-python/#mpi4py-in-your-custom-conda-environment>`_ to clone a mpi4py installed conda environment on NERSC.
