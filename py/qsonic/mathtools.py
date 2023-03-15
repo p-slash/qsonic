@@ -152,12 +152,12 @@ class Fast1DInterpolator():
 
 
 class SubsampleCov():
-    """Utility class to store all subsamples and calculate delete-one Jackknife
-    covariance matrix.
+    """Utility class to store all subsamples with weights and calculate
+    the delete-one Jackknife covariance matrix.
 
     Usage::
 
-        subsampler = SubsampleCov(ndata, nsamples, is_weighted=True)
+        subsampler = SubsampleCov(ndata, nsamples)
 
         for measurement, weights in SomeDataAfterFunction:
             # You can do this more than nsamples times
@@ -168,7 +168,8 @@ class SubsampleCov():
     .. warning::
 
             You cannot call :meth:`add_measurement` after calling
-            :meth:`get_mean` or :meth:`get_mean_n_cov`.
+            :meth:`get_mean`, :meth:`get_mean_n_cov`,
+            or :meth:`get_mean_n_var`.
 
     Parameters
     ----------
@@ -176,8 +177,8 @@ class SubsampleCov():
         Size of the data vector.
     nsamples: int
         Number of samples.
-    is_weighted: bool, default: False
-        Whether the samples are weighted.
+    istart: int, default: 0
+        Start index for the subsampling array
 
     Attributes
     ----------
@@ -185,8 +186,6 @@ class SubsampleCov():
         Size of the data vector.
     nsamples: int
         Number of samples. You can more measurements then this.
-    is_weighted: bool, default: False
-        Whether the samples are weighted.
     _isample: int
         Sample counter. Wraps around nsamples
     _is_normalized: bool
@@ -194,72 +193,79 @@ class SubsampleCov():
         called.
     all_measurements: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         2D array of zeros of shape ``(nsamples, ndata)``.
-    all_weights: :external+numpy:py:class:`ndarray <numpy.ndarray>` or None
-        2D array of zeros of shape ``(nsamples, ndata)`` if
-        ``is_weighted=True``.
+    all_weights: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        2D array of zeros of shape ``(nsamples, ndata)``.
+    mean: :class:`ndarray <numpy.ndarray>` or None
+        Mean. 1D array of size ``ndata``
+    covariance: :class:`ndarray <numpy.ndarray>` or None
+        Covariance. 2D array of shape ``(ndata, ndata)``
+    variance: : :class:`ndarray <numpy.ndarray>` or None
+        Variance. 1D array of size ``ndata``
     """
 
-    def __init__(self, ndata, nsamples, is_weighted=False):
+    def __init__(self, ndata, nsamples, istart=0):
         self.ndata = ndata
         self.nsamples = nsamples
-        self._isample = 0
-        self.is_weighted = is_weighted
+        self._isample = istart % nsamples
 
         self.all_measurements = np.zeros((nsamples, ndata))
-        if self.is_weighted:
-            self.all_weights = np.zeros((nsamples, ndata))
-            self._is_normalized = False
-        else:
-            self.all_weights = np.ones(self.nsamples) / self.nsamples
-            self._is_normalized = True
+        self.all_weights = np.zeros((nsamples, ndata))
+        self._is_normalized = False
 
-    def add_measurement(self, xvec, wvec=None):
+        self.mean = None
+        self.covariance = None
+        self.variance = None
+
+    def add_measurement(self, xvec, wvec):
         """ Adds a measurement to the sample.
 
-        You can call this function more then ``nsamples`` times. If ``wvec`` is
-        passed, the provided measurement (``xvec``) should be weighted, but
-        unnormalized. After a mean or covariance is obtained, you cannot add
+        You can call this function more then ``nsamples`` times. The provided
+        measurement should be weighted, but unnormalized, i.e. ``xvec=wi*xi``.
+        After a mean or covariance is obtained, you cannot add
         more measurements.
 
         Arguments
         ---------
         xvec: :class:`ndarray <numpy.ndarray>`
             1D data (measurement) vector.
-        wvec: :class:`ndarray <numpy.ndarray>` or None, default: None
+        wvec: :class:`ndarray <numpy.ndarray>`
             1D weight vector.
 
         Raises
         ---------
         RuntimeError
-            If the object is initialized with ``is_weighted=True``,
-            but no weights are provided (``wved=None``).
-        RuntimeError
-            If the object is initialized with ``is_weighted=False``,
-            but unexpected weights are provided.
-        RuntimeError
-            If the object is initialized with ``is_weighted=True`` and later
-            normalized by calling ``_normalize, get_mean, get_mean_n_cov``.
+            If the object is normalized by calling
+            ``_normalize, get_mean, get_mean_n_cov`` and
+            ``get_mean_n_var``.
         """
-        if (wvec is None) and self.is_weighted:
-            raise RuntimeError("SubsampleCov requires weights.")
-        if (wvec is not None) and (not self.is_weighted):
-            raise RuntimeError("SubsampleCov unexpected weights.")
-        if (self._is_normalized) and self.is_weighted:
+        if self._is_normalized:
             raise RuntimeError(
                 "SubsampleCov has already been normalized. "
                 "You cannot add more measurements.")
 
         self.all_measurements[self._isample] += xvec
-
-        if (wvec is not None) and self.is_weighted:
-            self.all_weights[self._isample] += wvec
-
+        self.all_weights[self._isample] += wvec
         self._isample = (self._isample + 1) % self.nsamples
 
-    def _normalize(self):
-        if not self.is_weighted:
-            return
+    def allreduce(self, comm, inplace):
+        """Sums statistics from all MPI process.
 
+        .. note::
+
+            Call this with ``inplace=MPI.IN_PLACE``.
+
+        Arguments
+        ---------
+        comm: MPI.COMM_WORLD
+            MPI comm object for Allreduce
+        inplace: BufSpec
+            MPI.IN_PLACE
+        """
+
+        comm.Allreduce(inplace, self.all_measurements)
+        comm.Allreduce(inplace, self.all_weights)
+
+    def _normalize(self):
         self.all_measurements /= self.all_weights + np.finfo(float).eps
         self.all_weights /= np.sum(
             self.all_weights, axis=0) + np.finfo(float).eps
@@ -271,39 +277,22 @@ class SubsampleCov():
 
         .. warning::
 
-            You cannot call :meth:`add_measurement` after calling this.
+            You cannot call :meth:`add_measurement` after calling this unless
+            you :meth:`reset`.
 
         Returns
         -------
-        mean_xvec: :class:`ndarray <numpy.ndarray>`
+        mean: :class:`ndarray <numpy.ndarray>`
             Mean.
         """
         if not self._is_normalized:
             self._normalize()
 
-        mean_xvec = np.sum(self.all_measurements * self.all_weights, axis=0)
+        self.mean = np.sum(self.all_measurements * self.all_weights, axis=0)
 
-        return mean_xvec
+        return self.mean
 
-    def get_mean_n_cov(self, bias_correct=False):
-        """ Get the mean and covariance using delete-one Jackknife.
-
-        .. warning::
-
-            You cannot call :meth:`add_measurement` after calling this.
-
-        Returns
-        -------
-        mean_xvec: :class:`ndarray <numpy.ndarray>`
-            Mean.
-        cov: :class:`ndarray <numpy.ndarray>`
-            Covariance. 2D array
-        """
-        if not self._is_normalized:
-            self._normalize()
-
-        mean_xvec = self.getMean()
-
+    def _get_xdiff(self, mean_xvec, bias_correct=False):
         # remove one measurement, then renormalize
         jack_i = (
             mean_xvec - self.all_measurements * self.all_weights
@@ -316,6 +305,76 @@ class SubsampleCov():
 
         xdiff = jack_i - mean_jack
 
-        cov = np.dot(xdiff.T, xdiff) * (self.nsamples - 1) / self.nsamples
+        return mean_xvec, xdiff
 
-        return mean_xvec, cov
+    def get_mean_n_cov(self, bias_correct=False):
+        """ Get the mean and covariance using delete-one Jackknife.
+
+        Also sets :attr:`mean` and :attr:`covariance`.
+
+        .. warning::
+
+            You cannot call :meth:`add_measurement` after calling this unless
+            you :meth:`reset`.
+
+        Arguments
+        ---------
+        bias_correct: bool, default: False
+            Jackknife bias correction term for the mean.
+
+        Returns
+        -------
+        mean: :class:`ndarray <numpy.ndarray>`
+            Mean.
+        cov: :class:`ndarray <numpy.ndarray>`
+            Covariance. 2D array
+        """
+        mean_xvec = self.get_mean()
+        self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
+
+        self.covariance = (
+            np.dot(xdiff.T, xdiff) * (self.nsamples - 1) / self.nsamples
+        )
+
+        return self.mean, self.covariance
+
+    def get_mean_n_var(self, bias_correct=False):
+        """ Get the mean and variance (i.e. diagonal of the covariance) using
+        delete-one Jackknife.
+
+        .. warning::
+
+            You cannot call :meth:`add_measurement` after calling this unless
+            you :meth:`reset`.
+
+        Arguments
+        ---------
+        bias_correct: bool, default: False
+            Jackknife bias correction term for the mean.
+
+        Returns
+        -------
+        mean_xvec: :class:`ndarray <numpy.ndarray>`
+            Mean.
+        var_xvec: :class:`ndarray <numpy.ndarray>`
+            Variance. 1D array
+        """
+        mean_xvec = self.get_mean()
+        self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
+
+        self.variance = (
+            np.sum(xdiff**2, axis=1) * (self.nsamples - 1) / self.nsamples
+        )
+
+        return self.mean, self.variance
+
+    def reset(self, istart=0):
+        self._isample = istart % self.nsamples
+
+        self.all_measurements = 0
+        self.all_weights = 0
+        self._is_normalized = False
+
+        self.mean = None
+        self.covariance = None
+        self.variance = None
