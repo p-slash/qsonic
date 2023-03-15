@@ -114,10 +114,9 @@ def set_targetid_list_to_remove(args, comm, mpi_rank):
     return ids_to_remove
 
 
-def mpi_run_all(comm, mpi_rank, mpi_size):
-    args = mpi_parse(get_parser(), comm, mpi_rank)
-
-    ids_to_remove = set_targetid_list_to_remove(args, comm, mpi_rank)
+def mpi_read_all_deltas(args, comm, mpi_rank, mpi_size):
+    start_time = time.time()
+    logging_mpi("Reading deltas.", mpi_rank)
 
     all_delta_files = None
     if mpi_rank == 0:
@@ -128,18 +127,33 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     if not all_delta_files:
         raise Exception(f"Delta files are not found in {args.input_dir}.")
 
-    logging_mpi(f"There are {len(all_delta_files)} delta files.")
-    if mpi_size > len(all_delta_files):
+    ndelta_all = len(all_delta_files)
+    logging_mpi(f"There are {ndelta_all} delta files.")
+    if mpi_size > ndelta_all:
         warnings.warn(
             "There are more MPI processes then number of delta files.")
 
-    nfiles_per_rank = max(1, len(all_delta_files) // mpi_size)
+    nfiles_per_rank = max(1, ndelta_all // mpi_size)
     i1 = nfiles_per_rank * mpi_rank
     i2 = min(len(all_delta_files), i1 + nfiles_per_rank)
     files_this_rank = all_delta_files[i1:i2]
 
-    deltas_list = (
-        qsonic.io.read_deltas(fname) for fname in files_this_rank)
+    deltas_list = [qsonic.io.read_deltas(fname) for fname in files_this_rank]
+
+    etime = (time.time() - start_time) / 60  # min
+    logging_mpi(
+        f"Master read {i2-i1} deltas in {etime:.1f} mins.",
+        mpi_rank)
+
+    return deltas_list
+
+
+def mpi_run_all(comm, mpi_rank, mpi_size):
+    args = mpi_parse(get_parser(), comm, mpi_rank)
+    if mpi_rank == 0 and args.outdir:
+        os_makedirs(args.outdir, exist_ok=True)
+
+    ids_to_remove = set_targetid_list_to_remove(args, comm, mpi_rank)
 
     def _is_kept(delta):
         return (
@@ -148,6 +162,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
             and (delta.mean_snr < args.max_snr)
         )
 
+    deltas_list = mpi_read_all_deltas(args, comm, mpi_rank, mpi_size)
     # Flatten this list of lists and remove quasars
     deltas_list = (x for alist in deltas_list for x in alist if _is_kept(x))
 
