@@ -856,8 +856,13 @@ class VarLSSFitter(object):
 
         return fit_results, nfails
 
-    def fit(self, comm, mpi_rank, current_varlss, current_eta=None):
-        """ Syncronize all MPI processes and fit for `var_lss`.
+    def fit(self, comm, mpi_rank, initial_guess):
+        """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
+
+        Second axis always contains ``eta`` values. Example::
+
+            var_lss = initial_guess[:, 0]
+            eta = initial_guess[:, 1]
 
         This implemented using :func:`scipy.optimize.curve_fit` with
         ``sqrt(var2_delta_subs)`` as absolute errors. Domain is bounded to
@@ -872,31 +877,31 @@ class VarLSSFitter(object):
             MPI comm object for Allreduce
         mpi_rank: int
             Rank of the MPI process.
-        current_varlss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Initial guess for var_lss.
-        current_eta: :class:`ndarray <numpy.ndarray>` or None, default: None
-            Initial guess for eta. If ``None``, eta is fixed to one.
+        initial_guess: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Initial guess for var_lss and eta. If 1D array, eta is fixed to
+            one. If 2D, its shape must be ``(nwbins, 2)``.
 
         Returns
         ---------
         fit_results: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Smoothed fit results at observed wavelengths where missing values
             are extrapolated. 1D array containing LSS variance if
-            ``current_eta=None``. 2D containing eta values on the second axis
-            if ``current_eta`` is ndarray.
+            ``initial_guess`` is 1D. 2D containing eta values on the second
+            axis if ``initial_guess`` is 2D ndarray.
         std_results: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Error on ``var_lss`` from sqrt of ``curve_fit`` output. Same
             behavior as ``fit_results``.
         """
+        assert (initial_guess.ndim == 1 or initial_guess.ndim == 2)
+
         self._allreduce(comm)
-        if current_eta is not None:
-            fit_results = np.zeros((self.nwbins, 2))
-            std_results = np.zeros((self.nwbins, 2))
-            initials = np.concatenate([current_varlss, current_eta]).T
-        else:
+
+        if initial_guess.ndim == 1:
             fit_results = np.zeros(self.nwbins)
             std_results = np.zeros(self.nwbins)
-            initials = current_varlss
+        if initial_guess.ndim == 2:
+            fit_results = np.zeros((self.nwbins, 2))
+            std_results = np.zeros((self.nwbins, 2))
 
         for iwave in range(self.nwbins):
             i1 = (iwave + 1) * (self.nvarbins + 2)
@@ -918,7 +923,7 @@ class VarLSSFitter(object):
                     VarLSSFitter.variance_function,
                     1 / self.ivar_centers[w],
                     self.var_delta_subs.mean[wbinslice][w],
-                    p0=initials[iwave],
+                    p0=initial_guess[iwave],
                     sigma=np.sqrt(self.var2_delta_subs.mean[wbinslice][w]),
                     absolute_sigma=True,
                     check_finite=True,
