@@ -798,6 +798,11 @@ class VarLSSFitter(object):
         """Sums statistics from all MPI process, and calculates mean, variance
         and error on the variance.
 
+        The variance on var_delta is first calculated by delete-one Jackknife
+        over ``nsubsamples``. This is regularized by calculated var2_delta
+        (Gaussian estimates), where if Jackknife variance is smaller than the
+        Gaussian estimate, it is replaced by the Gaussian estimate.
+
         Arguments
         ---------
         comm: MPI.COMM_WORLD
