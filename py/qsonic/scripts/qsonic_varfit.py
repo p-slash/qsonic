@@ -77,7 +77,7 @@ def get_parser(add_help=True):
 
 
 def set_targetid_list_to_remove(args, comm, mpi_rank):
-    ids_to_remove = None
+    ids_to_remove = np.array([], dtype=int)
     if mpi_rank == 0 and args.remove_targetid_list:
         try:
             ids_to_remove = np.loadtxt(args.remove_targetid_list, dtype=int)
