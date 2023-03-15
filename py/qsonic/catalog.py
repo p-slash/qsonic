@@ -70,6 +70,53 @@ def read_quasar_catalog(
     return catalog
 
 
+def mpi_read_qso_catalog(
+        filename, comm, mpi_rank, is_mock,
+        keep_surveys=None, zmin=2.1, zmax=6.0):
+    """ Returns the same quasar catalog object on all MPI ranks.
+
+    It is sorted in the following order: HPXPIXEL, SURVEY (if applicable),
+    TARGETID. BAL info included if available. It is required for BAL masking.
+
+    Arguments
+    ----------
+    filename: str
+        Filename to catalog.
+    comm: MPI comm object
+        MPI comm object for bcast
+    mpi_rank: int
+        Rank of the MPI process
+    is_mock: bool
+        If the catalog is for mocks.
+    keep_surveys: None or list(str), default: None
+        List of surveys to subselect. None keeps all.
+    zmin: float, default: 2.1
+        Minimum quasar redshift
+    zmax: float, default: 6.0
+        Maximum quasar redshift
+
+    Returns
+    ----------
+    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Sorted catalog on all MPI ranks.
+    """
+    catalog = None
+
+    if mpi_rank == 0:
+        try:
+            catalog = read_quasar_catalog(
+                filename, is_mock, keep_surveys, zmin, zmax)
+        except Exception as e:
+            logging_mpi(f"{e}", 0, "error")
+            catalog = None
+
+    catalog = comm.bcast(catalog, root=0)
+    if catalog is None:
+        raise Exception("Error while reading catalog.")
+
+    return catalog
+
+
 def mpi_read_local_qso_catalog(
         filename, comm, mpi_rank, mpi_size, is_mock,
         keep_surveys=None, zmin=2.1, zmax=6.0):
@@ -102,19 +149,9 @@ def mpi_read_local_qso_catalog(
     local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
         List of sorted catalogs.
     """
-    catalog = None
-
-    if mpi_rank == 0:
-        try:
-            catalog = read_quasar_catalog(
-                filename, is_mock, keep_surveys, zmin, zmax)
-        except Exception as e:
-            logging_mpi(f"{e}", 0, "error")
-            catalog = None
-
-    catalog = comm.bcast(catalog, root=0)
-    if catalog is None:
-        raise Exception("Error while reading catalog.")
+    catalog = mpi_read_qso_catalog(
+        filename, comm, mpi_rank, is_mock,
+        keep_surveys, zmin, zmax)
 
     return _mpi_get_local_queue(catalog, mpi_rank, mpi_size)
 
