@@ -308,7 +308,7 @@ class SubsampleCov():
         return mean_xvec, xdiff
 
     def get_mean_n_cov(self, bias_correct=False):
-        """ Get the mean and covariance using delete-one Jackknife.
+        """ Get the mean and covariance of the mean using delete-one Jackknife.
 
         Also sets :attr:`mean` and :attr:`covariance`.
 
@@ -327,7 +327,7 @@ class SubsampleCov():
         mean: :class:`ndarray <numpy.ndarray>`
             Mean.
         cov: :class:`ndarray <numpy.ndarray>`
-            Covariance. 2D array
+            Covariance of the mean. 2D array
         """
         mean_xvec = self.get_mean()
         self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
@@ -339,8 +339,8 @@ class SubsampleCov():
         return self.mean, self.covariance
 
     def get_mean_n_var(self, bias_correct=False):
-        """ Get the mean and variance (i.e. diagonal of the covariance) using
-        delete-one Jackknife.
+        """ Get the mean and variance of themean (i.e. diagonal of the
+        covariance) using delete-one Jackknife.
 
         .. warning::
 
@@ -357,7 +357,7 @@ class SubsampleCov():
         mean_xvec: :class:`ndarray <numpy.ndarray>`
             Mean.
         var_xvec: :class:`ndarray <numpy.ndarray>`
-            Variance. 1D array
+            Variance of the mean. 1D array
         """
         mean_xvec = self.get_mean()
         self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
