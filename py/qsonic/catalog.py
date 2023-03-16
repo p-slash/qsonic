@@ -70,7 +70,7 @@ def read_quasar_catalog(
     return catalog
 
 
-def mpi_read_qso_catalog(
+def mpi_read_quasar_catalog(
         filename, comm, mpi_rank, is_mock,
         keep_surveys=None, zmin=2.1, zmax=6.0):
     """ Returns the same quasar catalog object on all MPI ranks.
@@ -117,46 +117,7 @@ def mpi_read_qso_catalog(
     return catalog
 
 
-def mpi_read_local_qso_catalog(
-        filename, comm, mpi_rank, mpi_size, is_mock,
-        keep_surveys=None, zmin=2.1, zmax=6.0):
-    """ Returns quasar catalog object for mpi_rank.
-
-    It is sorted in the following order: HPXPIXEL, SURVEY (if applicable),
-    TARGETID. BAL info included if available. It is required for BAL masking.
-
-    Arguments
-    ----------
-    filename: str
-        Filename to catalog.
-    comm: MPI comm object
-        MPI comm object for bcast
-    mpi_rank: int
-        Rank of the MPI process
-    mpi_size: int
-        Size of MPI processes
-    is_mock: bool
-        If the catalog is for mocks.
-    keep_surveys: None or list(str), default: None
-        List of surveys to subselect. None keeps all.
-    zmin: float, default: 2.1
-        Minimum quasar redshift
-    zmax: float, default: 6.0
-        Maximum quasar redshift
-
-    Returns
-    ----------
-    local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-        List of sorted catalogs.
-    """
-    catalog = mpi_read_qso_catalog(
-        filename, comm, mpi_rank, is_mock,
-        keep_surveys, zmin, zmax)
-
-    return _mpi_get_local_queue(catalog, mpi_rank, mpi_size)
-
-
-def _mpi_get_local_queue(catalog, mpi_rank, mpi_size):
+def mpi_get_local_queue(catalog, mpi_rank, mpi_size):
     """ Take a 'HPXPIXEL' sorted `catalog` and assign a list of catalogs to
     mpi_rank
 
