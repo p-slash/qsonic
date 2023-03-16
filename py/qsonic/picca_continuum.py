@@ -1028,6 +1028,17 @@ class VarLSSFitter(object):
         return fit_results, std_results
 
     def save(self, fname, min_snr=0, max_snr=100):
+        """Save variance statistics to FITS file.
+
+        Arguments
+        ---------
+        fname: str
+            Filename to be written. It is always overwritten.
+        min_snr: float, default: 0
+            Minimum SNR in this sample to be written into header.
+        max_snr: float, default: 100
+            Maximum SNR in this sampleto be written into header.
+        """
         if self.mpi_rank != 0:
             return
 
