@@ -1038,11 +1038,13 @@ class VarLSSFitter(object):
             Minimum SNR in this sample to be written into header.
         max_snr: float, default: 100
             Maximum SNR in this sampleto be written into header.
-        """
-        if self.mpi_rank != 0:
-            return
 
-        fitsfile = fitsio.FITS(fname, 'rw', clobber=True)
+        Returns
+        -------
+        mpi_saver: MPISaver
+            To save additional data or to close manually.
+        """
+        mpi_saver = MPISaver(fname, self.mpi_rank)
 
         hdr_dict = {
             'MINNPIX': VarLSSFitter.min_no_pix,
@@ -1057,19 +1059,14 @@ class VarLSSFitter(object):
             'NVARBINS': self.ivar_centers.size
         }
 
-        dtype = np.dtype([
-            ('wave', 'f8'), ('ivar_pip', 'f8'), ('mean_delta', 'f8'),
-            ('var_delta', 'f8'), ('var2_delta', 'f8'), ('num_pixels', 'i8'),
-            ('num_qso', 'i8')
-        ])
-        towrite_data = np.empty(self.num_pixels.size, dtype=dtype)
-        towrite_data['wave'] = np.repeat(self.waveobs, self.ivar_centers.size)
-        towrite_data['ivar_pip'] = np.tile(self.ivar_centers, self.nwbins)
-        towrite_data['mean_delta'] = self.mean_delta.mean
-        towrite_data['var_delta'] = self.var_delta.mean
-        towrite_data['var2_delta'] = self.var2_delta.mean
-        towrite_data['num_pixels'] = self.num_pixels
-        towrite_data['num_qso'] = self.num_qso
+        mpi_saver.write([
+            np.repeat(self.waveobs, self.ivar_centers.size),
+            np.tile(self.ivar_centers, self.nwbins),
+            self.mean_delta.mean, self.var_delta.mean,
+            self.var2_delta.mean, self.num_pixels, self.num_qso],
+            names=['wave', 'ivar_pipe', 'mean_delta', 'var_delta',
+                   'var2_delta', 'num_pixels', 'num_qso'],
+            extname="VAR_STATS", header=hdr_dict
+        )
 
-        fitsfile.write(towrite_data, header=hdr_dict, extname='VAR_STATS')
-        fitsfile.close()
+        return mpi_saver
