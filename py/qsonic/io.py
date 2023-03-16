@@ -185,7 +185,7 @@ def save_deltas(
 
     for healpix, hp_specs in zip(unique_pix, split_spectra):
         results = fitsio.FITS(
-            f"{outdir}/deltas-{healpix}.fits", 'rw', clobber=True)
+            f"{outdir}/delta-{healpix}.fits", 'rw', clobber=True)
 
         for spec in qsonic.spectrum.valid_spectra(hp_specs):
             spec.write(results, varlss_interp)
