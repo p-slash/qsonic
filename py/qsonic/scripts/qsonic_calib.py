@@ -76,7 +76,7 @@ def get_parser(add_help=True):
     return parser
 
 
-def set_targetid_list_to_remove(args, comm, mpi_rank):
+def mpi_set_targetid_list_to_remove(args, comm, mpi_rank):
     ids_to_remove = np.array([], dtype=int)
     if mpi_rank == 0 and args.remove_targetid_list:
         try:
@@ -141,9 +141,7 @@ def mpi_read_all_deltas(args, comm, mpi_rank, mpi_size):
     deltas_list = [qsonic.io.read_deltas(fname) for fname in files_this_rank]
 
     etime = (time.time() - start_time) / 60  # min
-    logging_mpi(
-        f"Master read {i2-i1} deltas in {etime:.1f} mins.",
-        mpi_rank)
+    logging_mpi(f"Rank{mpi_rank} read {i2-i1} deltas in {etime:.1f} mins.", 0)
 
     return deltas_list
 
@@ -153,7 +151,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     if mpi_rank == 0 and args.outdir:
         os_makedirs(args.outdir, exist_ok=True)
 
-    ids_to_remove = set_targetid_list_to_remove(args, comm, mpi_rank)
+    ids_to_remove = mpi_set_targetid_list_to_remove(args, comm, mpi_rank)
 
     def _is_kept(delta):
         return (
@@ -164,12 +162,15 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
 
     deltas_list = mpi_read_all_deltas(args, comm, mpi_rank, mpi_size)
     # Flatten this list of lists and remove quasars
-    deltas_list = (x for alist in deltas_list for x in alist if _is_kept(x))
+    deltas_list = [x for alist in deltas_list for x in alist if _is_kept(x)]
 
     varfitter = VarLSSFitter(
         args.wave1, args.wave2, args.nwbins,
         args.var1, args.var2, args.nvarbins,
-        nsubsamples=100)
+        nsubsamples=100, comm=comm)
+    # Change static minimum numbers for valid statistics
+    VarLSSFitter.min_no_pix = args.min_no_pix
+    VarLSSFitter.min_no_qso = args.min_no_qso
 
     for delta in deltas_list:
         varfitter.add(delta.wave, delta.delta, delta.ivar)
@@ -177,16 +178,19 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     logging_mpi("Fitting variance for VarLSS and eta", mpi_rank)
     fit_results = np.ones((args.nwbins, 2))
     fit_results[:, 0] = 0.1
-    fit_results, std_results = varfitter.fit(comm, mpi_rank, fit_results)
+    fit_results, std_results = varfitter.fit(fit_results)
 
     # Save variance stats to file
-    # logging.info("Saving variance stats to files")
-    # suffix = (
-    #     f"minpix{args.min_no_pix}_minqso{args.min_no_qso}"
-    #     f"_snr{args.min_snr:.1f}-{args.max_snr:.1f}")
-    # tmpfilename = f"{args.outdir}/{args.fbase}-{suffix}-variance-stats.fits"
+    logging_mpi("Saving variance stats to files", mpi_rank)
+    suffix = (
+        f"minpix{args.min_no_pix}_minqso{args.min_no_qso}"
+        f"_snr{args.min_snr:.1f}-{args.max_snr:.1f}")
+    tmpfilename = f"{args.outdir}/{args.fbase}-{suffix}-variance-stats.fits"
+    varfitter.save(tmpfilename)
+    logging_mpi(f"Variance stats saved in {tmpfilename}.", mpi_rank)
 
-    # logging.info(f"Variance stats saved {tmpfilename}.")
+    # Save fits results as well
+    # Stack 1+deltas
 
 
 def main():
