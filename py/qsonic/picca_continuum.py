@@ -662,6 +662,36 @@ class VarLSSFitter(object):
     shifted. Valid bins require at least 500 pixels from 50 quasars. Assumes no
     spectra has `wave < w1obs` or `wave > w2obs`.
 
+    .. note::
+
+        This class is designed to be used in a linear fashion. You create it,
+        add statistics to it and finally fit. After :meth:`fit` is called,
+        :meth:`fit` and :meth:`add` **cannot** be called again. You may
+        :meth:`reset` and start over.
+
+    Usage::
+
+        ...
+        varfitter = VarLSSFitter(
+            wave1, wave2, nwbins,
+            var1, var2, nvarbins,
+            nsubsamples=100, comm=comm)
+        # Change static minimum numbers for valid statistics
+        VarLSSFitter.min_no_pix = min_no_pix
+        VarLSSFitter.min_no_qso = min_no_qso
+
+        for delta in deltas_list:
+            varfitter.add(delta.wave, delta.delta, delta.ivar)
+
+        logging_mpi("Fitting variance for VarLSS and eta", mpi_rank)
+        fit_results = np.ones((nwbins, 2))
+        fit_results[:, 0] = 0.1
+        fit_results, std_results = varfitter.fit(fit_results)
+
+        varfitter.save("variance-file.fits")
+
+        # You CANNOT call ``fit`` again!
+
     Parameters
     ----------
     w1obs: float
