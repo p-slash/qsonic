@@ -116,17 +116,19 @@ class MPISaver():
         if self.fts is not None:
             self.fts.close()
 
-    def write(self, data, names, extname):
+    def write(self, data, names=None, extname=None, header=None):
         """ Write to FITS file.
 
         Arguments
         ---------
         data: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
             Data to write to extention.
-        names: list(str)
+        names: list(str)or None, default: None
             Column names for data.
-        extname: str
+        extname: str or None, default: None
             Extention name.
+        header: dict or None, default: None
+            Header dictionary to save.
         """
         if self.fts is not None:
-            self.fts.write(data, names=names, extname=extname)
+            self.fts.write(data, names=names, extname=extname, header=header)
