@@ -43,6 +43,23 @@ class TestMathtools(object):
         npt.assert_allclose(ivar_sm[idces], 0)
         npt.assert_allclose(ivar_sm, ivar)
 
+    def test_SubsampleCov(self):
+        subsampler = qsonic.mathtools.SubsampleCov(1, 100)
+
+        randoms = np.random.default_rng().normal(size=1000000)
+
+        true_mean = np.mean(randoms)
+        true_var = np.std(randoms)**2
+        var_on_mean = true_var / randoms.size
+
+        for r in randoms:
+            subsampler.add_measurement(r, 1)
+
+        mean, cov = subsampler.get_mean_n_cov()
+
+        npt.assert_allclose(mean, true_mean, atol=np.sqrt(var_on_mean))
+        npt.assert_almost_equal(cov[0, 0], var_on_mean, decimal=4)
+
 
 if __name__ == '__main__':
     pytest.main()
