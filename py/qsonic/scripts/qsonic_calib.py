@@ -38,7 +38,7 @@ def get_parser(add_help=True):
         "--input-dir", '-i', required=True,
         help="Input directory.")
     iogroup.add_argument(
-        "--outdir", '-o',
+        "--outdir", '-o', required=True,
         help="Output directory to save files.")
     iogroup.add_argument(
         "--mock-analysis", action="store_true",
@@ -146,9 +146,38 @@ def mpi_read_all_deltas(args, comm, mpi_rank, mpi_size):
     return deltas_list
 
 
+def mpi_stack_fluxes(args, comm, deltas_list):
+    dwave = deltas_list[0].header['DELTA_LAMBDA']
+    nwaveobs = int((args.wave2 - args.wave1) / dwave) + 1
+    waveobs = np.arange(nwaveobs) * dwave + args.wave1
+    stacked_flux = np.zeros(nwaveobs)
+    weights = np.zeros(nwaveobs)
+
+    for delta in deltas_list:
+        flux = (1 + delta.delta) * delta.cont
+        idx = ((delta.wave - args.wave1) / dwave + 0.5).astype(int)
+        w = (idx > 0) & (idx < nwaveobs)
+        stacked_flux[idx[w]] += flux[w] * delta.ivar[w]
+        weights[idx[w]] += delta.ivar[w]
+
+    # Save stacked_flux to buffer, then used stacked_flux to store reduced
+    # weights. Place them properly in the end.
+    buf = np.zeros(nwaveobs)
+    comm.Allreduce(stacked_flux, buf)
+    w = buf > 0
+    comm.Allreduce(weights, stacked_flux)
+    weights = stacked_flux
+    stacked_flux = buf
+
+    stacked_flux /= weights
+    stacked_flux[~w] = 0
+
+    return waveobs, stacked_flux
+
+
 def mpi_run_all(comm, mpi_rank, mpi_size):
     args = mpi_parse(get_parser(), comm, mpi_rank)
-    if mpi_rank == 0 and args.outdir:
+    if mpi_rank == 0:
         os_makedirs(args.outdir, exist_ok=True)
 
     ids_to_remove = mpi_set_targetid_list_to_remove(args, comm, mpi_rank)
@@ -186,11 +215,24 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
         f"minpix{args.min_no_pix}_minqso{args.min_no_qso}"
         f"_snr{args.min_snr:.1f}-{args.max_snr:.1f}")
     tmpfilename = f"{args.outdir}/{args.fbase}-{suffix}-variance-stats.fits"
-    varfitter.save(tmpfilename)
+    mpi_saver = varfitter.save(tmpfilename)
     logging_mpi(f"Variance stats saved in {tmpfilename}.", mpi_rank)
 
     # Save fits results as well
-    # Stack 1+deltas
+    mpi_saver.write([
+        varfitter.waveobs, fit_results[:, 0], fit_results[:, 1],
+        std_results[:, 0], std_results[:, 1]],
+        names=["wave", "var_lss", "eta", "e_var_lss", "e_eta"],
+        extname="VAR_FUNC"
+    )
+
+    waveobs, stacked_flux = mpi_stack_fluxes(args, comm, deltas_list)
+    mpi_saver.write(
+        [waveobs, stacked_flux],
+        names=["wave", "stacked_flux"],
+        extname="STACKED_FLUX")
+
+    mpi_saver.close()
 
 
 def main():
