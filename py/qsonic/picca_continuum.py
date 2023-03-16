@@ -1062,10 +1062,11 @@ class VarLSSFitter(object):
         mpi_saver.write([
             np.repeat(self.waveobs, self.ivar_centers.size),
             np.tile(self.ivar_centers, self.nwbins),
-            self.mean_delta.mean, self.var_delta.mean,
-            self.var2_delta.mean, self.num_pixels, self.num_qso],
+            self.mean_delta_subs.mean, self.var_delta_subs.mean,
+            self.var_delta_subs.variance, self.var2_delta_subs.mean,
+            self.num_pixels, self.num_qso],
             names=['wave', 'ivar_pipe', 'mean_delta', 'var_delta',
-                   'var2_delta', 'num_pixels', 'num_qso'],
+                   'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso'],
             extname="VAR_STATS", header=hdr_dict
         )
 
