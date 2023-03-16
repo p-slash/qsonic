@@ -904,6 +904,12 @@ class VarLSSFitter(object):
 
         return error_estimates
 
+    def _fit_array_shape_assert(self, arr):
+        assert (arr.ndim == 1 or arr.ndim == 2)
+        assert (arr.shape[0] == self.nwbins)
+        if arr.ndim == 2:
+            assert (arr.shape[1] == 2)
+
     def fit(self, initial_guess, method="gauss"):
         """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
 
@@ -938,11 +944,7 @@ class VarLSSFitter(object):
             Error on ``var_lss`` from sqrt of ``curve_fit`` output. Same
             behavior as ``fit_results``.
         """
-        assert (initial_guess.ndim == 1 or initial_guess.ndim == 2)
-        assert (initial_guess.shape[0] == self.nwbins)
-        if initial_guess.ndim == 2:
-            assert (initial_guess.shape[1] == 2)
-
+        self._fit_array_shape_assert(initial_guess)
         self._allreduce()
 
         error_estimates = self.get_var_delta_error(method)
