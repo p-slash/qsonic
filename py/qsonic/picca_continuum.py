@@ -182,7 +182,9 @@ class PiccaContinuumFitter():
             self.varlss_interp = self._get_fiducial_interp(
                 args.fiducial_varlss, 'VAR')
         else:
-            self.varlss_fitter = VarLSSFitter(args.wave1, args.wave2, nwbins)
+            self.varlss_fitter = VarLSSFitter(
+                args.wave1, args.wave2, nwbins,
+                comm=self.comm)
             self.varlss_interp = Fast1DInterpolator(
                 self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
                 0.1 * np.ones(nwbins), ep=np.zeros(nwbins))
@@ -504,7 +506,7 @@ class PiccaContinuumFitter():
         # Else, fit for var_lss
         logging_mpi("Fitting var_lss", self.mpi_rank)
         y, ep = self.varlss_fitter.fit(
-            self.comm, self.mpi_rank, self.varlss_interp.fp)
+            self.varlss_interp.fp)
         if not noupdate:
             self.varlss_interp.fp = y
             self.varlss_interp.ep = ep
@@ -676,6 +678,8 @@ class VarLSSFitter(object):
         Number of variance bins.
     nsubsamples: int, default: 100
         Number of subsamples for the Jackknife covariance.
+    comm: MPI.COMM_WORLD or None, default: None
+        MPI comm object to allreduce if enabled.
 
     Attributes
     ----------
@@ -698,6 +702,10 @@ class VarLSSFitter(object):
         Number of pixels in the bin.
     num_qso: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Number of quasars in the bin.
+    comm: MPI.COMM_WORLD or None, default: None
+        MPI comm object to allreduce if enabled.
+    mpi_rank: int
+        Rank of the MPI process if ``comm!=None``. Zero otherwise.
     """
     min_no_pix = 500
     """int: Minimum number of pixels a bin must have to be valid."""
@@ -727,10 +735,13 @@ class VarLSSFitter(object):
     def __init__(
             self, w1obs, w2obs, nwbins,
             var1=1e-5, var2=2., nvarbins=100,
-            nsubsamples=100
+            nsubsamples=100, comm=None
     ):
         self.nwbins = nwbins
         self.nvarbins = nvarbins
+        self.comm = comm
+
+        # Set up wavelength and inverse variance bins
         wave_edges, self.dwobs = np.linspace(
             w1obs, w2obs, nwbins + 1, retstep=True)
         self.waveobs = (wave_edges[1:] + wave_edges[:-1]) / 2
@@ -738,12 +749,19 @@ class VarLSSFitter(object):
             -np.log10(var2), -np.log10(var1), nvarbins + 1)
         self.ivar_centers = (self.ivar_edges[1:] + self.ivar_edges[:-1]) / 2
 
+        # Set up arrays to store statistics
         self.minlength = (self.nvarbins + 2) * (self.nwbins + 2)
 
         self.num_pixels = np.zeros(self.minlength, dtype=int)
         self.num_qso = np.zeros(self.minlength, dtype=int)
 
-        self.mpi_rank = MPI.COMM_WORLD.Get_rank()
+        # If ran with MPI, save mpi_rank first
+        # Then shift each container to remove possibly over adding to 0th bin.
+        if comm is not None:
+            self.mpi_rank = comm.Get_rank()
+        else:
+            self.mpi_rank = 0
+
         self.var_delta_subs = SubsampleCov(
             self.minlength, nsubsamples, self.mpi_rank)
         self.mean_delta_subs = SubsampleCov(
@@ -794,24 +812,20 @@ class VarLSSFitter(object):
         npix[npix > 0] = 1
         self.num_qso += npix
 
-    def _allreduce(self, comm):
+    def _allreduce(self):
         """Sums statistics from all MPI process, and calculates mean, variance
         and error on the variance.
 
         It also calculates the delete-one Jackknife variance of var_delta over
         ``nsubsamples``.
-
-        Arguments
-        ---------
-        comm: MPI.COMM_WORLD
-            MPI comm object for Allreduce
         """
-        self.mean_delta_subs.allreduce(comm, MPI.IN_PLACE)
-        self.var_delta_subs.allreduce(comm, MPI.IN_PLACE)
-        self.var2_delta_subs.allreduce(comm, MPI.IN_PLACE)
+        if self.comm is not None:
+            self.mean_delta_subs.allreduce(self.comm, MPI.IN_PLACE)
+            self.var_delta_subs.allreduce(self.comm, MPI.IN_PLACE)
+            self.var2_delta_subs.allreduce(self.comm, MPI.IN_PLACE)
 
-        comm.Allreduce(MPI.IN_PLACE, self.num_pixels)
-        comm.Allreduce(MPI.IN_PLACE, self.num_qso)
+            self.comm.Allreduce(MPI.IN_PLACE, self.num_pixels)
+            self.comm.Allreduce(MPI.IN_PLACE, self.num_qso)
 
         self.var_delta_subs.get_mean_n_var()
         self.mean_delta_subs.get_mean()
@@ -890,7 +904,7 @@ class VarLSSFitter(object):
 
         return error_estimates
 
-    def fit(self, comm, mpi_rank, initial_guess, method="gauss"):
+    def fit(self, initial_guess, method="gauss"):
         """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
 
         Second axis always contains ``eta`` values. Example::
@@ -907,10 +921,6 @@ class VarLSSFitter(object):
 
         Arguments
         ---------
-        comm: MPI.COMM_WORLD
-            MPI comm object for Allreduce
-        mpi_rank: int
-            Rank of the MPI process.
         initial_guess: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Initial guess for var_lss and eta. If 1D array, eta is fixed to
             one. If 2D, its shape must be ``(nwbins, 2)``.
@@ -929,17 +939,15 @@ class VarLSSFitter(object):
             behavior as ``fit_results``.
         """
         assert (initial_guess.ndim == 1 or initial_guess.ndim == 2)
+        assert (initial_guess.shape[0] == self.nwbins)
+        if initial_guess.ndim == 2:
+            assert (initial_guess.shape[1] == 2)
 
-        self._allreduce(comm)
+        self._allreduce()
 
         error_estimates = self.get_var_delta_error(method)
-
-        if initial_guess.ndim == 1:
-            fit_results = np.zeros(self.nwbins)
-            std_results = np.zeros(self.nwbins)
-        if initial_guess.ndim == 2:
-            fit_results = np.zeros((self.nwbins, 2))
-            std_results = np.zeros((self.nwbins, 2))
+        fit_results = np.zeros_like(initial_guess)
+        std_results = np.zeros_like(initial_guess)
 
         for iwave in range(self.nwbins):
             i1 = (iwave + 1) * (self.nvarbins + 2)
@@ -953,7 +961,7 @@ class VarLSSFitter(object):
                 warn_mpi(
                     "Not enough statistics for VarLSSFitter at"
                     f" wave_obs: {self.waveobs[iwave]:.2f}.",
-                    mpi_rank)
+                    self.mpi_rank)
                 continue
 
             try:
@@ -972,7 +980,7 @@ class VarLSSFitter(object):
                     "VarLSSFitter failed at wave_obs: "
                     f"{self.waveobs[iwave]:.2f}. "
                     f"Reason: {e}. Extrapolating.",
-                    mpi_rank)
+                    self.mpi_rank)
             else:
                 fit_results[iwave] = pfit
                 std_results[iwave] = np.sqrt(np.diag(pcov))
@@ -983,6 +991,42 @@ class VarLSSFitter(object):
         if nfails > 0:
             warn_mpi(
                 f"VarLSSFitter failed and extrapolated at {nfails} points.",
-                mpi_rank)
+                self.mpi_rank)
 
         return fit_results, std_results
+
+    def save(self, fname, min_snr=0, max_snr=100):
+        if self.mpi_rank != 0:
+            return
+
+        fitsfile = fitsio.FITS(fname, 'rw', clobber=True)
+
+        hdr_dict = {
+            'MINNPIX': VarLSSFitter.min_no_pix,
+            'MINNQSO': VarLSSFitter.min_no_qso,
+            'MINSNR': min_snr,
+            'MAXSNR': max_snr,
+            'WAVE1': self.wave1,
+            'WAVE2': self.wave2,
+            'NWBINS': self.nwbins,
+            'VAR1': 1 / self.ivar_centers[-1],
+            'VAR2': 1 / self.ivar_centers[0],
+            'NVARBINS': self.ivar_centers.size
+        }
+
+        dtype = np.dtype([
+            ('wave', 'f8'), ('ivar_pip', 'f8'), ('mean_delta', 'f8'),
+            ('var_delta', 'f8'), ('var2_delta', 'f8'), ('num_pixels', 'i8'),
+            ('num_qso', 'i8')
+        ])
+        towrite_data = np.empty(self.num_pixels.size, dtype=dtype)
+        towrite_data['wave'] = np.repeat(self.waveobs, self.ivar_centers.size)
+        towrite_data['ivar_pip'] = np.tile(self.ivar_centers, self.nwbins)
+        towrite_data['mean_delta'] = self.mean_delta.mean
+        towrite_data['var_delta'] = self.var_delta.mean
+        towrite_data['var2_delta'] = self.var2_delta.mean
+        towrite_data['num_pixels'] = self.num_pixels
+        towrite_data['num_qso'] = self.num_qso
+
+        fitsfile.write(towrite_data, header=hdr_dict, extname='VAR_STATS')
+        fitsfile.close()
