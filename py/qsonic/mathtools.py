@@ -182,8 +182,9 @@ class SubsampleCov():
 
     Attributes
     ----------
-    ndata: int
-        Size of the data vector.
+    ndata: int or tuple(int)
+        Size or shape of the data vector. If 3 quantities share the same
+        weights, data vector shape should be (3, size1d).
     nsamples: int
         Number of samples. You can more measurements then this.
     _isample: int
@@ -204,12 +205,20 @@ class SubsampleCov():
     """
 
     def __init__(self, ndata, nsamples, istart=0):
-        self.ndata = ndata
         self.nsamples = nsamples
         self._isample = istart % nsamples
 
-        self.all_measurements = np.zeros((nsamples, ndata))
-        self.all_weights = np.zeros((nsamples, ndata))
+        if isinstance(ndata, int):
+            newshape = (nsamples, 1, ndata)
+            self.ndata = ndata
+        elif isinstance(ndata, tuple):
+            newshape = (nsamples, ndata[0], ndata[1])
+            self.ndata = ndata[1]
+        else:
+            raise Exception("ndata must be int or tuple of ints.")
+
+        self.all_measurements = np.zeros(newshape)
+        self.all_weights = np.zeros((nsamples, 1, self.ndata))
         self._is_normalized = False
 
         self.mean = None
@@ -227,7 +236,7 @@ class SubsampleCov():
         Arguments
         ---------
         xvec: :class:`ndarray <numpy.ndarray>`
-            1D data (measurement) vector.
+            Data (measurement) vector.
         wvec: :class:`ndarray <numpy.ndarray>`
             1D weight vector.
 
@@ -332,9 +341,13 @@ class SubsampleCov():
         mean_xvec = self.get_mean()
         self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
 
-        self.covariance = (
-            np.dot(xdiff.T, xdiff) * (self.nsamples - 1) / self.nsamples
-        )
+        covshape = (self.all_measurements.shape[1], self.ndata, self.ndata)
+        self.covariance = np.empty(covshape)
+        for jj in range(self.all_measurements.shape[1]):
+            x = xdiff[:, jj, :]
+            self.covariance[jj] = (
+                np.dot(x.T, x) * (self.nsamples - 1) / self.nsamples
+            )
 
         return self.mean, self.covariance
 
@@ -363,7 +376,7 @@ class SubsampleCov():
         self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
 
         self.variance = (
-            np.sum(xdiff**2, axis=1) * (self.nsamples - 1) / self.nsamples
+            np.sum(xdiff**2, axis=0) * (self.nsamples - 1) / self.nsamples
         )
 
         return self.mean, self.variance
