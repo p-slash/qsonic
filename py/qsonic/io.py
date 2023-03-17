@@ -27,46 +27,49 @@ def add_io_parser(parser=None):
         parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    iogroup = parser.add_argument_group(
-        'Input/output parameters and selections')
-    iogroup.add_argument(
+    ingroup = parser.add_argument_group('Input options')
+    ingroup.add_argument(
         "--input-dir", '-i', required=True,
         help="Input directory to healpix")
-    iogroup.add_argument(
+    ingroup.add_argument(
         "--catalog", required=True,
         help="Catalog filename")
-    iogroup.add_argument(
-        "--outdir", '-o',
-        help="Output directory to save deltas.")
-    iogroup.add_argument(
+    ingroup.add_argument(
         "--mock-analysis", action="store_true",
         help="Input folder is mock. Uses nside=16")
-    iogroup.add_argument(
+    ingroup.add_argument(
         "--keep-surveys", nargs='+', default=['sv3', 'main'],
         help="Surveys to keep.")
-    iogroup.add_argument(
+    ingroup.add_argument(
         "--coadd-arms", action="store_true",
         help="Coadds arms when saving.")
 
-    iogroup.add_argument(
+    ingroup.add_argument(
         "--skip-resomat", action="store_true",
         help="Skip reading resolution matrix for 3D.")
-    iogroup.add_argument(
+    ingroup.add_argument(
         "--arms", default=['B', 'R'], choices=['B', 'R', 'Z'], nargs='+',
         help="Arms to read.")
-    iogroup.add_argument(
+    ingroup.add_argument(
         "--min-rsnr", type=float, default=0.,
         help="Minium SNR <F/sigma> above Lya.")
-    iogroup.add_argument(
+    ingroup.add_argument(
         "--skip", type=_float_range(0, 1), default=0.,
         help="Skip short spectra lower than given ratio.")
-    iogroup.add_argument(
-        "--save-by-hpx", action="store_true",
-        help="Save by healpix. If not, saves by MPI rank.")
-    iogroup.add_argument(
+    ingroup.add_argument(
         "--keep-nonforest-pixels", action="store_true",
         help="Keeps non forest wavelengths. Memory intensive!")
 
+    outgroup = parser.add_argument_group('Output options')
+    outgroup.add_argument(
+        "--outdir", '-o',
+        help="Output directory to save deltas.")
+    outgroup.add_argument(
+        "--save-smooth-weights", action="store_true",
+        help="Save smoothed weights instead.")
+    outgroup.add_argument(
+        "--save-by-hpx", action="store_true",
+        help="Save by healpix. If not, saves by MPI rank.")
     return parser
 
 
@@ -141,7 +144,9 @@ def read_spectra_onehealpix(
 
 
 def save_deltas(
-        spectra_list, outdir, varlss_interp, save_by_hpx=False, mpi_rank=None):
+        spectra_list, outdir, varlss_interp,
+        save_by_hpx=False, mpi_rank=None, use_ivar_sm=False
+):
     """ Saves given list of spectra as deltas. NO coaddition of arms.
     Each arm is saved separately. Only valid spectra are saved.
 
@@ -153,10 +158,12 @@ def save_deltas(
         Output directory. Does not save if empty of None
     varlss_interp: Interpolator
         Interpolator for LSS variance
-    save_by_hpx: bool
+    save_by_hpx: bool, default: False
         Saves by healpix if True. Has priority over mpi_rank
-    mpi_rank: int
+    mpi_rank: int, default: None
         Rank of the MPI process. Save by `mpi_rank` if passed.
+    use_ivar_sm: bool, default: False
+        Use :attr:`Spectrum.forestivar_sm` in weights instead.
 
     Raises
     ---------
@@ -188,7 +195,7 @@ def save_deltas(
             f"{outdir}/delta-{healpix}.fits", 'rw', clobber=True)
 
         for spec in qsonic.spectrum.valid_spectra(hp_specs):
-            spec.write(results, varlss_interp)
+            spec.write(results, varlss_interp, use_ivar_sm)
 
         results.close()
 
