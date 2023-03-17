@@ -518,10 +518,11 @@ class PiccaContinuumFitter():
             return
 
         sl = np.s_[::max(1, int(y.size / 10))]
-        text = "wave_obs \t| var_lss \t| error\n"
+        text = ("------------------------------\n"
+                "wave_obs \t| var_lss \t| error\n")
         for w, v, e in zip(self.varlss_fitter.waveobs[sl], y[sl], ep[sl]):
-            text += f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}\nnew"
-
+            text += f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}\n"
+        text += "------------------------------"
         logging_mpi(text, 0)
 
     def iterate(self, spectra_list):
