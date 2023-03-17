@@ -41,29 +41,19 @@ def add_io_parser(parser=None):
         "--keep-surveys", nargs='+', default=['sv3', 'main'],
         help="Surveys to keep.")
     ingroup.add_argument(
-        "--coadd-arms", action="store_true",
-        help="Coadds arms when saving.")
-
-    ingroup.add_argument(
         "--skip-resomat", action="store_true",
         help="Skip reading resolution matrix for 3D.")
     ingroup.add_argument(
         "--arms", default=['B', 'R'], choices=['B', 'R', 'Z'], nargs='+',
         help="Arms to read.")
-    ingroup.add_argument(
-        "--min-rsnr", type=float, default=0.,
-        help="Minium SNR <F/sigma> above Lya.")
-    ingroup.add_argument(
-        "--skip", type=_float_range(0, 1), default=0.,
-        help="Skip short spectra lower than given ratio.")
-    ingroup.add_argument(
-        "--keep-nonforest-pixels", action="store_true",
-        help="Keeps non forest wavelengths. Memory intensive!")
 
     outgroup = parser.add_argument_group('Output options')
     outgroup.add_argument(
         "--outdir", '-o',
         help="Output directory to save deltas.")
+    outgroup.add_argument(
+        "--coadd-arms", action="store_true",
+        help="Coadds arms when saving.")
     outgroup.add_argument(
         "--save-smooth-weights", action="store_true",
         help="Save smoothed weights instead.")
