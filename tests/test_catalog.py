@@ -118,8 +118,8 @@ class TestCatalog(object):
             dtype=cat_dtype)
 
         mpi_size = 2
-        q0 = qsonic.catalog._mpi_get_local_queue(input_catalog, 0, mpi_size)
-        q1 = qsonic.catalog._mpi_get_local_queue(input_catalog, 1, mpi_size)
+        q0 = qsonic.catalog.mpi_get_local_queue(input_catalog, 0, mpi_size)
+        q1 = qsonic.catalog.mpi_get_local_queue(input_catalog, 1, mpi_size)
         assert (len(q0) == 2)
         assert (len(q1) == 2)
         npt.assert_equal(q0[0]['TARGETID'], [666, 667, 668])

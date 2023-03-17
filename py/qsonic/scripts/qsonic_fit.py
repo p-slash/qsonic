@@ -32,6 +32,18 @@ def get_parser(add_help=True):
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser = qsonic.io.add_io_parser(parser)
+
+    analysis_group = parser.add_argument_group('Analysis options')
+    analysis_group.add_argument(
+        "--min-rsnr", type=float, default=0.,
+        help="Minium SNR <F/sigma> above Lya.")
+    analysis_group.add_argument(
+        "--skip", type=qsonic.io._float_range(0, 1), default=0.,
+        help="Skip short spectra lower than given ratio.")
+    analysis_group.add_argument(
+        "--keep-nonforest-pixels", action="store_true",
+        help="Keeps non forest wavelengths. Memory intensive!")
+
     parser = qsonic.spectrum.add_wave_region_parser(parser)
     parser = qsonic.masks.add_mask_parser(parser)
     parser = add_picca_continuum_parser(parser)
@@ -194,9 +206,12 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
         os_makedirs(args.outdir, exist_ok=True)
 
     # read catalog
-    local_queue = qsonic.catalog.mpi_read_local_qso_catalog(
-        args.catalog, comm, mpi_rank, mpi_size, is_mock=args.mock_analysis,
+    full_catalog = qsonic.catalog.mpi_read_quasar_catalog(
+        args.catalog, comm, mpi_rank, is_mock=args.mock_analysis,
         keep_surveys=args.keep_surveys)
+
+    local_queue = qsonic.catalog.mpi_get_local_queue(
+        full_catalog, mpi_rank, mpi_size)
 
     # Blinding
     qsonic.spectrum.Spectrum.set_blinding(local_queue, args)
