@@ -551,10 +551,12 @@ class Delta():
         Wavelength array in A.
     delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Deltas.
-    cont: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Continuum.
     ivar: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Inverse variance.
+    weight: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Weights, which includes var_lss.
+    cont: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Continuum.
     header: FITS header
         Header.
     targetid: int
@@ -586,6 +588,16 @@ class Delta():
 
     def __init__(self, hdu):
         self.header = hdu.read_header()
+        key = Delta._accepted_targetid_keys.intersection(self.header.keys())
+        if not key:
+            raise RuntimeError(
+                "One of these must be present in delta file header: "
+                f"{', '.join(Delta._accepted_targetid_keys)} for TARGETID!")
+
+        key = key.pop()
+        self.targetid = self.header[key]
+        self.mean_snr = self.header['MEANSNR']
+
         colnames = hdu.get_colnames()
         data = hdu.read()
 
@@ -596,15 +608,6 @@ class Delta():
 
         key = Delta._check_hdu(colnames, "delta")
         self.delta = data[key]
-        self.cont = data['CONT']
         self.ivar = data['IVAR']
-
-        key = Delta._accepted_targetid_keys.intersection(self.header.keys())
-        if not key:
-            raise RuntimeError(
-                "One of these must be present in delta file header: "
-                f"{', '.join(Delta._accepted_targetid_keys)} for TARGETID!")
-
-        key = key.pop()
-        self.targetid = self.header[key]
-        self.mean_snr = self.header['MEANSNR']
+        self.weight = data['WEIGHT']
+        self.cont = data['CONT']
