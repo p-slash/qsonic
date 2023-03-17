@@ -398,19 +398,24 @@ class Spectrum():
             npix += armpix
         return snr / npix
 
-    def write(self, fts_file, varlss_interp):
+    def write(self, fts_file, varlss_interp, use_ivar_sm=False):
         """Writes each arm to FITS file separately.
 
         Writes 'LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT' columns and
         'RESOMAT' column if resolution matrix is present to extention name
-        'targetid-arm'. FITS file must be initialized before. Each arm has its
-        own `MEANSNR`. `weights` in the file are **not** smoothed.
+        ``targetid-arm``. FITS file must be initialized before.
+        Each arm has its own `MEANSNR`. "WEIGHT" in the file do not use
+        smoothed inverse variance by default, which can be changed by
+        ``use_ivar_sm=True``.
 
         Arguments
         ---------
         fts_file: FITS file
+            The file handler, not filename.
         varlss_interp: Fast1DInterpolator or any other interpolator.
             LSS variance interpolator.
+        use_ivar_sm: bool, default: False
+            Use :attr:`forestivar_sm` in weights instead.
         """
         hdr_dict = {
             'LOS_ID': self.targetid,
@@ -423,6 +428,7 @@ class Spectrum():
             'MEANSNR': 0.,
             'RSNR': self.rsnr,
             'DELTA_LAMBDA': self.dwave,
+            'SMWEIGHT': use_ivar_sm,
         }
 
         for arm, wave_arm in self.forestwave.items():
@@ -439,7 +445,9 @@ class Spectrum():
             delta = self.forestflux[arm] / cont_est - 1
             ivar = self.forestivar[arm] * cont_est**2
             var_lss = varlss_interp(wave_arm)
-            weight = ivar / (1 + ivar * var_lss)
+            ivar_w = (
+                self.forestivar_sm[arm] * cont_est**2 if use_ivar_sm else ivar)
+            weight = ivar_w / (1 + ivar_w * var_lss)
 
             cols = [wave_arm, delta, ivar, weight, cont_est]
             if self.forestreso:
