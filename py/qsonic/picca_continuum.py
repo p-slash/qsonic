@@ -725,12 +725,9 @@ class VarLSSFitter(object):
     minlength: int
         Minimum size of the combined bin count array. It includes underflow and
         overflow bins for both wavelength and variance bins.
-    var_delta_subs: SubsampleCov
-        Variance delta.
-    mean_delta_subs: SubsampleCov
-        Mean delta.
-    var2_delta_subs: SubsampleCov
-        delta^4.
+    subsampler: SubsampleCov
+        Subsampler object that stores mean_delta in axis=0, var_delta in axis=1
+        , var2_delta in axis=2.
     num_pixels: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Number of pixels in the bin.
     num_qso: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
@@ -800,18 +797,15 @@ class VarLSSFitter(object):
         else:
             self.mpi_rank = 0
 
-        self.var_delta_subs = SubsampleCov(
-            self.minlength, nsubsamples, self.mpi_rank)
-        self.mean_delta_subs = SubsampleCov(
-            self.minlength, nsubsamples, self.mpi_rank)
-        self.var2_delta_subs = SubsampleCov(
-            self.minlength, nsubsamples, self.mpi_rank)
+        # Axis 0 is mean
+        # Axis 1 is var_delta
+        # Axis 2 is var2_delta
+        self.subsampler = SubsampleCov(
+            (3, self.minlength), nsubsamples, self.mpi_rank)
 
     def reset(self):
         """Reset delta and num arrays to zero."""
-        self.var_delta_subs.reset(self.mpi_rank)
-        self.mean_delta_subs.reset(self.mpi_rank)
-        self.var2_delta_subs.reset(self.mpi_rank)
+        self.subsampler.reset(self.mpi_rank)
         self.num_pixels = 0
         self.num_qso = 0
 
@@ -836,16 +830,12 @@ class VarLSSFitter(object):
 
         npix = np.bincount(all_indx, minlength=self.minlength)
         self.num_pixels += npix
-
-        self.mean_delta_subs.add_measurement(
+        xvec = np.array([
             np.bincount(all_indx, weights=delta, minlength=self.minlength),
-            npix)
-        self.var_delta_subs.add_measurement(
             np.bincount(all_indx, weights=delta**2, minlength=self.minlength),
-            npix)
-        self.var2_delta_subs.add_measurement(
-            np.bincount(all_indx, weights=delta**4, minlength=self.minlength),
-            npix)
+            np.bincount(all_indx, weights=delta**4, minlength=self.minlength)
+        ])
+        self.subsampler.add_measurement(xvec, npix)
 
         npix[npix > 0] = 1
         self.num_qso += npix
@@ -858,22 +848,18 @@ class VarLSSFitter(object):
         ``nsubsamples``.
         """
         if self.comm is not None:
-            self.mean_delta_subs.allreduce(self.comm, MPI.IN_PLACE)
-            self.var_delta_subs.allreduce(self.comm, MPI.IN_PLACE)
-            self.var2_delta_subs.allreduce(self.comm, MPI.IN_PLACE)
+            self.subsampler.allreduce(self.comm, MPI.IN_PLACE)
 
             self.comm.Allreduce(MPI.IN_PLACE, self.num_pixels)
             self.comm.Allreduce(MPI.IN_PLACE, self.num_qso)
 
-        self.var_delta_subs.get_mean_n_var()
-        self.mean_delta_subs.get_mean()
-        self.var2_delta_subs.get_mean()
+        self.subsampler.get_mean_n_var()
 
-        self.var_delta_subs.mean -= self.mean_delta_subs.mean**2
-        self.var2_delta_subs.mean -= self.var_delta_subs.mean**2
+        self.subsampler.mean[1] -= self.subsampler.mean[0]**2
+        self.subsampler.mean[2] -= self.subsampler.mean[1]**2
 
         w = self.num_pixels > 0
-        self.var2_delta_subs.mean[w] /= self.num_pixels[w]
+        self.subsampler.mean[2, w] /= self.num_pixels[w]
 
     def _smooth_fit_results(self, fit_results, std_results):
         w = fit_results > 0
@@ -927,14 +913,14 @@ class VarLSSFitter(object):
             method == "gauss" or method == "regJack" or method == "doubleJack")
 
         if method == "gauss":
-            error_estimates = np.sqrt(self.var2_delta_subs.mean)
+            error_estimates = np.sqrt(self.subsampler.mean[2])
 
         else:
             # Regularized jackknife errors
             error_estimates = np.where(
-                self.var_delta_subs.variance > self.var2_delta_subs.mean,
-                self.var_delta_subs.variance,
-                self.var2_delta_subs.mean
+                self.subsampler.variance[1] > self.var2_delta,
+                self.subsampler.variance[1],
+                self.var2_delta
             )
 
             error_estimates = np.sqrt(error_estimates)
@@ -987,6 +973,7 @@ class VarLSSFitter(object):
         error_estimates = self.get_var_delta_error(method)
         fit_results = np.zeros_like(initial_guess)
         std_results = np.zeros_like(initial_guess)
+        var_delta = self.subsampler.mean[1]
 
         for iwave in range(self.nwbins):
             i1 = (iwave + 1) * (self.nvarbins + 2)
@@ -1007,7 +994,7 @@ class VarLSSFitter(object):
                 pfit, pcov = curve_fit(
                     VarLSSFitter.variance_function,
                     1 / self.ivar_centers[w],
-                    self.var_delta_subs.mean[wbinslice][w],
+                    var_delta[wbinslice][w],
                     p0=initial_guess[iwave],
                     sigma=error_estimates[wbinslice][w],
                     absolute_sigma=True,
@@ -1069,8 +1056,8 @@ class VarLSSFitter(object):
         mpi_saver.write([
             np.repeat(self.waveobs, self.ivar_centers.size),
             np.tile(self.ivar_centers, self.nwbins),
-            self.mean_delta_subs.mean, self.var_delta_subs.mean,
-            self.var_delta_subs.variance, self.var2_delta_subs.mean,
+            self.mean_delta, self.var_delta,
+            self.subsampler.variance[1], self.var2_delta,
             self.num_pixels, self.num_qso],
             names=['wave', 'ivar_pipe', 'mean_delta', 'var_delta',
                    'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso'],
@@ -1078,3 +1065,18 @@ class VarLSSFitter(object):
         )
 
         return mpi_saver
+
+    @property
+    def mean_delta(self):
+        """:class:`ndarray <numpy.ndarray>`: Mean delta."""
+        return self.subsampler.mean[0]
+
+    @property
+    def var_delta(self):
+        """:class:`ndarray <numpy.ndarray>`: Variance delta."""
+        return self.subsampler.mean[1]
+
+    @property
+    def var2_delta(self):
+        """:class:`ndarray <numpy.ndarray>`: Variance delta^2."""
+        return self.subsampler.mean[2]
