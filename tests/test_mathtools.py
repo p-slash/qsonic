@@ -43,10 +43,10 @@ class TestMathtools(object):
         npt.assert_allclose(ivar_sm[idces], 0)
         npt.assert_allclose(ivar_sm, ivar)
 
-    def test_SubsampleCov(self):
+    def test_SubsampleCov_theory(self):
         subsampler = qsonic.mathtools.SubsampleCov(1, 100)
 
-        randoms = np.random.default_rng().normal(size=1000000)
+        randoms = np.random.default_rng().normal(size=100000)
 
         true_mean = np.mean(randoms)
         true_var = np.std(randoms)**2
@@ -57,8 +57,29 @@ class TestMathtools(object):
 
         mean, cov = subsampler.get_mean_n_cov()
 
-        npt.assert_allclose(mean, true_mean, atol=np.sqrt(var_on_mean))
+        npt.assert_allclose(mean, true_mean)
         npt.assert_almost_equal(cov[0, 0], var_on_mean, decimal=4)
+
+    def test_SubsampleCov_shape(self):
+        subsampler = qsonic.mathtools.SubsampleCov((3, 10), 20)
+        randoms = np.random.default_rng().normal(size=(100, 3, 10))
+        randoms[:, 1, :] += 1
+        randoms[:, 2, :] += 2
+
+        true_mean = np.mean(randoms, axis=0)
+        # true_var = np.std(randoms, axis=0)**2
+        # var_on_mean = true_var / randoms.shape[0]
+
+        for r in randoms:
+            subsampler.add_measurement(r, 1)
+
+        mean, var = subsampler.get_mean_n_var()
+        npt.assert_allclose(mean, true_mean)
+        npt.assert_equal(mean.shape, var.shape)
+
+        mean, cov = subsampler.get_mean_n_cov()
+        npt.assert_allclose(mean, true_mean)
+        npt.assert_equal(cov.shape, (3, 10, 10))
 
 
 if __name__ == '__main__':
