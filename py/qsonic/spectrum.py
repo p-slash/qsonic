@@ -555,8 +555,11 @@ class Delta():
         MEANSNR from header.
     """
     _accepted_wave_columns = set(["LAMBDA", "LOGLAM"])
+    """set: Supported column names for wavelength."""
     _accepted_delta_columns = set(['DELTA', 'DELTA_BLIND'])
+    """set: Supported column names for delta."""
     _accepted_targetid_keys = set(['MOCKID', 'TARGETID', 'THING_ID'])
+    """set: Supported header keys for unique ID."""
     _accepted_colums_map = {
         "wave": _accepted_wave_columns,
         "delta": _accepted_delta_columns
