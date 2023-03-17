@@ -53,9 +53,11 @@ def add_picca_continuum_parser(parser=None):
 class PiccaContinuumFitter():
     """ Picca continuum fitter class.
 
-    Fits spectra without coadding. Pipeline ivar is smoothed before using in
-    weights. Mean continuum is smoothed using inverse weights and cubic spline.
-    Contruct, then call `iterate()` with local spectra.
+    Fits spectra without coadding. Pipeline inverse variance preferably should
+    be smoothed before fitting. Mean continuum and var_lss are smoothed using
+    inverse weights and cubic spline to help numerical stability.
+
+    Contruct an instance, then call :meth:`iterate` with local spectra.
 
     Parameters
     ----------
@@ -215,7 +217,7 @@ class PiccaContinuumFitter():
         Returns
         ---------
         cost: float
-            Cost (modified chi2) for a given `x`.
+            Cost (modified chi2) for a given ``x``.
         """
         cost = 0
 
@@ -353,7 +355,7 @@ class PiccaContinuumFitter():
 
     def _project_normalize_meancont(self, new_meancont):
         """ Project out higher order Legendre polynomials from the new mean
-        continuum, since these are degenerate with the free fitting parameters.
+        continuum since these are degenerate with the free fitting parameters.
         Returns a normalized mean continuum. Integrals are calculated using
         ``np.trapz`` with ``ln lambda_RF`` as x array.
 
@@ -364,7 +366,7 @@ class PiccaContinuumFitter():
 
         Returns
         ---------
-        new_meancont: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        new_meancont: :class:`ndarray <numpy.ndarray>`
             Legendere polynomials projected out and normalized mean continuum.
         mean: float
             Normalization of the mean continuum.
@@ -481,7 +483,8 @@ class PiccaContinuumFitter():
         return has_converged
 
     def update_var_lss(self, spectra_list, noupdate):
-        """ Fit for var_lss. See VarLSSFitter for implementation details.
+        """ Fit and update var_lss. See :class:`VarLSSFitter` for fitting
+        details.
 
         Arguments
         ---------
@@ -746,6 +749,11 @@ class VarLSSFitter(object):
     def variance_function(var_pipe, var_lss, eta=1):
         """Variance model to be fit.
 
+        .. math::
+
+            \sigma^2_\mathrm{obs} = \eta \sigma^2_\mathrm{pipe} +
+            \sigma^2_\mathrm{LSS}
+
         Arguments
         ---------
         var_pipe: :external+numpy:py:class:`ndarray <numpy.ndarray>`
@@ -894,17 +902,16 @@ class VarLSSFitter(object):
     def get_var_delta_error(self, method="gauss"):
         """ Calculate the error (sigma) on var_delta using a given method.
 
-        ``method="gauss"``::
+        - ``method="gauss"``:
+            Observed var2_delta using delta**4 statistics are used as has been
+            done before.
 
-        Observed var2_delta using delta**4 statistics are used as has been done
-        before.
-
-        ``method="regJack"`` and ``method="doubleJack"``::
-
-        The variance on var_delta is first calculated by delete-one Jackknife
-        over ``nsubsamples``. This is regularized by calculated var2_delta
-        (Gaussian estimates), where if Jackknife variance is smaller than the
-        Gaussian estimate, it is replaced by the Gaussian estimate.
+        - ``method="regJack"`` and ``method="doubleJack"``:
+            The variance on var_delta is first calculated by delete-one
+            Jackknife
+            over ``nsubsamples``. This is regularized by calculated var2_delta
+            (Gaussian estimates), where if Jackknife variance is smaller than
+            the Gaussian estimate, it is replaced by the Gaussian estimate.
 
         Arguments
         ---------
