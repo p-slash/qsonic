@@ -722,7 +722,7 @@ class VarLSSFitter(object):
     ivar_edges: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Inverse variance edges.
     var_centers: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Variance centers.
+        Variance centers in **descending** order.
     minlength: int
         Minimum size of the combined bin count array. It includes underflow and
         overflow bins for both wavelength and variance bins.
@@ -785,7 +785,7 @@ class VarLSSFitter(object):
         self.waveobs = (wave_edges[1:] + wave_edges[:-1]) / 2
         self.ivar_edges = np.logspace(
             -np.log10(var2), -np.log10(var1), nvarbins + 1)
-        var_edges = 1 / self.ivar_edges[::-1]
+        var_edges = 1 / self.ivar_edges
         self.var_centers = (var_edges[1:] + var_edges[:-1]) / 2
 
         # Set up arrays to store statistics
@@ -1004,7 +1004,7 @@ class VarLSSFitter(object):
             try:
                 pfit, pcov = curve_fit(
                     VarLSSFitter.variance_function,
-                    1 / self.var_centers[w],
+                    self.var_centers[w],
                     var_delta[wbinslice][w],
                     p0=initial_guess[iwave],
                     sigma=error_estimates[wbinslice][w],
@@ -1059,8 +1059,8 @@ class VarLSSFitter(object):
             'WAVE1': self.waveobs[0],
             'WAVE2': self.waveobs[-1],
             'NWBINS': self.nwbins,
-            'VAR1': self.var_centers[0],
-            'VAR2': self.var_centers[1],
+            'VAR1': self.var_centers[-1],
+            'VAR2': self.var_centers[0],
             'NVARBINS': self.var_centers.size
         }
 
