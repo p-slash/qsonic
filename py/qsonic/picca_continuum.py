@@ -9,7 +9,7 @@ from scipy.special import legendre
 
 from mpi4py import MPI
 
-from qsonic.spectrum import valid_spectra
+from qsonic.spectrum import valid_spectra, Spectrum
 from qsonic.mpi_utils import logging_mpi, warn_mpi, MPISaver
 from qsonic.mathtools import mypoly1d, Fast1DInterpolator, SubsampleCov
 
@@ -83,6 +83,8 @@ class PiccaContinuumFitter():
         Rank of the MPI process.
     meanflux_interp: Fast1DInterpolator
         Interpolator for mean flux. If fiducial is not set, this equals to 1.
+    flux_stacker: FluxStacker
+        Stacks flux. Set up with 8 A wavelength bin size.
     varlss_fitter: VarLSSFitter or None
         None if fiducials are set for var_lss.
     varlss_interp: Fast1DInterpolator
@@ -178,6 +180,9 @@ class PiccaContinuumFitter():
                 args.fiducial_meanflux, 'MEANFLUX')
         else:
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
+
+        self.flux_stacker = FluxStacker(
+            args.wave1, args.wave2, 8., comm=self.comm)
 
         if args.fiducial_varlss:
             self.varlss_fitter = None
@@ -310,6 +315,7 @@ class PiccaContinuumFitter():
                     break
 
                 cont_est *= self.meanflux_interp(wave_arm)
+                cont_est *= self.flux_stacker(wave_arm)
                 spec.cont_params['cont'][arm] = cont_est
                 var_lss = self.varlss_interp(wave_arm) * cont_est**2
                 weight = 1. / (1 + spec.forestivar_sm[arm] * var_lss)
@@ -387,7 +393,7 @@ class PiccaContinuumFitter():
         return new_meancont, mean
 
     def update_mean_cont(self, spectra_list, noupdate):
-        """ Update the global mean continuum.
+        """ Update the global mean continuum and stacked flux.
 
         Uses :attr:`forestivar_sm <qsonic.spectrum.Spectrum.forestivar_sm>`
         in inverse variance, but must be set beforehand.
@@ -396,6 +402,8 @@ class PiccaContinuumFitter():
         continuum is removed from higher Legendre polynomials and normalized by
         the mean. This function updates
         :attr:`meancont_interp.fp <.meancont_interp>` if noupdate is False.
+
+        It also updates :attr:`flux_stacker`.
 
         Arguments
         ---------
@@ -414,6 +422,7 @@ class PiccaContinuumFitter():
         norm_flux = np.zeros(self.nbins)
         std_flux = np.empty(self.nbins)
         counts = np.zeros(self.nbins)
+        self.flux_stacker.reset()
 
         for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
@@ -423,7 +432,7 @@ class PiccaContinuumFitter():
                 ).astype(int)
 
                 cont = spec.cont_params['cont'][arm]
-                flux_ = spec.forestflux[arm] / cont
+                flux = spec.forestflux[arm] / cont
                 # Deconvolve resolution matrix ?
 
                 var_lss = self.varlss_interp(wave_arm)
@@ -431,10 +440,13 @@ class PiccaContinuumFitter():
                 weight = weight / (1 + weight * var_lss)
 
                 norm_flux += np.bincount(
-                    bin_idx, weights=flux_ * weight, minlength=self.nbins)
+                    bin_idx, weights=flux * weight, minlength=self.nbins)
                 counts += np.bincount(
                     bin_idx, weights=weight, minlength=self.nbins)
 
+                self.flux_stacker.add(wave_arm, flux, weight)
+
+        self.flux_stacker.calculate()
         self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
         self.comm.Allreduce(MPI.IN_PLACE, counts)
         w = counts > 0
@@ -605,6 +617,11 @@ class PiccaContinuumFitter():
             names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
             extname=f'CONT-{it}')
 
+        fattr.write(
+            [self.flux_stacker.waveobs, self.flux_stacker.stacked_flux],
+            names=['lambda', 'stacked_flux'],
+            extname=f'STACKED_FLUX-{it}')
+
         if self.varlss_fitter is None:
             return
 
@@ -659,7 +676,7 @@ class PiccaContinuumFitter():
             fts.close()
 
 
-class VarLSSFitter(object):
+class VarLSSFitter():
     """ Variance fitter for the large-scale fluctuations.
 
     Input wavelengths and variances are the bin edges, so centers will be
@@ -1092,3 +1109,97 @@ class VarLSSFitter(object):
     def var2_delta(self):
         """:class:`ndarray <numpy.ndarray>`: Variance delta^2."""
         return self.subsampler.mean[2][self.wvalid_bins]
+
+
+class FluxStacker():
+    """ The class to stack flux values to obtain IGM mean flux and other
+    problems.
+
+    This object can be called. Stacked flux is initialized to one. Reset before
+    adding statistics.
+
+    Parameters
+    ----------
+    w1obs: float
+        Lower observed wavelength edge.
+    w2obs: float
+        Upper observed wavelength edge.
+    dwobs: float
+        Wavelength spacing.
+    comm: MPI.COMM_WORLD or None, default: None
+        MPI comm object to allreduce if enabled.
+
+    Attributes
+    ----------
+    waveobs: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Wavelength centers in the observed frame.
+    nwbins: int
+        Number of wavelength bins
+    dwobs: float
+        Wavelength spacing. Usually same as observed grid.
+    _interp: Fast1DInterpolator
+        Interpolator. Saves stacked_flux in fp and weights in ep.
+    comm: MPI.COMM_WORLD or None, default: None
+        MPI comm object to allreduce if enabled.
+    """
+
+    def __init__(self, w1obs, w2obs, dwobs, comm=None):
+        # Set up wavelength and inverse variance bins
+        self.nwbins = int((w2obs - w1obs) / dwobs)
+        wave_edges, self.dwobs = np.linspace(
+            w1obs, w2obs, self.nwbins + 1, retstep=True)
+        self.waveobs = (wave_edges[1:] + wave_edges[:-1]) / 2
+
+        self.comm = comm
+
+        self._interp = Fast1DInterpolator(
+            self.waveobs[0], self.dwobs,
+            np.ones(self.nwbins), ep=np.zeros(self.nwbins))
+
+    def __call__(self, wave):
+        return self._interp(wave)
+
+    def add(self, wave, flux, weight):
+        """ Add statistics of a single spectrum.
+
+        Updates :attr:`stacked_flux` and :attr:`weights`. Assumes no spectra
+        has ``wave < w1obs`` or ``wave > w2obs``.
+
+        Arguments
+        ---------
+        wave: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Wavelength array.
+        flux: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Flux array. Specifically f/C.
+        weight: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Weight array.
+        """
+        wave_indx = ((wave - self.waveobs[0]) / self.dwobs + 0.5).astype(int)
+
+        self._interp.fp[wave_indx] += flux * weight
+        self._interp.ep[wave_indx] += weight
+
+    def calculate(self):
+        """Calculate stacked flux by allreducing if necessary."""
+        if self.comm is not None:
+            self.comm.Allreduce(MPI.IN_PLACE, self._interp.fp)
+            self.comm.Allreduce(MPI.IN_PLACE, self._interp.ep)
+
+        w = self._interp.ep > 0
+        self._interp.fp[w] /= self._interp.ep[w]
+        self._interp.fp[~w] = 0
+
+    def reset(self):
+        """Reset :attr:`stacked_flux` and :attr:`weights` arrays to zero."""
+        self._interp.fp *= 0
+        self._interp.ep *= 0
+
+    @property
+    def stacked_flux(self):
+        """:class:`ndarray <numpy.ndarray>`: Stacked flux."""
+        return self._interp.fp
+
+    @property
+    def weights(self):
+        """:class:`ndarray <numpy.ndarray>`: Weights."""
+        return self._interp.ep
