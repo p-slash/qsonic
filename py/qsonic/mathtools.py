@@ -305,7 +305,7 @@ class SubsampleCov():
         # remove one measurement, then renormalize
         jack_i = (
             mean_xvec - self.all_measurements * self.all_weights
-        ) / (1 - self.all_weights)
+        ) / (1 - self.all_weights + np.finfo(float).eps)
         mean_jack = np.mean(jack_i, axis=0)
 
         if bias_correct:
