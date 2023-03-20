@@ -81,6 +81,13 @@ class TestMathtools(object):
         npt.assert_allclose(mean, true_mean)
         npt.assert_equal(cov.shape, (3, 10, 10))
 
+    def test_SubsampleCov_reset(self):
+        subsampler = qsonic.mathtools.SubsampleCov((3, 10), 20)
+        subsampler.reset()
+
+        npt.assert_equal(subsampler.all_measurements.shape, (20, 3, 10))
+        npt.assert_equal(subsampler.all_weights.shape, (20, 1, 10))
+
 
 if __name__ == '__main__':
     pytest.main()

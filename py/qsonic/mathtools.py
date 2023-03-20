@@ -384,8 +384,8 @@ class SubsampleCov():
     def reset(self, istart=0):
         self._isample = istart % self.nsamples
 
-        self.all_measurements = 0
-        self.all_weights = 0
+        self.all_measurements *= 0
+        self.all_weights *= 0
         self._is_normalized = False
 
         self.mean = None
