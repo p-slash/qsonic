@@ -508,8 +508,7 @@ class PiccaContinuumFitter():
 
         # Else, fit for var_lss
         logging_mpi("Fitting var_lss", self.mpi_rank)
-        y, ep = self.varlss_fitter.fit(
-            self.varlss_interp.fp)
+        y, ep = self.varlss_fitter.fit(self.varlss_interp.fp)
         if not noupdate:
             self.varlss_interp.fp = y
             self.varlss_interp.ep = ep
