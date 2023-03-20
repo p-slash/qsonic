@@ -326,6 +326,53 @@ class Spectrum():
         coadd_reso /= creso_norm
         self._forestreso = {'brz': coadd_reso}
 
+    def coadd(self):
+        """Coadding without continuum and var_lss terms.
+        """
+        min_wave = np.min([wave[0] for wave in self.forestwave.values()])
+        max_wave = np.max([wave[-1] for wave in self.forestwave.values()])
+
+        nwaves = int((max_wave - min_wave) / self.dwave + 0.5) + 1
+        coadd_wave = np.arange(nwaves) * self.dwave + min_wave
+        coadd_flux = np.zeros(nwaves)
+        coadd_ivar = np.zeros(nwaves)
+        # coadd_cont = np.empty(nwaves)
+        coadd_norm = np.zeros(nwaves)
+
+        idxes = {}
+        for arm, wave_arm in self.forestwave.items():
+            idx = ((wave_arm - min_wave) / self.dwave + 0.5).astype(int)
+            idxes[arm] = idx
+
+            # weight = self.forestivar_sm[arm]
+            # var_lss = varlss_interp(wave_arm)
+            # var_lss *= self.cont_params['cont'][arm]**2
+            # weight = weight / (1 + weight * var_lss)
+            weight = self.forestivar_sm[arm]
+
+            var = np.zeros_like(weight)
+            w = self.forestivar[arm] > 0
+            var[w] = 1 / self.forestivar[arm][w]
+
+            coadd_flux[idx] += weight * self.forestflux[arm]
+            coadd_ivar[idx] += weight**2 * var
+            coadd_norm[idx] += weight
+
+            # continuum needs not weighting
+            # coadd_cont[idx] = self.cont_params['cont'][arm]
+
+        w = coadd_norm > 0
+        coadd_flux[w] /= coadd_norm[w]
+        coadd_ivar[w] = coadd_norm[w]**2 / coadd_ivar[w]
+
+        self._forestwave = {'brz': coadd_wave}
+        self._forestflux = {'brz': coadd_flux}
+        self._forestivar = {'brz': coadd_ivar}
+        # self.cont_params['cont'] = {'brz': coadd_cont}
+
+        if self.reso:
+            self._coadd_arms_reso(nwaves, idxes)
+
     def coadd_arms_forest(self, varlss_interp):
         """ Coadds different arms using smoothed pipeline ivar and var_lss.
         Resolution matrix is equally weighted!

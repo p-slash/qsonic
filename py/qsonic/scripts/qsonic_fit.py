@@ -231,6 +231,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # Create smoothed ivar as intermediate variable
     for spec in spectra_list:
         spec.set_smooth_ivar()
+        spec.coadd()
 
     # Continuum fitting
     # -------------------
