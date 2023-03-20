@@ -726,6 +726,8 @@ class VarLSSFitter(object):
     minlength: int
         Minimum size of the combined bin count array. It includes underflow and
         overflow bins for both wavelength and variance bins.
+    wvalid_bins: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Bool array slicer to get non-overflow bins of 1D arrays.
     subsampler: SubsampleCov
         Subsampler object that stores mean_delta in axis=0, var_delta in axis=1
         , var2_delta in axis=2.
@@ -787,6 +789,13 @@ class VarLSSFitter(object):
 
         # Set up arrays to store statistics
         self.minlength = (self.nvarbins + 2) * (self.nwbins + 2)
+        # Bool array slicer for get non-overflow bins in 1D array
+        self.wvalid_bins = np.zeros(self.minlength, dtype=bool)
+        for iwave in range(self.nwbins):
+            i1 = (iwave + 1) * (self.nvarbins + 2)
+            i2 = i1 + self.nvarbins
+            wbinslice = np.s_[i1:i2]
+            self.wvalid_bins[wbinslice] = True
 
         self.num_pixels = np.zeros(self.minlength, dtype=int)
         self.num_qso = np.zeros(self.minlength, dtype=int)
@@ -807,8 +816,8 @@ class VarLSSFitter(object):
     def reset(self):
         """Reset delta and num arrays to zero."""
         self.subsampler.reset(self.mpi_rank)
-        self.num_pixels = 0
-        self.num_qso = 0
+        self.num_pixels *= 0
+        self.num_qso *= 0
 
     def add(self, wave, delta, ivar):
         """Add statistics of a single spectrum. Updates delta and num arrays.
@@ -1046,38 +1055,39 @@ class VarLSSFitter(object):
             'MINNQSO': VarLSSFitter.min_no_qso,
             'MINSNR': min_snr,
             'MAXSNR': max_snr,
-            'WAVE1': self.wave1,
-            'WAVE2': self.wave2,
+            'WAVE1': self.waveobs[0],
+            'WAVE2': self.waveobs[-1],
             'NWBINS': self.nwbins,
             'VAR1': 1 / self.ivar_centers[-1],
             'VAR2': 1 / self.ivar_centers[0],
             'NVARBINS': self.ivar_centers.size
         }
 
-        mpi_saver.write([
+        data_to_write = [
             np.repeat(self.waveobs, self.ivar_centers.size),
             np.tile(self.ivar_centers, self.nwbins),
             self.mean_delta, self.var_delta,
-            self.subsampler.variance[1], self.var2_delta,
-            self.num_pixels, self.num_qso],
-            names=['wave', 'ivar_pipe', 'mean_delta', 'var_delta',
-                   'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso'],
-            extname="VAR_STATS", header=hdr_dict
-        )
+            self.subsampler.variance[1][self.wvalid_bins], self.var2_delta,
+            self.num_pixels[self.wvalid_bins], self.num_qso[self.wvalid_bins]]
+        names = ['wave', 'ivar_pipe', 'mean_delta', 'var_delta',
+                 'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso']
+
+        mpi_saver.write(
+            data_to_write, names=names, extname="VAR_STATS", header=hdr_dict)
 
         return mpi_saver
 
     @property
     def mean_delta(self):
         """:class:`ndarray <numpy.ndarray>`: Mean delta."""
-        return self.subsampler.mean[0]
+        return self.subsampler.mean[0][self.wvalid_bins]
 
     @property
     def var_delta(self):
         """:class:`ndarray <numpy.ndarray>`: Variance delta."""
-        return self.subsampler.mean[1]
+        return self.subsampler.mean[1][self.wvalid_bins]
 
     @property
     def var2_delta(self):
         """:class:`ndarray <numpy.ndarray>`: Variance delta^2."""
-        return self.subsampler.mean[2]
+        return self.subsampler.mean[2][self.wvalid_bins]

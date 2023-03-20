@@ -218,6 +218,11 @@ class TestVarLSSFitter(object):
         expected_numqso[21] = 1
         npt.assert_equal(varlss_fitter.num_qso, expected_numqso)
 
+        expected_size = 3 * nwbins
+        varlss_fitter._allreduce()
+        npt.assert_equal(varlss_fitter.wvalid_bins.sum(), expected_size)
+        npt.assert_equal(varlss_fitter.mean_delta.size, expected_size)
+
 
 if __name__ == '__main__':
     pytest.main()
