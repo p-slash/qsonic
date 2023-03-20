@@ -577,7 +577,7 @@ class Delta():
 
     @staticmethod
     def _check_hdu(colnames, attr):
-        req_map = Delta._accepted_key_map[attr]
+        req_map = Delta._accepted_colums_map[attr]
         key = req_map.intersection(colnames)
         if not key:
             raise RuntimeError(
