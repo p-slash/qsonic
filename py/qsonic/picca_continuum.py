@@ -1176,9 +1176,9 @@ class FluxStacker():
         """
         wave_indx = ((wave - self.waveobs[0]) / self.dwobs + 0.5).astype(int)
 
-        self._interp.fp[wave_indx] += np.bincount(
+        self._interp.fp += np.bincount(
             wave_indx, weights=flux * weight, minlength=self.nwbins)
-        self._interp.ep[wave_indx] += np.bincount(
+        self._interp.ep += np.bincount(
             wave_indx, weights=weight, minlength=self.nwbins)
 
     def calculate(self):
