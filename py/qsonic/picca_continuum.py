@@ -721,8 +721,8 @@ class VarLSSFitter(object):
         Wavelength centers in the observed frame.
     ivar_edges: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Inverse variance edges.
-    ivar_centers: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Inverse variance centers.
+    var_centers: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Variance centers.
     minlength: int
         Minimum size of the combined bin count array. It includes underflow and
         overflow bins for both wavelength and variance bins.
@@ -785,7 +785,8 @@ class VarLSSFitter(object):
         self.waveobs = (wave_edges[1:] + wave_edges[:-1]) / 2
         self.ivar_edges = np.logspace(
             -np.log10(var2), -np.log10(var1), nvarbins + 1)
-        self.ivar_centers = (self.ivar_edges[1:] + self.ivar_edges[:-1]) / 2
+        var_edges = 1 / self.ivar_edges[::-1]
+        self.var_centers = (var_edges[1:] + var_edges[:-1]) / 2
 
         # Set up arrays to store statistics
         self.minlength = (self.nvarbins + 2) * (self.nwbins + 2)
@@ -1003,7 +1004,7 @@ class VarLSSFitter(object):
             try:
                 pfit, pcov = curve_fit(
                     VarLSSFitter.variance_function,
-                    1 / self.ivar_centers[w],
+                    1 / self.var_centers[w],
                     var_delta[wbinslice][w],
                     p0=initial_guess[iwave],
                     sigma=error_estimates[wbinslice][w],
@@ -1058,18 +1059,18 @@ class VarLSSFitter(object):
             'WAVE1': self.waveobs[0],
             'WAVE2': self.waveobs[-1],
             'NWBINS': self.nwbins,
-            'VAR1': 1 / self.ivar_centers[-1],
-            'VAR2': 1 / self.ivar_centers[0],
-            'NVARBINS': self.ivar_centers.size
+            'VAR1': self.var_centers[0],
+            'VAR2': self.var_centers[1],
+            'NVARBINS': self.var_centers.size
         }
 
         data_to_write = [
-            np.repeat(self.waveobs, self.ivar_centers.size),
-            np.tile(self.ivar_centers, self.nwbins),
+            np.repeat(self.waveobs, self.var_centers.size),
+            np.tile(self.var_centers, self.nwbins),
             self.mean_delta, self.var_delta,
             self.subsampler.variance[1][self.wvalid_bins], self.var2_delta,
             self.num_pixels[self.wvalid_bins], self.num_qso[self.wvalid_bins]]
-        names = ['wave', 'ivar_pipe', 'mean_delta', 'var_delta',
+        names = ['wave', 'var_pipe', 'mean_delta', 'var_delta',
                  'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso']
 
         mpi_saver.write(
