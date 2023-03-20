@@ -40,16 +40,19 @@ def get_parser(add_help=True):
     iogroup.add_argument(
         "--outdir", '-o', required=True,
         help="Output directory to save files.")
+    iogroup.add_argument("--fbase", help="Basename", default="qsonic-eta-fits")
+    iogroup.add_argument(
+        "--catalog",
+        help="Catalog filename to enable catalog related removals.")
     iogroup.add_argument(
         "--mock-analysis", action="store_true",
         help="Input folder is mock. Uses nside=16")
     iogroup.add_argument(
-        "--keep-surveys", nargs='+', default=['sv3', 'main'],
-        help="Surveys to keep.")
-    iogroup.add_argument("--fbase", help="Basename", default="qsonic-eta-fits")
+        "--keep-surveys", nargs='*',
+        help="Surveys to keep. Empty keeps all.")
     iogroup.add_argument(
-        "--remove-bal-qsos", type="str",
-        help="Catalog to remove BAL sightlines.")
+        "--remove-bal-qsos", action="store_true",
+        help="Removes BAL sightlines in the catalog option.")
     iogroup.add_argument(
         "--remove-targetid-list",
         help="Text file with TARGETIDs to exclude from analysis.")
@@ -89,10 +92,13 @@ def mpi_set_targetid_list_to_remove(args, comm, mpi_rank):
     if ids_to_remove is None:
         raise Exception("Error while reading remove_targetid_list.")
 
-    if args.remove_bal_qsos:
+    if args.catalog:
         catalog = qsonic.io.mpi_read_qso_catalog(
-            args.remove_bal_qsos, comm, mpi_rank, args.mock_analysis,
-            args.keep_surveys)
+            args.catalog, comm, mpi_rank, args.mock_analysis)
+    else:
+        catalog = None
+
+    if catalog is not None and args.remove_bal_qsos:
         logging_mpi("Checking BAL mask.", mpi_rank)
         BALMask.check_catalog(catalog)
 
@@ -104,7 +110,7 @@ def mpi_set_targetid_list_to_remove(args, comm, mpi_rank):
         ids_to_remove = np.concatenate((ids_to_remove, bal_targetids))
         logging_mpi(f"Removing {bal_targetids.size} BAL sightlines", mpi_rank)
 
-    if args.keep_surveys:
+    if catalog is not None and args.keep_surveys:
         sel_survey = np.isin(catalog['SURVEY'], args.keep_surveys)
         remove_sur_tids = catalog['TARGETID'][~sel_survey]
         logging_mpi(
@@ -128,7 +134,7 @@ def mpi_read_all_deltas(args, comm, mpi_rank, mpi_size):
         raise Exception(f"Delta files are not found in {args.input_dir}.")
 
     ndelta_all = len(all_delta_files)
-    logging_mpi(f"There are {ndelta_all} delta files.")
+    logging_mpi(f"There are {ndelta_all} delta files.", mpi_rank)
     if mpi_size > ndelta_all:
         warnings.warn(
             "There are more MPI processes then number of delta files.")
@@ -164,12 +170,12 @@ def mpi_stack_fluxes(args, comm, deltas_list):
     # weights. Place them properly in the end.
     buf = np.zeros(nwaveobs)
     comm.Allreduce(stacked_flux, buf)
-    w = buf > 0
     comm.Allreduce(weights, stacked_flux)
     weights = stacked_flux
     stacked_flux = buf
 
-    stacked_flux /= weights
+    w = weights > 0
+    stacked_flux[w] /= weights[w]
     stacked_flux[~w] = 0
 
     return waveobs, stacked_flux
@@ -197,9 +203,6 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
         args.wave1, args.wave2, args.nwbins,
         args.var1, args.var2, args.nvarbins,
         nsubsamples=100, comm=comm)
-    # Change static minimum numbers for valid statistics
-    VarLSSFitter.min_no_pix = args.min_no_pix
-    VarLSSFitter.min_no_qso = args.min_no_qso
 
     for delta in deltas_list:
         varfitter.add(delta.wave, delta.delta, delta.ivar)
@@ -211,9 +214,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
 
     # Save variance stats to file
     logging_mpi("Saving variance stats to files", mpi_rank)
-    suffix = (
-        f"minpix{args.min_no_pix}_minqso{args.min_no_qso}"
-        f"_snr{args.min_snr:.1f}-{args.max_snr:.1f}")
+    suffix = f"_snr{args.min_snr:.1f}-{args.max_snr:.1f}"
     tmpfilename = f"{args.outdir}/{args.fbase}-{suffix}-variance-stats.fits"
     mpi_saver = varfitter.save(tmpfilename)
     logging_mpi(f"Variance stats saved in {tmpfilename}.", mpi_rank)
