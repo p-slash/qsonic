@@ -161,7 +161,7 @@ def mpi_stack_fluxes(args, comm, deltas_list):
 
     for delta in deltas_list:
         flux = (1 + delta.delta) * delta.cont
-        idx = ((delta.wave - args.wave1) / dwave + 0.5).astype(int)
+        idx = ((delta.wave - args.wave1) / dwave).astype(int)
         w = (idx >= 0) & (idx < nwaveobs)
         stacked_flux[idx[w]] += flux[w] * delta.weight[w]
         weights[idx[w]] += delta.weight[w]
@@ -170,6 +170,7 @@ def mpi_stack_fluxes(args, comm, deltas_list):
     # weights. Place them properly in the end.
     buf = np.zeros(nwaveobs)
     comm.Allreduce(stacked_flux, buf)
+    stacked_flux *= 0
     comm.Allreduce(weights, stacked_flux)
     weights = stacked_flux
     stacked_flux = buf
@@ -214,7 +215,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
 
     # Save variance stats to file
     logging_mpi("Saving variance stats to files", mpi_rank)
-    suffix = f"_snr{args.min_snr:.1f}-{args.max_snr:.1f}"
+    suffix = f"snr{args.min_snr:.1f}-{args.max_snr:.1f}"
     tmpfilename = f"{args.outdir}/{args.fbase}-{suffix}-variance-stats.fits"
     mpi_saver = varfitter.save(tmpfilename)
     logging_mpi(f"Variance stats saved in {tmpfilename}.", mpi_rank)
