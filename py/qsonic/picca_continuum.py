@@ -3,6 +3,7 @@ import argparse
 
 import numpy as np
 import fitsio
+from iminuit import Minuit
 from scipy.optimize import minimize, curve_fit
 from scipy.interpolate import UnivariateSpline
 from scipy.special import legendre
@@ -47,6 +48,9 @@ def add_picca_continuum_parser(parser=None):
     cont_group.add_argument(
         "--cont-order", type=int, default=1,
         help="Order of continuum fitting polynomial.")
+    cont_group.add_argument(
+        "--minimizer", default="iminuit", choices=["iminuit", "l_bfgs_b"],
+        help="Minimizer to use fitting continuum.")
 
     return parser
 
@@ -78,6 +82,8 @@ class PiccaContinuumFitter():
         Denominator for the slope term in the continuum model.
     meancont_interp: Fast1DInterpolator
         Fast linear interpolator object for the mean continuum.
+    minimizer: function
+        Function that points to one of the minimizer options.
     comm: MPI.COMM_WORLD
         MPI comm object to reduce, broadcast etc.
     mpi_rank: int
@@ -173,6 +179,14 @@ class PiccaContinuumFitter():
             self.rfwave[0], self.dwrf, np.ones(self.nbins),
             ep=np.zeros(self.nbins))
 
+        if args.minimizer == "iminuit":
+            self.minimizer = self._iminuit_minimizer
+        elif args.minimizer == "l_bfgs_b":
+            self.minimizer = self._scipy_l_bfgs_b_minimizer
+        else:
+            raise QsonicException(
+                "Undefined minimizer. Developer forgot to implement.")
+
         self.comm = MPI.COMM_WORLD
         self.mpi_rank = self.comm.Get_rank()
 
@@ -267,6 +281,56 @@ class PiccaContinuumFitter():
 
         return cont
 
+    def _iminuit_minimizer(self, spec):
+        def _cost(x):
+            return self._continuum_costfn(
+                x, spec.forestwave, spec.forestflux, spec.forestivar_sm,
+                spec.z_qso)
+
+        def _x0():
+            a0 = 0
+            n0 = 0
+            for arm, ivar_arm in spec.forestivar_sm.items():
+                a0 += np.dot(spec.forestflux[arm], ivar_arm)
+                n0 += np.sum(ivar_arm)
+
+            return a0 / n0
+
+        x0 = np.zeros_like(spec.cont_params['x'])
+        x0[0] = _x0()
+        mini = Minuit(_cost, x0)
+        mini.errordef = Minuit.LEAST_SQUARES
+        mini.migrad()
+
+        result = {}
+
+        result['valid'] = mini.valid
+        result['x'] = mini.values[0]
+        result['xcov'] = np.array(mini.covariance)
+
+        return result
+
+    def _scipy_l_bfgs_b_minimizer(self, spec):
+        mini = minimize(
+            self._continuum_costfn,
+            spec.cont_params['x'],
+            args=(spec.forestwave,
+                  spec.forestflux,
+                  spec.forestivar_sm,
+                  spec.z_qso),
+            method='L-BFGS-B',
+            bounds=None,
+            jac=None
+        )
+
+        result = {}
+
+        result['valid'] = mini.success
+        result['x'] = mini.x
+        result['xcov'] = result.hess_inv.todense()
+
+        return result
+
     def fit_continuum(self, spec):
         """ Fits the continuum for a single Spectrum.
 
@@ -290,26 +354,15 @@ class PiccaContinuumFitter():
         """
         # We can precalculate meanflux and varlss here,
         # and store them in respective keys to spec.cont_params
-        result = minimize(
-            self._continuum_costfn,
-            spec.cont_params['x'],
-            args=(spec.forestwave,
-                  spec.forestflux,
-                  spec.forestivar_sm,
-                  spec.z_qso),
-            method='L-BFGS-B',
-            bounds=None,
-            jac=None
-        )
 
-        spec.cont_params['valid'] = result.success
+        result = self.minimizer(spec)
 
-        if result.success:
+        if result['valid']:
             spec.cont_params['cont'] = {}
             chi2 = 0
             for arm, wave_arm in spec.forestwave.items():
                 cont_est = self.get_continuum_model(
-                    result.x, wave_arm / (1 + spec.z_qso))
+                    result['x'], wave_arm / (1 + spec.z_qso))
 
                 if any(cont_est < 0):
                     spec.cont_params['valid'] = False
@@ -328,8 +381,8 @@ class PiccaContinuumFitter():
             spec.cont_params['chi2'] = chi2
 
         if spec.cont_params['valid']:
-            spec.cont_params['x'] = result.x
-            spec.cont_params['xcov'] = result.hess_inv.todense()
+            spec.cont_params['x'] = result['x']
+            spec.cont_params['xcov'] = result['xcov']
         else:
             spec.cont_params['cont'] = None
             spec.cont_params['chi2'] = -1
