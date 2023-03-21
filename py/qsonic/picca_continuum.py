@@ -998,15 +998,18 @@ class VarLSSFitter():
         self._fit_array_shape_assert(initial_guess)
         self._allreduce()
 
-        error_estimates = self.get_var_delta_error(method)
-        error_estimates = error_estimates.reshape(self.nwbins, self.nvarbins)
-        var_delta_r = self.var_delta.reshape(self.nwbins, self.nvarbins)
         fit_results = np.zeros_like(initial_guess)
         std_results = np.zeros_like(initial_guess)
 
+        error_estimates = self.get_var_delta_error(method)
+        error_estimates = error_estimates.reshape(self.nwbins, self.nvarbins)
+        var_delta_r = self.var_delta.reshape(self.nwbins, self.nvarbins)
+        w_gtr_min = ((self.num_pixels > VarLSSFitter.min_no_pix)
+                     & (self.num_qso > VarLSSFitter.min_no_qso))
+        w_gtr_min = w_gtr_min.reshape(self.nwbins, self.nvarbins)
+
         for iwave in range(self.nwbins):
-            w = ((self.num_pixels > VarLSSFitter.min_no_pix)
-                 & (self.num_qso > VarLSSFitter.min_no_qso))
+            w = w_gtr_min[iwave]
 
             if w.sum() == 0:
                 warn_mpi(
