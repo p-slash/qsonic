@@ -9,6 +9,7 @@ from scipy.special import legendre
 
 from mpi4py import MPI
 
+from qsonic import QsonicException
 from qsonic.spectrum import valid_spectra
 from qsonic.mpi_utils import logging_mpi, warn_mpi, MPISaver
 from qsonic.mathtools import mypoly1d, Fast1DInterpolator, SubsampleCov
@@ -141,12 +142,12 @@ class PiccaContinuumFitter():
         nsize, waves_0, dwave = self.comm.bcast([nsize, waves_0, dwave])
 
         if nsize == 0:
-            raise Exception(
+            raise QsonicException(
                 "Failed to construct fiducial mean flux or varlss from "
                 f"{fname}::LAMBDA is not equally spaced.")
 
         if nsize == -1:
-            raise Exception(
+            raise QsonicException(
                 "Failed to construct fiducial mean flux or varlss from "
                 f"{fname}::{col2read} is not in file.")
 

@@ -7,6 +7,7 @@ import warnings
 import fitsio
 import numpy as np
 
+from qsonic import QsonicException
 import qsonic.spectrum
 
 
@@ -185,9 +186,9 @@ def save_deltas(
 
     Raises
     ---------
-    Exception
+    QsonicException
         If both `mpi_rank` and `save_by_hpx` is None/False.
-    Exception
+    QsonicException
         If blinding is not set.
     """
     if not outdir:
@@ -203,10 +204,10 @@ def save_deltas(
         unique_pix = [mpi_rank]
         split_spectra = [spectra_list]
     else:
-        raise Exception("save_by_hpx and mpi_rank can't both be None.")
+        raise QsonicException("save_by_hpx and mpi_rank can't both be None.")
 
     if qsonic.spectrum.Spectrum.blinding_not_set():
-        raise Exception("Blinding is not set. Cannot save delta.")
+        raise QsonicException("Blinding is not set. Cannot save delta.")
 
     for healpix, hp_specs in zip(unique_pix, split_spectra):
         results = fitsio.FITS(
