@@ -2,6 +2,7 @@ import argparse
 
 import numpy as np
 
+from qsonic import QsonicException
 from qsonic.mathtools import get_smooth_ivar
 
 
@@ -339,7 +340,7 @@ class Spectrum():
             LSS variance interpolator.
         """
         if not self.cont_params['valid'] or not self.cont_params['cont']:
-            raise Exception("Continuum needed for coadding.")
+            raise QsonicException("Continuum needed for coadding.")
 
         min_wave = np.min([wave[0] for wave in self.forestwave.values()])
         max_wave = np.max([wave[-1] for wave in self.forestwave.values()])
