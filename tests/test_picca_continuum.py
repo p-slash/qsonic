@@ -206,17 +206,22 @@ class TestVarLSSFitter(object):
             data['wave']['B'], data['flux']['B'][0], data['ivar']['B'][0])
 
         empty_bins = np.s_[-5:]
-        assert all(varlss_fitter.num_pixels[:5] == 0)
-        assert all(varlss_fitter.num_pixels[empty_bins] == 0)
+        assert all(varlss_fitter._num_pixels[:5] == 0)
+        assert all(varlss_fitter._num_pixels[empty_bins] == 0)
         expected_numqso = np.zeros((nwbins + 2) * 5, dtype=int)
         expected_numqso[[6, 11, 16]] = 1
-        npt.assert_equal(varlss_fitter.num_qso, expected_numqso)
+        npt.assert_equal(varlss_fitter._num_qso, expected_numqso)
 
         varlss_fitter.add(
             data['wave']['R'], data['flux']['R'][0], data['ivar']['R'][0])
         expected_numqso[[11, 16]] = 2
         expected_numqso[21] = 1
-        npt.assert_equal(varlss_fitter.num_qso, expected_numqso)
+        npt.assert_equal(varlss_fitter._num_qso, expected_numqso)
+
+        expected_size = 3 * nwbins
+        varlss_fitter._allreduce()
+        npt.assert_equal(varlss_fitter.wvalid_bins.sum(), expected_size)
+        npt.assert_equal(varlss_fitter.mean_delta.size, expected_size)
 
 
 if __name__ == '__main__':
