@@ -6,6 +6,8 @@ import numpy as np
 from numpy.lib.recfunctions import rename_fields
 import fitsio
 
+from qsonic import QsonicException
+
 LIGHT_SPEED = 299792.458
 """float: Speed of light in km/s."""
 sqrt_pi = 1.77245385091
@@ -64,8 +66,8 @@ class SkyMask():
 
             self.mask_rest_frame = mask[mask['frame'] == 'RF']
             self.mask_obs_frame = mask[mask['frame'] == 'OBS']
-        except Exception as e:
-            raise Exception(
+        except QsonicException as e:
+            raise QsonicException(
                 f"Error loading SkyMask from mask file {fname}.") from e
 
     def apply(self, spec):
@@ -139,7 +141,7 @@ class BALMask():
         """
         if not all(col in catalog.dtype.names
                    for col in BALMask.expected_columns):
-            raise Exception("Input catalog is missing BAL columns.")
+            raise QsonicException("Input catalog is missing BAL columns.")
 
     @staticmethod
     def apply(spec):
