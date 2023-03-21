@@ -9,7 +9,7 @@ from scipy.special import legendre
 
 from mpi4py import MPI
 
-from qsonic.spectrum import valid_spectra, Spectrum
+from qsonic.spectrum import valid_spectra
 from qsonic.mpi_utils import logging_mpi, warn_mpi, MPISaver
 from qsonic.mathtools import mypoly1d, Fast1DInterpolator, SubsampleCov
 
@@ -531,7 +531,7 @@ class PiccaContinuumFitter():
 
         sl = np.s_[::max(1, int(y.size / 10))]
         text = ("------------------------------\n"
-                "wave_obs \t| var_lss \t| error\n")
+                "wave\t| var_lss\t| error\n")
         for w, v, e in zip(self.varlss_fitter.waveobs[sl], y[sl], ep[sl]):
             text += f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}\n"
         text += "------------------------------"
@@ -810,13 +810,13 @@ class VarLSSFitter():
         # Bool array slicer for get non-overflow bins in 1D array
         self.wvalid_bins = np.zeros(self.minlength, dtype=bool)
         for iwave in range(self.nwbins):
-            i1 = (iwave + 1) * (self.nvarbins + 2)
+            i1 = (iwave + 1) * (self.nvarbins + 2) + 1
             i2 = i1 + self.nvarbins
             wbinslice = np.s_[i1:i2]
             self.wvalid_bins[wbinslice] = True
 
-        self.num_pixels = np.zeros(self.minlength, dtype=int)
-        self.num_qso = np.zeros(self.minlength, dtype=int)
+        self._num_pixels = np.zeros(self.minlength, dtype=int)
+        self._num_qso = np.zeros(self.minlength, dtype=int)
 
         # If ran with MPI, save mpi_rank first
         # Then shift each container to remove possibly over adding to 0th bin.
@@ -834,13 +834,13 @@ class VarLSSFitter():
     def reset(self):
         """Reset delta and num arrays to zero."""
         self.subsampler.reset(self.mpi_rank)
-        self.num_pixels *= 0
-        self.num_qso *= 0
+        self._num_pixels *= 0
+        self._num_qso *= 0
 
     def add(self, wave, delta, ivar):
         """Add statistics of a single spectrum. Updates delta and num arrays.
 
-        Assumes no spectra has `wave < w1obs` or `wave > w2obs`.
+        Assumes no spectra has ``wave < w1obs`` or ``wave > w2obs``.
 
         Arguments
         ---------
@@ -857,7 +857,7 @@ class VarLSSFitter():
         all_indx = ivar_indx + wave_indx * (self.nvarbins + 2)
 
         npix = np.bincount(all_indx, minlength=self.minlength)
-        self.num_pixels += npix
+        self._num_pixels += npix
         xvec = np.array([
             np.bincount(all_indx, weights=delta, minlength=self.minlength),
             np.bincount(all_indx, weights=delta**2, minlength=self.minlength),
@@ -866,7 +866,7 @@ class VarLSSFitter():
         self.subsampler.add_measurement(xvec, npix)
 
         npix[npix > 0] = 1
-        self.num_qso += npix
+        self._num_qso += npix
 
     def _allreduce(self):
         """Sums statistics from all MPI process, and calculates mean, variance
@@ -886,8 +886,8 @@ class VarLSSFitter():
         self.subsampler.mean[1] -= self.subsampler.mean[0]**2
         self.subsampler.mean[2] -= self.subsampler.mean[1]**2
 
-        w = self.num_pixels > 0
-        self.subsampler.mean[2, w] /= self.num_pixels[w]
+        w = self._num_pixels > 0
+        self.subsampler.mean[2, w] /= self._num_pixels[w]
 
     def _smooth_fit_results(self, fit_results, std_results):
         w = fit_results > 0
@@ -953,7 +953,7 @@ class VarLSSFitter():
 
             error_estimates = np.sqrt(error_estimates)
 
-        return error_estimates
+        return error_estimates[self.wvalid_bins]
 
     def _fit_array_shape_assert(self, arr):
         assert (arr.ndim == 1 or arr.ndim == 2)
@@ -1001,15 +1001,10 @@ class VarLSSFitter():
         error_estimates = self.get_var_delta_error(method)
         fit_results = np.zeros_like(initial_guess)
         std_results = np.zeros_like(initial_guess)
-        var_delta = self.subsampler.mean[1]
 
         for iwave in range(self.nwbins):
-            i1 = (iwave + 1) * (self.nvarbins + 2)
-            i2 = i1 + self.nvarbins
-            wbinslice = np.s_[i1:i2]
-
-            w = self.num_pixels[wbinslice] > VarLSSFitter.min_no_pix
-            w &= self.num_qso[wbinslice] > VarLSSFitter.min_no_qso
+            w = ((self.num_pixels > VarLSSFitter.min_no_pix)
+                 & (self.num_qso > VarLSSFitter.min_no_qso))
 
             if w.sum() == 0:
                 warn_mpi(
@@ -1022,9 +1017,9 @@ class VarLSSFitter():
                 pfit, pcov = curve_fit(
                     VarLSSFitter.variance_function,
                     self.var_centers[w],
-                    var_delta[wbinslice][w],
+                    self.var_delta[w],
                     p0=initial_guess[iwave],
-                    sigma=error_estimates[wbinslice][w],
+                    sigma=error_estimates[w],
                     absolute_sigma=True,
                     check_finite=True,
                     bounds=(0, 2)
@@ -1086,7 +1081,7 @@ class VarLSSFitter():
             np.tile(self.var_centers, self.nwbins),
             self.mean_delta, self.var_delta,
             self.subsampler.variance[1][self.wvalid_bins], self.var2_delta,
-            self.num_pixels[self.wvalid_bins], self.num_qso[self.wvalid_bins]]
+            self.num_pixels, self.num_qso]
         names = ['wave', 'var_pipe', 'mean_delta', 'var_delta',
                  'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso']
 
@@ -1094,6 +1089,14 @@ class VarLSSFitter():
             data_to_write, names=names, extname="VAR_STATS", header=hdr_dict)
 
         return mpi_saver
+
+    @property
+    def num_pixels(self):
+        return self._num_pixels[self.wvalid_bins]
+
+    @property
+    def num_qso(self):
+        return self._num_qso[self.wvalid_bins]
 
     @property
     def mean_delta(self):
