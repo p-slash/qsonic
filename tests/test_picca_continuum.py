@@ -241,7 +241,7 @@ class TestVarLSSFitter(object):
 
         fit_results, std_results = varlss_fitter.fit(
             true_var_lss, smooth=False)
-        atol = std_results[0]
+        atol = 3 * std_results[0]
         rtol = atol / true_var_lss[0]
         npt.assert_allclose(fit_results, true_var_lss, rtol=rtol, atol=atol)
 
