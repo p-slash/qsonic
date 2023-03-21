@@ -11,7 +11,7 @@ from mpi4py import MPI
 
 from qsonic.spectrum import valid_spectra
 from qsonic.mpi_utils import logging_mpi, warn_mpi, MPISaver
-from qsonic.mathtools import Fast1DInterpolator, mypoly1d
+from qsonic.mathtools import mypoly1d, Fast1DInterpolator, SubsampleCov
 
 
 def add_picca_continuum_parser(parser=None):
@@ -53,9 +53,11 @@ def add_picca_continuum_parser(parser=None):
 class PiccaContinuumFitter():
     """ Picca continuum fitter class.
 
-    Fits spectra without coadding. Pipeline ivar is smoothed before using in
-    weights. Mean continuum is smoothed using inverse weights and cubic spline.
-    Contruct, then call `iterate()` with local spectra.
+    Fits spectra without coadding. Pipeline inverse variance preferably should
+    be smoothed before fitting. Mean continuum and var_lss are smoothed using
+    inverse weights and cubic spline to help numerical stability.
+
+    Contruct an instance, then call :meth:`iterate` with local spectra.
 
     Parameters
     ----------
@@ -81,6 +83,8 @@ class PiccaContinuumFitter():
         Rank of the MPI process.
     meanflux_interp: Fast1DInterpolator
         Interpolator for mean flux. If fiducial is not set, this equals to 1.
+    flux_stacker: FluxStacker (disabled)
+        Stacks flux. Set up with 8 A wavelength bin size.
     varlss_fitter: VarLSSFitter or None
         None if fiducials are set for var_lss.
     varlss_interp: Fast1DInterpolator
@@ -177,12 +181,17 @@ class PiccaContinuumFitter():
         else:
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
 
+        # self.flux_stacker = FluxStacker(
+        #     args.wave1, args.wave2, 8., comm=self.comm)
+
         if args.fiducial_varlss:
             self.varlss_fitter = None
             self.varlss_interp = self._get_fiducial_interp(
                 args.fiducial_varlss, 'VAR')
         else:
-            self.varlss_fitter = VarLSSFitter(args.wave1, args.wave2, nwbins)
+            self.varlss_fitter = VarLSSFitter(
+                args.wave1, args.wave2, nwbins,
+                comm=self.comm)
             self.varlss_interp = Fast1DInterpolator(
                 self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
                 0.1 * np.ones(nwbins), ep=np.zeros(nwbins))
@@ -213,7 +222,7 @@ class PiccaContinuumFitter():
         Returns
         ---------
         cost: float
-            Cost (modified chi2) for a given `x`.
+            Cost (modified chi2) for a given ``x``.
         """
         cost = 0
 
@@ -306,6 +315,7 @@ class PiccaContinuumFitter():
                     break
 
                 cont_est *= self.meanflux_interp(wave_arm)
+                # cont_est *= self.flux_stacker(wave_arm)
                 spec.cont_params['cont'][arm] = cont_est
                 var_lss = self.varlss_interp(wave_arm) * cont_est**2
                 weight = 1. / (1 + spec.forestivar_sm[arm] * var_lss)
@@ -351,7 +361,7 @@ class PiccaContinuumFitter():
 
     def _project_normalize_meancont(self, new_meancont):
         """ Project out higher order Legendre polynomials from the new mean
-        continuum, since these are degenerate with the free fitting parameters.
+        continuum since these are degenerate with the free fitting parameters.
         Returns a normalized mean continuum. Integrals are calculated using
         ``np.trapz`` with ``ln lambda_RF`` as x array.
 
@@ -362,7 +372,7 @@ class PiccaContinuumFitter():
 
         Returns
         ---------
-        new_meancont: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        new_meancont: :class:`ndarray <numpy.ndarray>`
             Legendere polynomials projected out and normalized mean continuum.
         mean: float
             Normalization of the mean continuum.
@@ -383,7 +393,7 @@ class PiccaContinuumFitter():
         return new_meancont, mean
 
     def update_mean_cont(self, spectra_list, noupdate):
-        """ Update the global mean continuum.
+        """ Update the global mean continuum and stacked flux.
 
         Uses :attr:`forestivar_sm <qsonic.spectrum.Spectrum.forestivar_sm>`
         in inverse variance, but must be set beforehand.
@@ -410,6 +420,7 @@ class PiccaContinuumFitter():
         norm_flux = np.zeros(self.nbins)
         std_flux = np.empty(self.nbins)
         counts = np.zeros(self.nbins)
+        # self.flux_stacker.reset()
 
         for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
@@ -419,7 +430,7 @@ class PiccaContinuumFitter():
                 ).astype(int)
 
                 cont = spec.cont_params['cont'][arm]
-                flux_ = spec.forestflux[arm] / cont
+                flux = spec.forestflux[arm] / cont
                 # Deconvolve resolution matrix ?
 
                 var_lss = self.varlss_interp(wave_arm)
@@ -427,10 +438,13 @@ class PiccaContinuumFitter():
                 weight = weight / (1 + weight * var_lss)
 
                 norm_flux += np.bincount(
-                    bin_idx, weights=flux_ * weight, minlength=self.nbins)
+                    bin_idx, weights=flux * weight, minlength=self.nbins)
                 counts += np.bincount(
                     bin_idx, weights=weight, minlength=self.nbins)
 
+                # self.flux_stacker.add(wave_arm, flux, weight)
+
+        # self.flux_stacker.calculate()
         self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
         self.comm.Allreduce(MPI.IN_PLACE, counts)
         w = counts > 0
@@ -479,7 +493,8 @@ class PiccaContinuumFitter():
         return has_converged
 
     def update_var_lss(self, spectra_list, noupdate):
-        """ Fit for var_lss. See VarLSSFitter for implementation details.
+        """ Fit and update var_lss. See :class:`VarLSSFitter` for fitting
+        details.
 
         Arguments
         ---------
@@ -504,7 +519,7 @@ class PiccaContinuumFitter():
         # Else, fit for var_lss
         logging_mpi("Fitting var_lss", self.mpi_rank)
         y, ep = self.varlss_fitter.fit(
-            self.varlss_interp.fp, self.comm, self.mpi_rank)
+            self.varlss_interp.fp)
         if not noupdate:
             self.varlss_interp.fp = y
             self.varlss_interp.ep = ep
@@ -514,7 +529,7 @@ class PiccaContinuumFitter():
 
         sl = np.s_[::max(1, int(y.size / 10))]
         text = ("------------------------------\n"
-                "wave_obs \t| var_lss \t| error\n")
+                "wave\t| var_lss\t| error\n")
         for w, v, e in zip(self.varlss_fitter.waveobs[sl], y[sl], ep[sl]):
             text += f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}\n"
         text += "------------------------------"
@@ -600,6 +615,11 @@ class PiccaContinuumFitter():
             names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
             extname=f'CONT-{it}')
 
+        # fattr.write(
+        #     [self.flux_stacker.waveobs, self.flux_stacker.stacked_flux],
+        #     names=['lambda', 'stacked_flux'],
+        #     extname=f'STACKED_FLUX-{it}')
+
         if self.varlss_fitter is None:
             return
 
@@ -654,12 +674,42 @@ class PiccaContinuumFitter():
             fts.close()
 
 
-class VarLSSFitter(object):
+class VarLSSFitter():
     """ Variance fitter for the large-scale fluctuations.
 
     Input wavelengths and variances are the bin edges, so centers will be
     shifted. Valid bins require at least 500 pixels from 50 quasars. Assumes no
     spectra has `wave < w1obs` or `wave > w2obs`.
+
+    .. note::
+
+        This class is designed to be used in a linear fashion. You create it,
+        add statistics to it and finally fit. After :meth:`fit` is called,
+        :meth:`fit` and :meth:`add` **cannot** be called again. You may
+        :meth:`reset` and start over.
+
+    Usage::
+
+        ...
+        varfitter = VarLSSFitter(
+            wave1, wave2, nwbins,
+            var1, var2, nvarbins,
+            nsubsamples=100, comm=comm)
+        # Change static minimum numbers for valid statistics
+        VarLSSFitter.min_no_pix = min_no_pix
+        VarLSSFitter.min_no_qso = min_no_qso
+
+        for delta in deltas_list:
+            varfitter.add(delta.wave, delta.delta, delta.ivar)
+
+        logging_mpi("Fitting variance for VarLSS and eta", mpi_rank)
+        fit_results = np.ones((nwbins, 2))
+        fit_results[:, 0] = 0.1
+        fit_results, std_results = varfitter.fit(fit_results)
+
+        varfitter.save("variance-file.fits")
+
+        # You CANNOT call ``fit`` again!
 
     Parameters
     ----------
@@ -669,12 +719,16 @@ class VarLSSFitter(object):
         Upper observed wavelength edge.
     nwbins: int
         Number of wavelength bins.
-    var1: float
+    var1: float, default: 1e-5
         Lower variance edge.
-    var2: float
+    var2: float, default: 2
         Upper variance edge.
-    nvarbins: int
+    nvarbins: int, default: 100
         Number of variance bins.
+    nsubsamples: int, default: 100
+        Number of subsamples for the Jackknife covariance.
+    comm: MPI.COMM_WORLD or None, default: None
+        MPI comm object to allreduce if enabled.
 
     Attributes
     ----------
@@ -682,21 +736,24 @@ class VarLSSFitter(object):
         Wavelength centers in the observed frame.
     ivar_edges: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Inverse variance edges.
-    ivar_centers: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Inverse variance centers.
+    var_centers: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Variance centers in **descending** order.
     minlength: int
         Minimum size of the combined bin count array. It includes underflow and
         overflow bins for both wavelength and variance bins.
-    var_delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Variance delta.
-    mean_delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Mean delta.
-    var2_delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        delta^4.
+    wvalid_bins: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Bool array slicer to get non-overflow bins of 1D arrays.
+    subsampler: SubsampleCov
+        Subsampler object that stores mean_delta in axis=0, var_delta in axis=1
+        , var2_delta in axis=2.
     num_pixels: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Number of pixels in the bin.
     num_qso: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Number of quasars in the bin.
+    comm: MPI.COMM_WORLD or None, default: None
+        MPI comm object to allreduce if enabled.
+    mpi_rank: int
+        Rank of the MPI process if ``comm!=None``. Zero otherwise.
     """
     min_no_pix = 500
     """int: Minimum number of pixels a bin must have to be valid."""
@@ -706,6 +763,11 @@ class VarLSSFitter(object):
     @staticmethod
     def variance_function(var_pipe, var_lss, eta=1):
         """Variance model to be fit.
+
+        .. math::
+
+            \sigma^2_\mathrm{obs} = \eta \sigma^2_\mathrm{pipe} +
+            \sigma^2_\mathrm{LSS}
 
         Arguments
         ---------
@@ -723,35 +785,60 @@ class VarLSSFitter(object):
         """
         return eta * var_pipe + var_lss
 
-    def __init__(self, w1obs, w2obs, nwbins, var1=1e-5, var2=2., nvarbins=100):
+    def __init__(
+            self, w1obs, w2obs, nwbins,
+            var1=1e-5, var2=2., nvarbins=100,
+            nsubsamples=100, comm=None
+    ):
         self.nwbins = nwbins
         self.nvarbins = nvarbins
+        self.comm = comm
+
+        # Set up wavelength and inverse variance bins
         wave_edges, self.dwobs = np.linspace(
             w1obs, w2obs, nwbins + 1, retstep=True)
         self.waveobs = (wave_edges[1:] + wave_edges[:-1]) / 2
         self.ivar_edges = np.logspace(
             -np.log10(var2), -np.log10(var1), nvarbins + 1)
-        self.ivar_centers = (self.ivar_edges[1:] + self.ivar_edges[:-1]) / 2
+        var_edges = 1 / self.ivar_edges
+        self.var_centers = (var_edges[1:] + var_edges[:-1]) / 2
 
+        # Set up arrays to store statistics
         self.minlength = (self.nvarbins + 2) * (self.nwbins + 2)
-        self.var_delta = np.zeros(self.minlength)
-        self.mean_delta = np.zeros_like(self.var_delta)
-        self.var2_delta = np.zeros_like(self.var_delta)
-        self.num_pixels = np.zeros_like(self.var_delta, dtype=int)
-        self.num_qso = np.zeros_like(self.var_delta, dtype=int)
+        # Bool array slicer for get non-overflow bins in 1D array
+        self.wvalid_bins = np.zeros(self.minlength, dtype=bool)
+        for iwave in range(self.nwbins):
+            i1 = (iwave + 1) * (self.nvarbins + 2) + 1
+            i2 = i1 + self.nvarbins
+            wbinslice = np.s_[i1:i2]
+            self.wvalid_bins[wbinslice] = True
+
+        self._num_pixels = np.zeros(self.minlength, dtype=int)
+        self._num_qso = np.zeros(self.minlength, dtype=int)
+
+        # If ran with MPI, save mpi_rank first
+        # Then shift each container to remove possibly over adding to 0th bin.
+        if comm is not None:
+            self.mpi_rank = comm.Get_rank()
+        else:
+            self.mpi_rank = 0
+
+        # Axis 0 is mean
+        # Axis 1 is var_delta
+        # Axis 2 is var2_delta
+        self.subsampler = SubsampleCov(
+            (3, self.minlength), nsubsamples, self.mpi_rank)
 
     def reset(self):
         """Reset delta and num arrays to zero."""
-        self.var_delta = 0.
-        self.mean_delta = 0.
-        self.var2_delta = 0.
-        self.num_pixels = 0
-        self.num_qso = 0
+        self.subsampler.reset(self.mpi_rank)
+        self._num_pixels *= 0
+        self._num_qso *= 0
 
     def add(self, wave, delta, ivar):
         """Add statistics of a single spectrum. Updates delta and num arrays.
 
-        Assumes no spectra has `wave < w1obs` or `wave > w2obs`.
+        Assumes no spectra has ``wave < w1obs`` or ``wave > w2obs``.
 
         Arguments
         ---------
@@ -767,91 +854,175 @@ class VarLSSFitter(object):
         ivar_indx = np.searchsorted(self.ivar_edges, ivar)
         all_indx = ivar_indx + wave_indx * (self.nvarbins + 2)
 
-        self.mean_delta += np.bincount(
-            all_indx, weights=delta, minlength=self.minlength)
-        self.var_delta += np.bincount(
-            all_indx, weights=delta**2, minlength=self.minlength)
-        self.var2_delta += np.bincount(
-            all_indx, weights=delta**4, minlength=self.minlength)
-        rebin = np.bincount(all_indx, minlength=self.minlength)
-        self.num_pixels += rebin
-        rebin[rebin > 0] = 1
-        self.num_qso += rebin
+        npix = np.bincount(all_indx, minlength=self.minlength)
+        self._num_pixels += npix
+        xvec = np.array([
+            np.bincount(all_indx, weights=delta, minlength=self.minlength),
+            np.bincount(all_indx, weights=delta**2, minlength=self.minlength),
+            np.bincount(all_indx, weights=delta**4, minlength=self.minlength)
+        ])
+        self.subsampler.add_measurement(xvec, npix)
 
-    def _allreduce(self, comm):
+        npix[npix > 0] = 1
+        self._num_qso += npix
+
+    def _allreduce(self):
         """Sums statistics from all MPI process, and calculates mean, variance
         and error on the variance.
 
+        It also calculates the delete-one Jackknife variance of var_delta over
+        ``nsubsamples``.
+        """
+        if self.comm is not None:
+            self.subsampler.allreduce(self.comm, MPI.IN_PLACE)
+
+            self.comm.Allreduce(MPI.IN_PLACE, self._num_pixels)
+            self.comm.Allreduce(MPI.IN_PLACE, self._num_qso)
+
+        self.subsampler.get_mean_n_var()
+
+        self.subsampler.mean[1] -= self.subsampler.mean[0]**2
+        self.subsampler.mean[2] -= self.subsampler.mean[1]**2
+
+        w = self._num_pixels > 0
+        self.subsampler.mean[2, w] /= self._num_pixels[w]
+
+    def _smooth_fit_results(self, fit_results, std_results):
+        w = fit_results > 0
+
+        # Smooth new estimates
+        if fit_results.ndim == 1:
+            spl = UnivariateSpline(
+                self.waveobs[w], fit_results[w], w=1 / std_results[w])
+
+            nfails = np.sum(fit_results == 0)
+            fit_results = spl(self.waveobs)
+        # else ndim == 2
+        else:
+            w = w[:, 0]
+            spl1 = UnivariateSpline(
+                self.waveobs[w], fit_results[w, 0], w=1 / std_results[w, 0])
+            spl2 = UnivariateSpline(
+                self.waveobs[w], fit_results[w, 1], w=1 / std_results[w, 1])
+
+            nfails = np.sum(fit_results[:, 0] == 0)
+            fit_results[:, 0] = spl1(self.waveobs)
+            fit_results[:, 1] = spl2(self.waveobs)
+
+        return fit_results, nfails
+
+    def get_var_delta_error(self, method="gauss"):
+        """ Calculate the error (sigma) on var_delta using a given method.
+
+        - ``method="gauss"``:
+            Observed var2_delta using delta**4 statistics are used as has been
+            done before.
+
+        - ``method="regJack"`` and ``method="doubleJack"``:
+            The variance on var_delta is first calculated by delete-one
+            Jackknife
+            over ``nsubsamples``. This is regularized by calculated var2_delta
+            (Gaussian estimates), where if Jackknife variance is smaller than
+            the Gaussian estimate, it is replaced by the Gaussian estimate.
+
         Arguments
         ---------
-        comm: MPI.COMM_WORLD
-            MPI comm object for Allreduce
+        method: str, default: gauss
+            Method to estimate error on var_delta
+
+        Returns
+        ---------
+        error_estimates: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Error (sigma) on var_delta
         """
-        comm.Allreduce(MPI.IN_PLACE, self.mean_delta)
-        comm.Allreduce(MPI.IN_PLACE, self.var_delta)
-        comm.Allreduce(MPI.IN_PLACE, self.var2_delta)
-        comm.Allreduce(MPI.IN_PLACE, self.num_pixels)
-        comm.Allreduce(MPI.IN_PLACE, self.num_qso)
+        assert (
+            method == "gauss" or method == "regJack" or method == "doubleJack")
 
-        w = self.num_pixels > 0
-        self.var_delta[w] /= self.num_pixels[w]
-        self.mean_delta[w] /= self.num_pixels[w]
-        self.var_delta -= self.mean_delta**2
-        self.var2_delta[w] /= self.num_pixels[w]
-        self.var2_delta -= self.var_delta**2
-        self.var2_delta[w] /= self.num_pixels[w]
+        if method == "gauss":
+            error_estimates = np.sqrt(self.subsampler.mean[2])
 
-    def fit(self, current_varlss, comm, mpi_rank):
-        """ Syncronize all MPI processes and fit for `var_lss`.
+        else:
+            # Regularized jackknife errors
+            error_estimates = np.where(
+                self.subsampler.variance[1] > self.var2_delta,
+                self.subsampler.variance[1],
+                self.var2_delta
+            )
 
-        This implemented using `scipy.optimize.curve_fit` with sqrt(var2_delta)
-        as absolute errors. `var_lss` is bounded to `(0, 2)`. These fits are
-        then smoothed via `UnivariateSpline` using weights from `curve_fit`,
+            error_estimates = np.sqrt(error_estimates)
+
+        return error_estimates[self.wvalid_bins]
+
+    def _fit_array_shape_assert(self, arr):
+        assert (arr.ndim == 1 or arr.ndim == 2)
+        assert (arr.shape[0] == self.nwbins)
+        if arr.ndim == 2:
+            assert (arr.shape[1] == 2)
+
+    def fit(self, initial_guess, method="gauss"):
+        """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
+
+        Second axis always contains ``eta`` values. Example::
+
+            var_lss = initial_guess[:, 0]
+            eta = initial_guess[:, 1]
+
+        This implemented using :func:`scipy.optimize.curve_fit` with
+        ``sqrt(var2_delta_subs)`` as absolute errors. Domain is bounded to
+        ``(0, 2)``. These fits are then smoothed via
+        :external+scipy:py:class:`scipy.interpolate.UnivariateSpline`
+        using weights from ``curve_fit``,
         while missing values or failed wavelength bins are extrapolated.
 
         Arguments
         ---------
-        current_varlss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Initial guess for var_lss
-        comm: MPI.COMM_WORLD
-            MPI comm object for Allreduce
-        mpi_rank: int
-            Rank of the MPI process.
+        initial_guess: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Initial guess for var_lss and eta. If 1D array, eta is fixed to
+            one. If 2D, its shape must be ``(nwbins, 2)``.
+        method: str, default: gauss
+            Error estimation method
 
         Returns
         ---------
-        var_lss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Smoothed LSS variance at observed wavelengths. Missing values are
-            extrapolated.
-        std_var_lss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Error on `var_lss` from sqrt of `curve_fit` output.
+        fit_results: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Smoothed fit results at observed wavelengths where missing values
+            are extrapolated. 1D array containing LSS variance if
+            ``initial_guess`` is 1D. 2D containing eta values on the second
+            axis if ``initial_guess`` is 2D ndarray.
+        std_results: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Error on ``var_lss`` from sqrt of ``curve_fit`` output. Same
+            behavior as ``fit_results``.
         """
-        self._allreduce(comm)
-        var_lss = np.zeros(self.nwbins)
-        std_var_lss = np.zeros(self.nwbins)
+        self._fit_array_shape_assert(initial_guess)
+        self._allreduce()
+
+        fit_results = np.zeros_like(initial_guess)
+        std_results = np.zeros_like(initial_guess)
+
+        error_estimates = self.get_var_delta_error(method)
+        w_gtr_min = ((self.num_pixels > VarLSSFitter.min_no_pix)
+                     & (self.num_qso > VarLSSFitter.min_no_qso))
 
         for iwave in range(self.nwbins):
-            i1 = (iwave + 1) * (self.nvarbins + 2)
+            i1 = iwave * self.nvarbins
             i2 = i1 + self.nvarbins
-            wbinslice = np.s_[i1:i2]
-
-            w = self.num_pixels[wbinslice] > VarLSSFitter.min_no_pix
-            w &= self.num_qso[wbinslice] > VarLSSFitter.min_no_qso
+            wave_slice = np.s_[i1:i2]
+            w = w_gtr_min[wave_slice]
 
             if w.sum() == 0:
                 warn_mpi(
                     "Not enough statistics for VarLSSFitter at"
                     f" wave_obs: {self.waveobs[iwave]:.2f}.",
-                    mpi_rank)
+                    self.mpi_rank)
                 continue
 
             try:
                 pfit, pcov = curve_fit(
                     VarLSSFitter.variance_function,
-                    1 / self.ivar_centers[w],
-                    self.var_delta[wbinslice][w],
-                    p0=current_varlss[iwave],
-                    sigma=np.sqrt(self.var2_delta[wbinslice][w]),
+                    self.var_centers[w],
+                    self.var_delta[wave_slice][w],
+                    p0=initial_guess[iwave],
+                    sigma=error_estimates[wave_slice][w],
                     absolute_sigma=True,
                     check_finite=True,
                     bounds=(0, 2)
@@ -861,20 +1032,182 @@ class VarLSSFitter(object):
                     "VarLSSFitter failed at wave_obs: "
                     f"{self.waveobs[iwave]:.2f}. "
                     f"Reason: {e}. Extrapolating.",
-                    mpi_rank)
+                    self.mpi_rank)
             else:
-                var_lss[iwave] = pfit[0]
-                std_var_lss[iwave] = np.sqrt(pcov[0, 0])
+                fit_results[iwave] = pfit
+                std_results[iwave] = np.sqrt(np.diag(pcov))
 
         # Smooth new estimates
-        w = var_lss > 0
-        spl = UnivariateSpline(
-            self.waveobs[w], var_lss[w], w=1 / std_var_lss[w])
-
-        nfails = np.sum(var_lss == 0)
+        fit_results, nfails = self._smooth_fit_results(
+            fit_results, std_results)
         if nfails > 0:
             warn_mpi(
                 f"VarLSSFitter failed and extrapolated at {nfails} points.",
-                mpi_rank)
+                self.mpi_rank)
 
-        return spl(self.waveobs), std_var_lss
+        return fit_results, std_results
+
+    def save(self, fname, min_snr=0, max_snr=100):
+        """Save variance statistics to FITS file.
+
+        Arguments
+        ---------
+        fname: str
+            Filename to be written. It is always overwritten.
+        min_snr: float, default: 0
+            Minimum SNR in this sample to be written into header.
+        max_snr: float, default: 100
+            Maximum SNR in this sampleto be written into header.
+
+        Returns
+        -------
+        mpi_saver: MPISaver
+            To save additional data or to close manually.
+        """
+        mpi_saver = MPISaver(fname, self.mpi_rank)
+
+        hdr_dict = {
+            'MINNPIX': VarLSSFitter.min_no_pix,
+            'MINNQSO': VarLSSFitter.min_no_qso,
+            'MINSNR': min_snr,
+            'MAXSNR': max_snr,
+            'WAVE1': self.waveobs[0],
+            'WAVE2': self.waveobs[-1],
+            'NWBINS': self.nwbins,
+            'VAR1': self.var_centers[-1],
+            'VAR2': self.var_centers[0],
+            'NVARBINS': self.var_centers.size
+        }
+
+        data_to_write = [
+            np.repeat(self.waveobs, self.var_centers.size),
+            np.tile(self.var_centers, self.nwbins),
+            self.mean_delta, self.var_delta,
+            self.subsampler.variance[1][self.wvalid_bins], self.var2_delta,
+            self.num_pixels, self.num_qso]
+        names = ['wave', 'var_pipe', 'mean_delta', 'var_delta',
+                 'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso']
+
+        mpi_saver.write(
+            data_to_write, names=names, extname="VAR_STATS", header=hdr_dict)
+
+        return mpi_saver
+
+    @property
+    def num_pixels(self):
+        return self._num_pixels[self.wvalid_bins]
+
+    @property
+    def num_qso(self):
+        return self._num_qso[self.wvalid_bins]
+
+    @property
+    def mean_delta(self):
+        """:class:`ndarray <numpy.ndarray>`: Mean delta."""
+        return self.subsampler.mean[0][self.wvalid_bins]
+
+    @property
+    def var_delta(self):
+        """:class:`ndarray <numpy.ndarray>`: Variance delta."""
+        return self.subsampler.mean[1][self.wvalid_bins]
+
+    @property
+    def var2_delta(self):
+        """:class:`ndarray <numpy.ndarray>`: Variance delta^2."""
+        return self.subsampler.mean[2][self.wvalid_bins]
+
+
+class FluxStacker():
+    """ The class to stack flux values to obtain IGM mean flux and other
+    problems.
+
+    This object can be called. Stacked flux is initialized to one. Reset before
+    adding statistics.
+
+    Parameters
+    ----------
+    w1obs: float
+        Lower observed wavelength edge.
+    w2obs: float
+        Upper observed wavelength edge.
+    dwobs: float
+        Wavelength spacing.
+    comm: MPI.COMM_WORLD or None, default: None
+        MPI comm object to allreduce if enabled.
+
+    Attributes
+    ----------
+    waveobs: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Wavelength centers in the observed frame.
+    nwbins: int
+        Number of wavelength bins
+    dwobs: float
+        Wavelength spacing. Usually same as observed grid.
+    _interp: Fast1DInterpolator
+        Interpolator. Saves stacked_flux in fp and weights in ep.
+    comm: MPI.COMM_WORLD or None, default: None
+        MPI comm object to allreduce if enabled.
+    """
+
+    def __init__(self, w1obs, w2obs, dwobs, comm=None):
+        # Set up wavelength and inverse variance bins
+        self.nwbins = int((w2obs - w1obs) / dwobs)
+        wave_edges, self.dwobs = np.linspace(
+            w1obs, w2obs, self.nwbins + 1, retstep=True)
+        self.waveobs = (wave_edges[1:] + wave_edges[:-1]) / 2
+
+        self.comm = comm
+
+        self._interp = Fast1DInterpolator(
+            self.waveobs[0], self.dwobs,
+            np.ones(self.nwbins), ep=np.zeros(self.nwbins))
+
+    def __call__(self, wave):
+        return self._interp(wave)
+
+    def add(self, wave, flux, weight):
+        """ Add statistics of a single spectrum.
+
+        Updates :attr:`stacked_flux` and :attr:`weights`. Assumes no spectra
+        has ``wave < w1obs`` or ``wave > w2obs``.
+
+        Arguments
+        ---------
+        wave: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Wavelength array.
+        flux: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Flux array. Specifically f/C.
+        weight: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Weight array.
+        """
+        wave_indx = ((wave - self.waveobs[0]) / self.dwobs + 0.5).astype(int)
+
+        self._interp.fp += np.bincount(
+            wave_indx, weights=flux * weight, minlength=self.nwbins)
+        self._interp.ep += np.bincount(
+            wave_indx, weights=weight, minlength=self.nwbins)
+
+    def calculate(self):
+        """Calculate stacked flux by allreducing if necessary."""
+        if self.comm is not None:
+            self.comm.Allreduce(MPI.IN_PLACE, self._interp.fp)
+            self.comm.Allreduce(MPI.IN_PLACE, self._interp.ep)
+
+        w = self._interp.ep > 0
+        self._interp.fp[w] /= self._interp.ep[w]
+        self._interp.fp[~w] = 0
+
+    def reset(self):
+        """Reset :attr:`stacked_flux` and :attr:`weights` arrays to zero."""
+        self._interp.fp *= 0
+        self._interp.ep *= 0
+
+    @property
+    def stacked_flux(self):
+        """:class:`ndarray <numpy.ndarray>`: Stacked flux."""
+        return self._interp.fp
+
+    @property
+    def weights(self):
+        """:class:`ndarray <numpy.ndarray>`: Weights."""
+        return self._interp.ep
