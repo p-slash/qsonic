@@ -5,6 +5,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.testing as npt
 
+from qsonic import QsonicException
 from qsonic.io import add_io_parser
 import qsonic.mpi_utils
 import qsonic.spectrum
@@ -27,7 +28,7 @@ class TestMPIUtils(TestCase):
         assert (args.catalog == "incat")
         assert (args.outdir == "outdir")
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(QsonicException):
             options = "--catalog incat -o outdir".split(' ')
             qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options)
 
