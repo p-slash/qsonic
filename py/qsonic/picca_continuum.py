@@ -876,8 +876,8 @@ class VarLSSFitter():
         if self.comm is not None:
             self.subsampler.allreduce(self.comm, MPI.IN_PLACE)
 
-            self.comm.Allreduce(MPI.IN_PLACE, self.num_pixels)
-            self.comm.Allreduce(MPI.IN_PLACE, self.num_qso)
+            self.comm.Allreduce(MPI.IN_PLACE, self._num_pixels)
+            self.comm.Allreduce(MPI.IN_PLACE, self._num_qso)
 
         self.subsampler.get_mean_n_var()
 
