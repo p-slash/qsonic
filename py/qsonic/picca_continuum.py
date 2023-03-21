@@ -999,6 +999,8 @@ class VarLSSFitter():
         self._allreduce()
 
         error_estimates = self.get_var_delta_error(method)
+        error_estimates = error_estimates.reshape(self.nwbins, self.nvarbins)
+        var_delta_r = self.var_delta.reshape(self.nwbins, self.nvarbins)
         fit_results = np.zeros_like(initial_guess)
         std_results = np.zeros_like(initial_guess)
 
@@ -1017,9 +1019,9 @@ class VarLSSFitter():
                 pfit, pcov = curve_fit(
                     VarLSSFitter.variance_function,
                     self.var_centers[w],
-                    self.var_delta[w],
+                    var_delta_r[iwave][w],
                     p0=initial_guess[iwave],
-                    sigma=error_estimates[w],
+                    sigma=error_estimates[iwave][w],
                     absolute_sigma=True,
                     check_finite=True,
                     bounds=(0, 2)
