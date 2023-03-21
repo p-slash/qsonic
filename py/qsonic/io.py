@@ -30,7 +30,7 @@ def add_io_parser(parser=None):
     ingroup = parser.add_argument_group('Input options')
     ingroup.add_argument(
         "--input-dir", '-i', required=True,
-        help="Input directory to healpix")
+        help="Input directory.")
     ingroup.add_argument(
         "--catalog", required=True,
         help="Catalog filename")
@@ -133,6 +133,34 @@ def read_spectra_onehealpix(
     return spectra_list
 
 
+def read_deltas(fname):
+    """ Returns a list of all Delta objects in a file.
+
+    Arguments
+    ---------
+    fname: str
+        FITS file name
+
+    Returns
+    ---------
+    deltas_list: list(Delta)
+
+    Raises
+    ---------
+    RuntimeError
+        If the file is missing certain columns and keys. See :class:`Delta`.
+    """
+    deltas_list = []
+    fitsfile = fitsio.FITS(fname)
+
+    for hdu in fitsfile[1:]:
+        deltas_list.append(qsonic.spectrum.Delta(hdu))
+
+    fitsfile.close()
+
+    return deltas_list
+
+
 def save_deltas(
         spectra_list, outdir, varlss_interp,
         save_by_hpx=False, mpi_rank=None, use_ivar_sm=False
@@ -178,7 +206,7 @@ def save_deltas(
         raise Exception("save_by_hpx and mpi_rank can't both be None.")
 
     if qsonic.spectrum.Spectrum.blinding_not_set():
-        raise Exception("Blinding is not set. Cannot save deltas.")
+        raise Exception("Blinding is not set. Cannot save delta.")
 
     for healpix, hp_specs in zip(unique_pix, split_spectra):
         results = fitsio.FITS(

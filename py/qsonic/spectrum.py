@@ -525,3 +525,89 @@ class Spectrum():
         """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Resolution
         matrix in the forest."""
         return self._forestreso
+
+
+class Delta():
+    """An object to read one delta from HDU.
+
+    Parameters
+    ----------
+    hdu: fitsio.TableHDU
+        Table containing delta data.
+
+    Raises
+    ---------
+    RuntimeError
+        If ``hdu`` doesn't have neither "LAMBDA" nor "LOGLAM" columns.
+    RuntimeError
+        If ``hdu`` doesn't have neither "DELTA" nor "DELTA_BLIND" columns.
+    RuntimeError
+        If ``hdu`` doesn't have none of "MOCKID", "TARGETID" and "THING_ID"
+        header keys.
+
+    Attributes
+    ----------
+    wave: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Wavelength array in A.
+    delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Deltas.
+    ivar: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Inverse variance.
+    weight: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Weights, which includes var_lss.
+    cont: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Continuum.
+    header: FITS header
+        Header.
+    targetid: int
+        TARGETID, MOCKID or THING_ID from header.
+    mean_snr: float
+        MEANSNR from header.
+    """
+    _accepted_wave_columns = set(["LAMBDA", "LOGLAM"])
+    """set: Supported column names for wavelength."""
+    _accepted_delta_columns = set(['DELTA', 'DELTA_BLIND'])
+    """set: Supported column names for delta."""
+    _accepted_targetid_keys = set(['MOCKID', 'TARGETID', 'THING_ID'])
+    """set: Supported header keys for unique ID."""
+    _accepted_colums_map = {
+        "wave": _accepted_wave_columns,
+        "delta": _accepted_delta_columns
+    }
+
+    @staticmethod
+    def _check_hdu(colnames, attr):
+        req_map = Delta._accepted_colums_map[attr]
+        key = req_map.intersection(colnames)
+        if not key:
+            raise RuntimeError(
+                "One of these must be present in delta files: "
+                f"{', '.join(req_map)} for {attr}!")
+
+        return key.pop()
+
+    def __init__(self, hdu):
+        self.header = hdu.read_header()
+        key = Delta._accepted_targetid_keys.intersection(self.header.keys())
+        if not key:
+            raise RuntimeError(
+                "One of these must be present in delta file header: "
+                f"{', '.join(Delta._accepted_targetid_keys)} for TARGETID!")
+
+        key = key.pop()
+        self.targetid = self.header[key]
+        self.mean_snr = self.header['MEANSNR']
+
+        colnames = hdu.get_colnames()
+        data = hdu.read()
+
+        key = Delta._check_hdu(colnames, "wave")
+        self.wave = data[key]
+        if key == "LOGLAM":
+            self.wave = 10**data['LOGLAM']
+
+        key = Delta._check_hdu(colnames, "delta")
+        self.delta = data[key]
+        self.ivar = data['IVAR']
+        self.weight = data['WEIGHT']
+        self.cont = data['CONT']
