@@ -896,7 +896,6 @@ class VarLSSFitter():
             spl = UnivariateSpline(
                 self.waveobs[w], fit_results[w], w=1 / std_results[w])
 
-            nfails = np.sum(fit_results == 0)
             fit_results = spl(self.waveobs)
         # else ndim == 2
         else:
@@ -906,11 +905,10 @@ class VarLSSFitter():
             spl2 = UnivariateSpline(
                 self.waveobs[w], fit_results[w, 1], w=1 / std_results[w, 1])
 
-            nfails = np.sum(fit_results[:, 0] == 0)
             fit_results[:, 0] = spl1(self.waveobs)
             fit_results[:, 1] = spl2(self.waveobs)
 
-        return fit_results, nfails
+        return fit_results
 
     def get_var_delta_error(self, method="gauss"):
         """ Calculate the error (sigma) on var_delta using a given method.
@@ -960,7 +958,7 @@ class VarLSSFitter():
         if arr.ndim == 2:
             assert (arr.shape[1] == 2)
 
-    def fit(self, initial_guess, method="gauss"):
+    def fit(self, initial_guess, method="gauss", smooth=True):
         """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
 
         Second axis always contains ``eta`` values. Example::
@@ -982,6 +980,8 @@ class VarLSSFitter():
             one. If 2D, its shape must be ``(nwbins, 2)``.
         method: str, default: gauss
             Error estimation method
+        smooth: bool, default: True
+            Smooth results using UnivariateSpline.
 
         Returns
         ---------
@@ -997,6 +997,7 @@ class VarLSSFitter():
         self._fit_array_shape_assert(initial_guess)
         self._allreduce()
 
+        nfails = 0
         fit_results = np.zeros_like(initial_guess)
         std_results = np.zeros_like(initial_guess)
 
@@ -1011,6 +1012,7 @@ class VarLSSFitter():
             w = w_gtr_min[wave_slice]
 
             if w.sum() == 0:
+                nfails += 1
                 warn_mpi(
                     "Not enough statistics for VarLSSFitter at"
                     f" wave_obs: {self.waveobs[iwave]:.2f}.",
@@ -1029,6 +1031,7 @@ class VarLSSFitter():
                     bounds=(0, 2)
                 )
             except Exception as e:
+                nfails += 1
                 warn_mpi(
                     "VarLSSFitter failed at wave_obs: "
                     f"{self.waveobs[iwave]:.2f}. "
@@ -1039,8 +1042,9 @@ class VarLSSFitter():
                 std_results[iwave] = np.sqrt(np.diag(pcov))
 
         # Smooth new estimates
-        fit_results, nfails = self._smooth_fit_results(
-            fit_results, std_results)
+        if smooth:
+            fit_results = self._smooth_fit_results(fit_results, std_results)
+
         if nfails > 0:
             warn_mpi(
                 f"VarLSSFitter failed and extrapolated at {nfails} points.",
