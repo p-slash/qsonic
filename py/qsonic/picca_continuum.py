@@ -281,23 +281,14 @@ class PiccaContinuumFitter():
 
         return cont
 
-    def _iminuit_minimizer(self, spec):
+    def _iminuit_minimizer(self, spec, a0):
         def _cost(x):
             return self._continuum_costfn(
                 x, spec.forestwave, spec.forestflux, spec.forestivar_sm,
                 spec.z_qso)
 
-        def _x0():
-            a0 = 0
-            n0 = 0
-            for arm, ivar_arm in spec.forestivar_sm.items():
-                a0 += np.dot(spec.forestflux[arm], ivar_arm)
-                n0 += np.sum(ivar_arm)
-
-            return a0 / n0
-
         x0 = np.zeros_like(spec.cont_params['x'])
-        x0[0] = _x0()
+        x0[0] = a0
         mini = Minuit(_cost, x0)
         mini.errordef = Minuit.LEAST_SQUARES
         mini.migrad()
@@ -305,15 +296,17 @@ class PiccaContinuumFitter():
         result = {}
 
         result['valid'] = mini.valid
-        result['x'] = mini.values[0]
+        result['x'] = np.array(mini.values)
         result['xcov'] = np.array(mini.covariance)
 
         return result
 
-    def _scipy_l_bfgs_b_minimizer(self, spec):
+    def _scipy_l_bfgs_b_minimizer(self, spec, a0):
+        x0 = np.zeros_like(spec.cont_params['x'])
+        x0[0] = a0
         mini = minimize(
             self._continuum_costfn,
-            spec.cont_params['x'],
+            x0,
             args=(spec.forestwave,
                   spec.forestflux,
                   spec.forestivar_sm,
@@ -327,7 +320,7 @@ class PiccaContinuumFitter():
 
         result['valid'] = mini.success
         result['x'] = mini.x
-        result['xcov'] = result.hess_inv.todense()
+        result['xcov'] = mini.hess_inv.todense()
 
         return result
 
@@ -355,9 +348,19 @@ class PiccaContinuumFitter():
         # We can precalculate meanflux and varlss here,
         # and store them in respective keys to spec.cont_params
 
-        result = self.minimizer(spec)
+        def get_a0():
+            a0 = 0
+            n0 = 1e-6
+            for arm, ivar_arm in spec.forestivar_sm.items():
+                a0 += np.dot(spec.forestflux[arm], ivar_arm)
+                n0 += np.sum(ivar_arm)
 
-        if result['valid']:
+            return a0 / n0
+
+        result = self.minimizer(spec, get_a0())
+        spec.cont_params['valid'] = result['valid']
+
+        if spec.cont_params['valid']:
             spec.cont_params['cont'] = {}
             chi2 = 0
             for arm, wave_arm in spec.forestwave.items():
@@ -407,11 +410,18 @@ class PiccaContinuumFitter():
             else:
                 no_valid_fits += 1
 
-        no_valid_fits = self.comm.reduce(no_valid_fits, root=0)
-        no_invalid_fits = self.comm.reduce(no_invalid_fits, root=0)
+        no_valid_fits = self.comm.allreduce(no_valid_fits)
+        no_invalid_fits = self.comm.allreduce(no_invalid_fits)
         logging_mpi(f"Number of valid fits: {no_valid_fits}", self.mpi_rank)
         logging_mpi(f"Number of invalid fits: {no_invalid_fits}",
                     self.mpi_rank)
+
+        if no_valid_fits == 0:
+            raise QsonicException("Crucial error: No valid continuum fits!")
+
+        invalid_ratio = no_invalid_fits / (no_valid_fits + no_invalid_fits)
+        if invalid_ratio > 0.2:
+            warn_mpi("More than 20% spectra have invalid fits.", self.mpi_rank)
 
     def _project_normalize_meancont(self, new_meancont):
         """ Project out higher order Legendre polynomials from the new mean
