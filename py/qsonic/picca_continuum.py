@@ -83,7 +83,7 @@ class PiccaContinuumFitter():
         Rank of the MPI process.
     meanflux_interp: Fast1DInterpolator
         Interpolator for mean flux. If fiducial is not set, this equals to 1.
-    flux_stacker: FluxStacker
+    flux_stacker: FluxStacker (disabled)
         Stacks flux. Set up with 8 A wavelength bin size.
     varlss_fitter: VarLSSFitter or None
         None if fiducials are set for var_lss.
@@ -181,8 +181,8 @@ class PiccaContinuumFitter():
         else:
             self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
 
-        self.flux_stacker = FluxStacker(
-            args.wave1, args.wave2, 8., comm=self.comm)
+        # self.flux_stacker = FluxStacker(
+        #     args.wave1, args.wave2, 8., comm=self.comm)
 
         if args.fiducial_varlss:
             self.varlss_fitter = None
@@ -315,7 +315,7 @@ class PiccaContinuumFitter():
                     break
 
                 cont_est *= self.meanflux_interp(wave_arm)
-                cont_est *= self.flux_stacker(wave_arm)
+                # cont_est *= self.flux_stacker(wave_arm)
                 spec.cont_params['cont'][arm] = cont_est
                 var_lss = self.varlss_interp(wave_arm) * cont_est**2
                 weight = 1. / (1 + spec.forestivar_sm[arm] * var_lss)
@@ -403,8 +403,6 @@ class PiccaContinuumFitter():
         the mean. This function updates
         :attr:`meancont_interp.fp <.meancont_interp>` if noupdate is False.
 
-        It also updates :attr:`flux_stacker`.
-
         Arguments
         ---------
         spectra_list: list(Spectrum)
@@ -422,7 +420,7 @@ class PiccaContinuumFitter():
         norm_flux = np.zeros(self.nbins)
         std_flux = np.empty(self.nbins)
         counts = np.zeros(self.nbins)
-        self.flux_stacker.reset()
+        # self.flux_stacker.reset()
 
         for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
@@ -444,9 +442,9 @@ class PiccaContinuumFitter():
                 counts += np.bincount(
                     bin_idx, weights=weight, minlength=self.nbins)
 
-                self.flux_stacker.add(wave_arm, flux, weight)
+                # self.flux_stacker.add(wave_arm, flux, weight)
 
-        self.flux_stacker.calculate()
+        # self.flux_stacker.calculate()
         self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
         self.comm.Allreduce(MPI.IN_PLACE, counts)
         w = counts > 0
@@ -617,10 +615,10 @@ class PiccaContinuumFitter():
             names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
             extname=f'CONT-{it}')
 
-        fattr.write(
-            [self.flux_stacker.waveobs, self.flux_stacker.stacked_flux],
-            names=['lambda', 'stacked_flux'],
-            extname=f'STACKED_FLUX-{it}')
+        # fattr.write(
+        #     [self.flux_stacker.waveobs, self.flux_stacker.stacked_flux],
+        #     names=['lambda', 'stacked_flux'],
+        #     extname=f'STACKED_FLUX-{it}')
 
         if self.varlss_fitter is None:
             return
@@ -1002,14 +1000,14 @@ class VarLSSFitter():
         std_results = np.zeros_like(initial_guess)
 
         error_estimates = self.get_var_delta_error(method)
-        error_estimates = error_estimates.reshape(self.nwbins, self.nvarbins)
-        var_delta_r = self.var_delta.reshape(self.nwbins, self.nvarbins)
         w_gtr_min = ((self.num_pixels > VarLSSFitter.min_no_pix)
                      & (self.num_qso > VarLSSFitter.min_no_qso))
-        w_gtr_min = w_gtr_min.reshape(self.nwbins, self.nvarbins)
 
         for iwave in range(self.nwbins):
-            w = w_gtr_min[iwave]
+            i1 = iwave * self.nvarbins
+            i2 = i1 + self.nvarbins
+            wave_slice = np.s_[i1:i2]
+            w = w_gtr_min[wave_slice]
 
             if w.sum() == 0:
                 warn_mpi(
@@ -1022,9 +1020,9 @@ class VarLSSFitter():
                 pfit, pcov = curve_fit(
                     VarLSSFitter.variance_function,
                     self.var_centers[w],
-                    var_delta_r[iwave][w],
+                    self.var_delta[wave_slice][w],
                     p0=initial_guess[iwave],
-                    sigma=error_estimates[iwave][w],
+                    sigma=error_estimates[wave_slice][w],
                     absolute_sigma=True,
                     check_finite=True,
                     bounds=(0, 2)
