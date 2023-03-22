@@ -16,7 +16,7 @@ def setup_data():
         cat_by_survey = np.array(
             [(39627939372861215, 2.328, 229.86, 6.19, 8258, b'main')] * nspec,
             dtype=cat_dtype)
-        inc = np.arange(nspec)
+        inc = np.roll(np.arange(nspec), 2)
         cat_by_survey['TARGETID'] += inc
 
         npix = 1000
