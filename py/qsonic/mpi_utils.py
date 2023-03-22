@@ -30,7 +30,7 @@ def mpi_parse(parser, comm, mpi_rank, options=None):
 
     args = comm.bcast(args)
     if args == -1:
-        raise QsonicException("Error parsing arguments.")
+        exit(0)
 
     return args
 

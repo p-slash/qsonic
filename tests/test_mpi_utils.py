@@ -28,7 +28,7 @@ class TestMPIUtils(TestCase):
         assert (args.catalog == "incat")
         assert (args.outdir == "outdir")
 
-        with pytest.raises(QsonicException):
+        with pytest.raises(SystemExit):
             options = "--catalog incat -o outdir".split(' ')
             qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options)
 
