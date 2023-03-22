@@ -30,9 +30,9 @@ _optional_columns = [
 """list(str): Optional columns."""
 _all_columns = [
     col for reqset in (
-        _required_columns + _required_data_columns + _optional_columns
+        _required_columns + _required_data_columns
     ) for col in reqset
-]
+] + _optional_columns
 
 
 def read_quasar_catalog(
