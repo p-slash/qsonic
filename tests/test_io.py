@@ -45,6 +45,7 @@ class TestIOReading(object):
                 assert (not outdata[key])
                 assert (not inval)
                 continue
+
             for arm in xarms:
                 assert (arm in outdata[key])
                 assert (arm in inval)
@@ -112,6 +113,14 @@ def my_setup_fits(tmp_path, setup_data):
             fts.write(data['flux'][arm], extname=f"{arm}_FLUX")
             fts.write(data['ivar'][arm], extname=f"{arm}_IVAR")
             fts.write(np.zeros(shape, dtype='i4'), extname=f"{arm}_MASK")
+
+    # return sorted data truth
+    # Sort the generated catalog first.
+    sort_idx = np.argsort(cat_by_survey, order="TARGETID")
+    cat_by_survey = cat_by_survey[sort_idx]
+    for key in ['flux', 'ivar', 'mask']:
+        for arm in xarms:
+            data[key][arm] = data[key][arm][sort_idx]
 
     yield cat_by_survey, tmp_path, xarms, data
 
