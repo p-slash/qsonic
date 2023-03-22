@@ -4,6 +4,8 @@ import warnings
 import fitsio
 import numpy as np
 
+from qsonic import QsonicException
+
 
 def mpi_parse(parser, comm, mpi_rank, options=None):
     """ Parse arguments on the master node, then broadcast.

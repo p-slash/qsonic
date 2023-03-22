@@ -7,6 +7,7 @@ import warnings
 
 import numpy as np
 
+from qsonic import QsonicException
 import qsonic.catalog
 import qsonic.io
 from qsonic.masks import BALMask
@@ -90,7 +91,7 @@ def mpi_set_targetid_list_to_remove(args, comm, mpi_rank):
 
     ids_to_remove = comm.bcast(ids_to_remove)
     if ids_to_remove is None:
-        raise Exception("Error while reading remove_targetid_list.")
+        raise QsonicException("Error while reading remove_targetid_list.")
 
     if args.catalog:
         catalog = qsonic.io.mpi_read_qso_catalog(
@@ -131,7 +132,8 @@ def mpi_read_all_deltas(args, comm, mpi_rank, mpi_size):
     all_delta_files = comm.bcast(all_delta_files)
 
     if not all_delta_files:
-        raise Exception(f"Delta files are not found in {args.input_dir}.")
+        raise QsonicException(
+            f"Delta files are not found in {args.input_dir}.")
 
     ndelta_all = len(all_delta_files)
     logging_mpi(f"There are {ndelta_all} delta files.", mpi_rank)
@@ -248,8 +250,9 @@ def main():
 
     try:
         mpi_run_all(comm, mpi_rank, mpi_size)
+    except QsonicException as e:
+        logging_mpi(e, mpi_rank, "exception")
     except Exception as e:
-        logging_mpi(f"{e}", mpi_rank, "error")
-        return 1
-
-    return 0
+        logging.error(f"Unexpected error on Rank{mpi_rank}. Abort.")
+        logging.exception(e)
+        comm.Abort()

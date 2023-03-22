@@ -5,6 +5,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.testing as npt
 
+from qsonic import QsonicException
 from qsonic.io import add_io_parser
 import qsonic.mpi_utils
 import qsonic.spectrum

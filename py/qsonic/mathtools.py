@@ -2,6 +2,8 @@
 import numpy as np
 from numba import njit
 
+from qsonic import QsonicException
+
 
 @njit("f8[:](f8[:], f8, f8, f8[:])")
 def _fast_eval_interp1d(x, xp0, dxp, fp):
@@ -215,7 +217,7 @@ class SubsampleCov():
             newshape = (nsamples, ndata[0], ndata[1])
             self.ndata = ndata[1]
         else:
-            raise Exception("ndata must be int or tuple of ints.")
+            raise QsonicException("ndata must be int or tuple of ints.")
 
         self.all_measurements = np.zeros(newshape)
         self.all_weights = np.zeros((nsamples, 1, self.ndata))

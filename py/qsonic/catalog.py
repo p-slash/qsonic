@@ -8,6 +8,7 @@ from healpy import ang2pix
 import numpy as np
 from numpy.lib.recfunctions import rename_fields, append_fields
 
+from qsonic import QsonicException
 from qsonic.mpi_utils import logging_mpi, balance_load
 
 _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
@@ -72,7 +73,8 @@ def read_quasar_catalog(
 
 def mpi_read_quasar_catalog(
         filename, comm, mpi_rank, is_mock,
-        keep_surveys=None, zmin=2.1, zmax=6.0):
+        keep_surveys=None, zmin=2.1, zmax=6.0
+):
     """ Returns the same quasar catalog object on all MPI ranks.
 
     It is sorted in the following order: HPXPIXEL, SURVEY (if applicable),
@@ -107,12 +109,12 @@ def mpi_read_quasar_catalog(
             catalog = read_quasar_catalog(
                 filename, is_mock, keep_surveys, zmin, zmax)
         except Exception as e:
-            logging_mpi(f"{e}", 0, "error")
+            logging_mpi(e, 0, "error")
             catalog = None
 
     catalog = comm.bcast(catalog, root=0)
     if catalog is None:
-        raise Exception("Error while reading catalog.")
+        raise QsonicException("Error while reading catalog.")
 
     return catalog
 

@@ -6,6 +6,7 @@ from os import makedirs as os_makedirs
 
 import numpy as np
 
+from qsonic import QsonicException
 import qsonic.catalog
 import qsonic.io
 import qsonic.spectrum
@@ -214,7 +215,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
         full_catalog, mpi_rank, mpi_size)
 
     # Blinding
-    qsonic.spectrum.Spectrum.set_blinding(local_queue, args)
+    qsonic.spectrum.Spectrum.set_blinding(full_catalog, args)
 
     # Read masks before data
     maskers = mpi_read_masks(local_queue, args, comm, mpi_rank)
@@ -279,8 +280,9 @@ def main():
 
     try:
         mpi_run_all(comm, mpi_rank, mpi_size)
+    except QsonicException as e:
+        logging_mpi(e, mpi_rank, "exception")
     except Exception as e:
-        logging_mpi(f"{e}", mpi_rank, "error")
-        return 1
-
-    return 0
+        logging.error(f"Unexpected error on Rank{mpi_rank}. Abort.")
+        logging.exception(e)
+        comm.Abort()
