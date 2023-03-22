@@ -215,7 +215,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
         full_catalog, mpi_rank, mpi_size)
 
     # Blinding
-    qsonic.spectrum.Spectrum.set_blinding(local_queue, args)
+    qsonic.spectrum.Spectrum.set_blinding(full_catalog, args)
 
     # Read masks before data
     maskers = mpi_read_masks(local_queue, args, comm, mpi_rank)
