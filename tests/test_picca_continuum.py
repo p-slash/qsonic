@@ -190,7 +190,6 @@ class TestPiccaContinuum(object):
         npt.assert_almost_equal(qcfit.meancont_interp.fp.mean(), 1)
 
 
-@pytest.mark.mpi
 class TestVarLSSFitter(object):
     def test_add(self, setup_data):
         nwbins = 4
@@ -222,6 +221,29 @@ class TestVarLSSFitter(object):
         varlss_fitter._allreduce()
         npt.assert_equal(varlss_fitter.wvalid_bins.sum(), expected_size)
         npt.assert_equal(varlss_fitter.mean_delta.size, expected_size)
+
+    def test_fit(self):
+        varlss_fitter = VarLSSFitter(
+            3600, 4800, nwbins=1, var1=1e-5, var2=2.)
+
+        true_var_lss = np.array([0.1])
+        nspec = 1000
+        nwave = int((4800 - 3600) / 0.8) + 1
+        wave = np.linspace(3600, 4800, nwave)
+        RNST = np.random.default_rng()
+        for jj in range(nspec):
+            var_pipe = RNST.uniform(np.log10(1e-5), np.log10(2), size=nwave)
+            var_pipe = 10**var_pipe
+            std_gen = np.sqrt(var_pipe + true_var_lss)
+            delta = RNST.normal(0, std_gen, nwave)
+
+            varlss_fitter.add(wave, delta, 1 / var_pipe)
+
+        fit_results, std_results = varlss_fitter.fit(
+            true_var_lss, smooth=False)
+        atol = 3 * std_results[0]
+        rtol = atol / true_var_lss[0]
+        npt.assert_allclose(fit_results, true_var_lss, rtol=rtol, atol=atol)
 
 
 if __name__ == '__main__':
