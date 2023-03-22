@@ -194,7 +194,8 @@ class PiccaContinuumFitter():
             self.meanflux_interp = self._get_fiducial_interp(
                 args.fiducial_meanflux, 'MEANFLUX')
         else:
-            self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
+            self.meanflux_interp = Fast1DInterpolator(
+                args.wave1, args.wave2 - args.wave1, np.ones(3))
 
         # self.flux_stacker = FluxStacker(
         #     args.wave1, args.wave2, 8., comm=self.comm)
@@ -810,10 +811,6 @@ class VarLSSFitter():
     subsampler: SubsampleCov
         Subsampler object that stores mean_delta in axis=0, var_delta in axis=1
         , var2_delta in axis=2.
-    num_pixels: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Number of pixels in the bin.
-    num_qso: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Number of quasars in the bin.
     comm: MPI.COMM_WORLD or None, default: None
         MPI comm object to allreduce if enabled.
     mpi_rank: int
@@ -1163,10 +1160,12 @@ class VarLSSFitter():
 
     @property
     def num_pixels(self):
+        """:class:`ndarray <numpy.ndarray>`: Number of pixels in bins."""
         return self._num_pixels[self.wvalid_bins]
 
     @property
     def num_qso(self):
+        """:class:`ndarray <numpy.ndarray>`: Number of quasars in bins."""
         return self._num_qso[self.wvalid_bins]
 
     @property
