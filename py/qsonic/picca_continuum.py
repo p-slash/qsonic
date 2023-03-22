@@ -3,12 +3,14 @@ import argparse
 
 import numpy as np
 import fitsio
+from iminuit import Minuit
 from scipy.optimize import minimize, curve_fit
 from scipy.interpolate import UnivariateSpline
 from scipy.special import legendre
 
 from mpi4py import MPI
 
+from qsonic import QsonicException
 from qsonic.spectrum import valid_spectra
 from qsonic.mpi_utils import logging_mpi, warn_mpi, MPISaver
 from qsonic.mathtools import mypoly1d, Fast1DInterpolator, SubsampleCov
@@ -46,6 +48,9 @@ def add_picca_continuum_parser(parser=None):
     cont_group.add_argument(
         "--cont-order", type=int, default=1,
         help="Order of continuum fitting polynomial.")
+    cont_group.add_argument(
+        "--minimizer", default="iminuit", choices=["iminuit", "l_bfgs_b"],
+        help="Minimizer to use fitting continuum.")
 
     return parser
 
@@ -77,6 +82,8 @@ class PiccaContinuumFitter():
         Denominator for the slope term in the continuum model.
     meancont_interp: Fast1DInterpolator
         Fast linear interpolator object for the mean continuum.
+    minimizer: function
+        Function that points to one of the minimizer options.
     comm: MPI.COMM_WORLD
         MPI comm object to reduce, broadcast etc.
     mpi_rank: int
@@ -141,12 +148,12 @@ class PiccaContinuumFitter():
         nsize, waves_0, dwave = self.comm.bcast([nsize, waves_0, dwave])
 
         if nsize == 0:
-            raise Exception(
+            raise QsonicException(
                 "Failed to construct fiducial mean flux or varlss from "
                 f"{fname}::LAMBDA is not equally spaced.")
 
         if nsize == -1:
-            raise Exception(
+            raise QsonicException(
                 "Failed to construct fiducial mean flux or varlss from "
                 f"{fname}::{col2read} is not in file.")
 
@@ -172,6 +179,14 @@ class PiccaContinuumFitter():
             self.rfwave[0], self.dwrf, np.ones(self.nbins),
             ep=np.zeros(self.nbins))
 
+        if args.minimizer == "iminuit":
+            self.minimizer = self._iminuit_minimizer
+        elif args.minimizer == "l_bfgs_b":
+            self.minimizer = self._scipy_l_bfgs_b_minimizer
+        else:
+            raise QsonicException(
+                "Undefined minimizer. Developer forgot to implement.")
+
         self.comm = MPI.COMM_WORLD
         self.mpi_rank = self.comm.Get_rank()
 
@@ -179,7 +194,8 @@ class PiccaContinuumFitter():
             self.meanflux_interp = self._get_fiducial_interp(
                 args.fiducial_meanflux, 'MEANFLUX')
         else:
-            self.meanflux_interp = Fast1DInterpolator(0., 1., np.ones(3))
+            self.meanflux_interp = Fast1DInterpolator(
+                args.wave1, args.wave2 - args.wave1, np.ones(3))
 
         # self.flux_stacker = FluxStacker(
         #     args.wave1, args.wave2, 8., comm=self.comm)
@@ -266,6 +282,49 @@ class PiccaContinuumFitter():
 
         return cont
 
+    def _iminuit_minimizer(self, spec, a0):
+        def _cost(x):
+            return self._continuum_costfn(
+                x, spec.forestwave, spec.forestflux, spec.forestivar_sm,
+                spec.z_qso)
+
+        x0 = np.zeros_like(spec.cont_params['x'])
+        x0[0] = a0
+        mini = Minuit(_cost, x0)
+        mini.errordef = Minuit.LEAST_SQUARES
+        mini.migrad()
+
+        result = {}
+
+        result['valid'] = mini.valid
+        result['x'] = np.array(mini.values)
+        result['xcov'] = np.array(mini.covariance)
+
+        return result
+
+    def _scipy_l_bfgs_b_minimizer(self, spec, a0):
+        x0 = np.zeros_like(spec.cont_params['x'])
+        x0[0] = a0
+        mini = minimize(
+            self._continuum_costfn,
+            x0,
+            args=(spec.forestwave,
+                  spec.forestflux,
+                  spec.forestivar_sm,
+                  spec.z_qso),
+            method='L-BFGS-B',
+            bounds=None,
+            jac=None
+        )
+
+        result = {}
+
+        result['valid'] = mini.success
+        result['x'] = mini.x
+        result['xcov'] = mini.hess_inv.todense()
+
+        return result
+
     def fit_continuum(self, spec):
         """ Fits the continuum for a single Spectrum.
 
@@ -289,26 +348,25 @@ class PiccaContinuumFitter():
         """
         # We can precalculate meanflux and varlss here,
         # and store them in respective keys to spec.cont_params
-        result = minimize(
-            self._continuum_costfn,
-            spec.cont_params['x'],
-            args=(spec.forestwave,
-                  spec.forestflux,
-                  spec.forestivar_sm,
-                  spec.z_qso),
-            method='L-BFGS-B',
-            bounds=None,
-            jac=None
-        )
 
-        spec.cont_params['valid'] = result.success
+        def get_a0():
+            a0 = 0
+            n0 = 1e-6
+            for arm, ivar_arm in spec.forestivar_sm.items():
+                a0 += np.dot(spec.forestflux[arm], ivar_arm)
+                n0 += np.sum(ivar_arm)
 
-        if result.success:
+            return a0 / n0
+
+        result = self.minimizer(spec, get_a0())
+        spec.cont_params['valid'] = result['valid']
+
+        if spec.cont_params['valid']:
             spec.cont_params['cont'] = {}
             chi2 = 0
             for arm, wave_arm in spec.forestwave.items():
                 cont_est = self.get_continuum_model(
-                    result.x, wave_arm / (1 + spec.z_qso))
+                    result['x'], wave_arm / (1 + spec.z_qso))
 
                 if any(cont_est < 0):
                     spec.cont_params['valid'] = False
@@ -327,8 +385,8 @@ class PiccaContinuumFitter():
             spec.cont_params['chi2'] = chi2
 
         if spec.cont_params['valid']:
-            spec.cont_params['x'] = result.x
-            spec.cont_params['xcov'] = result.hess_inv.todense()
+            spec.cont_params['x'] = result['x']
+            spec.cont_params['xcov'] = result['xcov']
         else:
             spec.cont_params['cont'] = None
             spec.cont_params['chi2'] = -1
@@ -353,11 +411,18 @@ class PiccaContinuumFitter():
             else:
                 no_valid_fits += 1
 
-        no_valid_fits = self.comm.reduce(no_valid_fits, root=0)
-        no_invalid_fits = self.comm.reduce(no_invalid_fits, root=0)
+        no_valid_fits = self.comm.allreduce(no_valid_fits)
+        no_invalid_fits = self.comm.allreduce(no_invalid_fits)
         logging_mpi(f"Number of valid fits: {no_valid_fits}", self.mpi_rank)
         logging_mpi(f"Number of invalid fits: {no_invalid_fits}",
                     self.mpi_rank)
+
+        if no_valid_fits == 0:
+            raise QsonicException("Crucial error: No valid continuum fits!")
+
+        invalid_ratio = no_invalid_fits / (no_valid_fits + no_invalid_fits)
+        if invalid_ratio > 0.2:
+            warn_mpi("More than 20% spectra have invalid fits.", self.mpi_rank)
 
     def _project_normalize_meancont(self, new_meancont):
         """ Project out higher order Legendre polynomials from the new mean
@@ -746,10 +811,6 @@ class VarLSSFitter():
     subsampler: SubsampleCov
         Subsampler object that stores mean_delta in axis=0, var_delta in axis=1
         , var2_delta in axis=2.
-    num_pixels: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Number of pixels in the bin.
-    num_qso: int :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Number of quasars in the bin.
     comm: MPI.COMM_WORLD or None, default: None
         MPI comm object to allreduce if enabled.
     mpi_rank: int
@@ -895,7 +956,6 @@ class VarLSSFitter():
             spl = UnivariateSpline(
                 self.waveobs[w], fit_results[w], w=1 / std_results[w])
 
-            nfails = np.sum(fit_results == 0)
             fit_results = spl(self.waveobs)
         # else ndim == 2
         else:
@@ -905,11 +965,10 @@ class VarLSSFitter():
             spl2 = UnivariateSpline(
                 self.waveobs[w], fit_results[w, 1], w=1 / std_results[w, 1])
 
-            nfails = np.sum(fit_results[:, 0] == 0)
             fit_results[:, 0] = spl1(self.waveobs)
             fit_results[:, 1] = spl2(self.waveobs)
 
-        return fit_results, nfails
+        return fit_results
 
     def get_var_delta_error(self, method="gauss"):
         """ Calculate the error (sigma) on var_delta using a given method.
@@ -959,7 +1018,7 @@ class VarLSSFitter():
         if arr.ndim == 2:
             assert (arr.shape[1] == 2)
 
-    def fit(self, initial_guess, method="gauss"):
+    def fit(self, initial_guess, method="gauss", smooth=True):
         """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
 
         Second axis always contains ``eta`` values. Example::
@@ -981,6 +1040,8 @@ class VarLSSFitter():
             one. If 2D, its shape must be ``(nwbins, 2)``.
         method: str, default: gauss
             Error estimation method
+        smooth: bool, default: True
+            Smooth results using UnivariateSpline.
 
         Returns
         ---------
@@ -996,6 +1057,7 @@ class VarLSSFitter():
         self._fit_array_shape_assert(initial_guess)
         self._allreduce()
 
+        nfails = 0
         fit_results = np.zeros_like(initial_guess)
         std_results = np.zeros_like(initial_guess)
 
@@ -1010,6 +1072,7 @@ class VarLSSFitter():
             w = w_gtr_min[wave_slice]
 
             if w.sum() == 0:
+                nfails += 1
                 warn_mpi(
                     "Not enough statistics for VarLSSFitter at"
                     f" wave_obs: {self.waveobs[iwave]:.2f}.",
@@ -1028,6 +1091,7 @@ class VarLSSFitter():
                     bounds=(0, 2)
                 )
             except Exception as e:
+                nfails += 1
                 warn_mpi(
                     "VarLSSFitter failed at wave_obs: "
                     f"{self.waveobs[iwave]:.2f}. "
@@ -1038,8 +1102,9 @@ class VarLSSFitter():
                 std_results[iwave] = np.sqrt(np.diag(pcov))
 
         # Smooth new estimates
-        fit_results, nfails = self._smooth_fit_results(
-            fit_results, std_results)
+        if smooth:
+            fit_results = self._smooth_fit_results(fit_results, std_results)
+
         if nfails > 0:
             warn_mpi(
                 f"VarLSSFitter failed and extrapolated at {nfails} points.",
@@ -1095,10 +1160,12 @@ class VarLSSFitter():
 
     @property
     def num_pixels(self):
+        """:class:`ndarray <numpy.ndarray>`: Number of pixels in bins."""
         return self._num_pixels[self.wvalid_bins]
 
     @property
     def num_qso(self):
+        """:class:`ndarray <numpy.ndarray>`: Number of quasars in bins."""
         return self._num_qso[self.wvalid_bins]
 
     @property
