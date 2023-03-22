@@ -219,21 +219,22 @@ def save_deltas(
         results.close()
 
 
-def _read_resoimage(imhdu, quasar_indices, sort_idx, nwave):
+def _read_resoimage(imhdu, quasar_indices, nwave):
     # Reading into sorted order is faster
+    # Since the output catalog is already sorted, we place them in order
     ndiags = imhdu.get_dims()[1]
     dtype = imhdu._get_image_numpy_dtype()
     data = np.empty((quasar_indices.size, ndiags, nwave), dtype=dtype)
-    for idata, iqso in zip(sort_idx, quasar_indices):
+    for idata, iqso in enumerate(quasar_indices):
         data[idata, :, :] = imhdu[int(iqso), :, :]
 
     return data
 
 
-def _read_imagehdu(imhdu, quasar_indices, sort_idx, nwave):
+def _read_imagehdu(imhdu, quasar_indices, nwave):
     dtype = imhdu._get_image_numpy_dtype()
     data = np.empty((quasar_indices.size, nwave), dtype=dtype)
-    for idata, iqso in zip(sort_idx, quasar_indices):
+    for idata, iqso in enumerate(quasar_indices):
         data[idata, :] = imhdu[int(iqso), :]
 
     return data
@@ -290,7 +291,6 @@ def _read_onehealpix_file(
             f"healpix:{common_targetids.size}!", RuntimeWarning)
 
     fbrmap = fbrmap[idx_fbr]
-    sort_idx = np.argsort(idx_fbr)
 
     data = {
         'wave': {},
@@ -306,17 +306,17 @@ def _read_onehealpix_file(
         nwave = data['wave'][arm].size
 
         data['flux'][arm] = _read_imagehdu(
-            fitsfile[f'{arm}_FLUX'], idx_fbr, sort_idx, nwave)
+            fitsfile[f'{arm}_FLUX'], idx_fbr, nwave)
         data['ivar'][arm] = _read_imagehdu(
-            fitsfile[f'{arm}_IVAR'], idx_fbr, sort_idx, nwave)
+            fitsfile[f'{arm}_IVAR'], idx_fbr, nwave)
         data['mask'][arm] = _read_imagehdu(
-            fitsfile[f'{arm}_MASK'], idx_fbr, sort_idx, nwave)
+            fitsfile[f'{arm}_MASK'], idx_fbr, nwave)
 
         if skip_resomat or f'{arm}_RESOLUTION' not in fitsfile:
             continue
 
         data['reso'][arm] = _read_resoimage(
-            fitsfile[f'{arm}_RESOLUTION'], idx_fbr, sort_idx, nwave)
+            fitsfile[f'{arm}_RESOLUTION'], idx_fbr, nwave)
 
     fitsfile.close()
 
