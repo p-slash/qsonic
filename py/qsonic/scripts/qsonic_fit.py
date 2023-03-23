@@ -36,6 +36,9 @@ def get_parser(add_help=True):
 
     analysis_group = parser.add_argument_group('Analysis options')
     analysis_group.add_argument(
+        "--smoothing-scale", default=16., type=float,
+        help="Smoothing scale for pipeline noise in A.")
+    analysis_group.add_argument(
         "--min-rsnr", type=float, default=0.,
         help="Minium SNR <F/sigma> above Lya.")
     analysis_group.add_argument(
@@ -230,8 +233,9 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
         spectra_list, args.forest_w1, args.forest_w2, args.skip, mpi_rank)
 
     # Create smoothed ivar as intermediate variable
-    for spec in spectra_list:
-        spec.set_smooth_ivar()
+    if args.smoothing_scale > 0:
+        for spec in spectra_list:
+            spec.set_smooth_ivar(args.smoothing_scale)
 
     # Continuum fitting
     # -------------------
