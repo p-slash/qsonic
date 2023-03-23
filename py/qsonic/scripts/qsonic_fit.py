@@ -274,6 +274,8 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
 
 
 def main():
+    start_time = time.time()
+
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     mpi_rank = comm.Get_rank()
@@ -290,3 +292,6 @@ def main():
         logging.error(f"Unexpected error on Rank{mpi_rank}. Abort.")
         logging.exception(e)
         comm.Abort()
+
+    etime = (time.time() - start_time) / 60  # min
+    logging_mpi(f"Total time spent is {etime:.1f} mins.", mpi_rank)
