@@ -302,12 +302,19 @@ class Spectrum():
         npixels = (1 + self.z_qso) * dforest_wave / self.dwave
         return self.get_real_size() > skip_ratio * npixels
 
-    def set_smooth_ivar(self):
+    def set_smooth_ivar(self, smoothing_size=16.):
         """ Set `forestivar_sm` to smoothed inverse variance. Before this call
-        `forestivar_sm` points to `forestivar`."""
+        `forestivar_sm` points to `forestivar`.
+
+        Arguments
+        ---------
+        smoothing_size: float, default: 16.
+            Gaussian smoothing spread in A.
+        """
         self._forestivar_sm = {}
+        sigma_pix = smoothing_size / self.dwave
         for arm, ivar_arm in self.forestivar.items():
-            self._forestivar_sm[arm] = get_smooth_ivar(ivar_arm)
+            self._forestivar_sm[arm] = get_smooth_ivar(ivar_arm, sigma_pix)
 
     def _coadd_arms_reso(self, nwaves, idxes):
         """Coadd resolution matrix with equal weights."""
