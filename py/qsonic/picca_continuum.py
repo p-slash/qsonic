@@ -39,7 +39,7 @@ def add_picca_continuum_parser(parser=None):
         "--rfdwave", type=float, default=0.8,
         help="Rest-frame wave steps. Complies with forest limits")
     cont_group.add_argument(
-        "--no-iterations", type=int, default=5,
+        "--no-iterations", type=int, default=10,
         help="Number of iterations for continuum fitting.")
     cont_group.add_argument(
         "--fiducial-meanflux", help="Fiducial mean flux FITS file.")
@@ -72,6 +72,10 @@ class PiccaContinuumFitter():
     be smoothed before fitting. Mean continuum and var_lss are smoothed using
     inverse weights and cubic spline to help numerical stability.
 
+    When fitting for var_lss, number of wavelength bins in the observed frame
+    for variance fitting ``nwbins`` are calculated by demanding 120 A steps
+    between bins as closely as possible.
+
     Contruct an instance, then call :meth:`iterate` with local spectra.
 
     Parameters
@@ -79,8 +83,6 @@ class PiccaContinuumFitter():
     args: argparse.Namespace
         Namespace. Wavelength values are taken to be the edges (not centers).
         See respective parsers for default values.
-    nwbins: int
-        Number of wavelength bins in the observed frame for variance fitting.
 
     Attributes
     ----------
@@ -174,7 +176,7 @@ class PiccaContinuumFitter():
 
         return Fast1DInterpolator(waves_0, dwave, data, ep=np.zeros(nsize))
 
-    def __init__(self, args, nwbins=20):
+    def __init__(self, args):
         # We first decide how many bins will approximately satisfy
         # rest-frame wavelength spacing. Then we create wavelength edges, and
         # transform these edges into centers
@@ -215,6 +217,7 @@ class PiccaContinuumFitter():
             self.varlss_interp = self._get_fiducial_interp(
                 args.fiducial_varlss, 'VAR')
         else:
+            nwbins = int(round((args.wave2 - args.wave1) / 120.))
             self.varlss_fitter = VarLSSFitter(
                 args.wave1, args.wave2, nwbins,
                 error_method=args.error_method_vardelta,
