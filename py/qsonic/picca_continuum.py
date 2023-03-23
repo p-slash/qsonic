@@ -49,6 +49,12 @@ def add_picca_continuum_parser(parser=None):
         "--cont-order", type=int, default=1,
         help="Order of continuum fitting polynomial.")
     cont_group.add_argument(
+        "--fit-eta", action="store_true",
+        help="NOT IMPLEMENTED: Fit for noise calibration (eta).")
+    cont_group.add_argument(
+        "--normalize-stacked-flux", action="store_true",
+        help="NOT IMPLEMENTED: Force stacked flux to be one at the end.")
+    cont_group.add_argument(
         "--error-method-vardelta", default="regJack",
         choices=VarLSSFitter.accepted_vardelta_error_methods,
         help="Error estimation method for var_delta.")
