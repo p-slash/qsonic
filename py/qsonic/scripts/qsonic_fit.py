@@ -62,7 +62,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     Arguments
     ---------
     local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-        Catalog from :func:`qsonic.catalog.mpi_read_local_qso_catalog`. Each
+        Catalog from :func:`qsonic.catalog.mpi_get_local_queue`. Each
         element is a catalog for one healpix.
     args: argparse.Namespace
         Options passed to script.
@@ -116,7 +116,7 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
     Arguments
     ---------
     local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-        Catalog from :func:`qsonic.catalog.mpi_read_local_qso_catalog`.
+        Catalog from :func:`qsonic.catalog.mpi_get_local_queue`.
     args: argparse.Namespace
         Options passed to script.
     comm: MPI.COMM_WORLD
