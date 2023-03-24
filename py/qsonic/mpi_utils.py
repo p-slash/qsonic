@@ -4,6 +4,8 @@ import warnings
 import fitsio
 import numpy as np
 
+from qsonic import QsonicException
+
 
 def mpi_parse(parser, comm, mpi_rank, options=None):
     """ Parse arguments on the master node, then broadcast.
@@ -62,6 +64,49 @@ def warn_mpi(msg, mpi_rank):
 
     if mpi_rank == 0:
         warnings.warn(msg, RuntimeWarning)
+
+
+class _INVALID_VALUE(object):
+    """Sentinel for invalid values."""
+
+
+def mpi_fnc_bcast(fnc, comm=None, mpi_rank=0, err_msg="", *args, **kwargs):
+    """ Wrapper function to run function then broadcast. Return value of
+    ``fnc`` must be broadcastable.
+
+    Arguments
+    ---------
+    fnc: callable
+        Function to evaluate.
+    comm: MPI.COMM_WORLD or None, default: None
+        MPI comm object for bcast
+    mpi_rank: int, default: 0
+        Rank of the MPI process.
+
+    Returns
+    -------
+    fnc(*args, **kwargs)
+
+    Raises
+    ------
+    QsonicException
+        If any error occur while doing fnc.
+    """
+    result = _INVALID_VALUE
+    if (mpi_rank == 0 or comm is None):
+        try:
+            result = fnc(*args, **kwargs)
+        except Exception as e:
+            logging_mpi(f"{fnc.__module__}.{fnc.__name__}: {e}", 0, "error")
+            result = _INVALID_VALUE
+
+    if comm is not None:
+        result = comm.bcast(result)
+
+    if result is _INVALID_VALUE:
+        raise QsonicException(err_msg)
+
+    return result
 
 
 def balance_load(split_catalog, mpi_size, mpi_rank):
