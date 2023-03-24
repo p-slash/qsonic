@@ -406,6 +406,44 @@ class Spectrum():
             npix += armpix
         return snr / npix
 
+    def mean_resolution(self, arm, weight=None):
+        """ Returns the weighted mean Gaussian sigma of the spectrograph
+        resolution.
+
+        Arguments
+        ---------
+        arm: str
+            Arm.
+        weight: None or ndarray, default: None
+            Weights. If ``None``, forestivar_sm is used.
+
+        Returns
+        -------
+        mean_reso: float or None
+            Gaussian sigma. None if forestreso is not set.
+        """
+        if not self.forestreso:
+            return None
+
+        if weight is None:
+            weight = self.forestivar_sm[arm]
+
+        total_weight = np.sum(weight)
+        reso = np.dot(self.forestreso[arm], weight) / total_weight
+        lambda_eff = np.dot(self.wave[arm], weight) / total_weight
+
+        central_idx = reso.argmax()
+        off_idx = np.array([-2, -1, 1, 2], dtype=int)
+        ratios = reso[central_idx] / reso[central_idx + off_idx]
+        ratios = np.log(ratios)
+        w2 = ratios > 0
+        norm = np.sum(w2)
+        new_ratios = np.zeros_like(ratios)
+        new_ratios[w2] = 1. / np.sqrt(ratios[w2])
+
+        rms_in_pixel = np.abs(off_idx).dot(new_ratios) / np.sqrt(2.) / norm
+        return rms_in_pixel * 3e5 * self.dwave / lambda_eff
+
     def write(self, fts_file, varlss_interp, use_ivar_sm=False):
         """Writes each arm to FITS file separately.
 
@@ -459,6 +497,7 @@ class Spectrum():
 
             cols = [wave_arm, delta, ivar, weight, cont_est]
             if self.forestreso:
+                hdr_dict['MEANRESO'] = self.mean_resolution(arm, weight)
                 cols.append(self.forestreso[arm].T.astype('f8'))
 
             fts_file.write(
