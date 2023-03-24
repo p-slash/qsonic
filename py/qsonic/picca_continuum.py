@@ -74,7 +74,7 @@ class PiccaContinuumFitter():
 
     When fitting for var_lss, number of wavelength bins in the observed frame
     for variance fitting ``nwbins`` are calculated by demanding 120 A steps
-    between bins as closely as possible.
+    between bins as closely as possible by :class:`VarLSSFitter`.
 
     Contruct an instance, then call :meth:`iterate` with local spectra.
 
@@ -134,6 +134,12 @@ class PiccaContinuumFitter():
         Returns
         -------
         Fast1DInterpolator
+
+        Raises
+        ------
+        QsonicException
+            If 'LAMBDA' is not equally spaced or ``col2read`` is not in the
+            file.
         """
         if self.mpi_rank == 0:
             with fitsio.FITS(fname) as fts:
@@ -217,14 +223,14 @@ class PiccaContinuumFitter():
             self.varlss_interp = self._get_fiducial_interp(
                 args.fiducial_varlss, 'VAR')
         else:
-            nwbins = int(round((args.wave2 - args.wave1) / 120.))
             self.varlss_fitter = VarLSSFitter(
-                args.wave1, args.wave2, nwbins,
+                args.wave1, args.wave2,
                 error_method=args.error_method_vardelta,
                 comm=self.comm)
             self.varlss_interp = Fast1DInterpolator(
                 self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
-                0.1 * np.ones(nwbins), ep=np.zeros(nwbins))
+                0.1 * np.ones(self.varlss_fitter.nwbins),
+                ep=np.zeros(self.varlss_fitter.nwbins))
 
         self.niterations = args.no_iterations
         self.cont_order = args.cont_order
@@ -412,6 +418,13 @@ class PiccaContinuumFitter():
         ---------
         spectra_list: list(Spectrum)
             Spectrum objects to fit.
+
+        Raises
+        ------
+        QsonicException
+            If there are no valid fits.
+        RuntimeWarning
+            If more than 20% spectra have invalid fits.
         """
         no_valid_fits = 0
         no_invalid_fits = 0
@@ -796,8 +809,9 @@ class VarLSSFitter():
         Lower observed wavelength edge.
     w2obs: float
         Upper observed wavelength edge.
-    nwbins: int
-        Number of wavelength bins.
+    nwbins: int, default: None
+        Number of wavelength bins. If none, automatically calculated to yield
+        120 A wavelength spacing.
     var1: float, default: 1e-5
         Lower variance edge.
     var2: float, default: 2
@@ -866,7 +880,7 @@ class VarLSSFitter():
         return eta * var_pipe + var_lss
 
     def __init__(
-            self, w1obs, w2obs, nwbins,
+            self, w1obs, w2obs, nwbins=None,
             var1=1e-5, var2=2., nvarbins=100,
             nsubsamples=100, error_method="regJack",
             comm=None
@@ -874,6 +888,9 @@ class VarLSSFitter():
         assert set(
             VarLSSFitter.accepted_vardelta_error_methods
         ).intersection([error_method])
+
+        if nwbins is None:
+            nwbins = int(round((w2obs - w1obs) / 120.))
 
         self.nwbins = nwbins
         self.nvarbins = nvarbins
@@ -1018,6 +1035,11 @@ class VarLSSFitter():
         ---------
         error_estimates: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Error (sigma) on var_delta
+
+        Raises
+        ------
+        ValueError
+            If method is not one of :attr:`accepted_vardelta_error_methods`.
         """
         if method is None:
             method = self.error_method
