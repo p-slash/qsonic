@@ -5,3 +5,4 @@ qsonic.mpi\_utils
    :members:
    :undoc-members:
    :show-inheritance:
+   :exclude-members: _INVALID_VALUE
