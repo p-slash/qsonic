@@ -226,7 +226,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
         varfitter.add(delta.wave, delta.delta, delta.ivar)
 
     logging_mpi("Fitting variance for VarLSS and eta", mpi_rank)
-    fit_results = np.ones((args.nwbins, 2))
+    fit_results = np.ones((varfitter.nwbins, 2))
     fit_results[:, 0] = 0.1
     fit_results, std_results = varfitter.fit(fit_results)
 
