@@ -36,6 +36,9 @@ def get_parser(add_help=True):
 
     analysis_group = parser.add_argument_group('Analysis options')
     analysis_group.add_argument(
+        "--smoothing-scale", default=16., type=float,
+        help="Smoothing scale for pipeline noise in A.")
+    analysis_group.add_argument(
         "--min-rsnr", type=float, default=0.,
         help="Minium SNR <F/sigma> above Lya.")
     analysis_group.add_argument(
@@ -59,7 +62,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     Arguments
     ---------
     local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-        Catalog from :func:`qsonic.catalog.mpi_read_local_qso_catalog`. Each
+        Catalog from :func:`qsonic.catalog.mpi_get_local_queue`. Each
         element is a catalog for one healpix.
     args: argparse.Namespace
         Options passed to script.
@@ -113,7 +116,7 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
     Arguments
     ---------
     local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-        Catalog from :func:`qsonic.catalog.mpi_read_local_qso_catalog`.
+        Catalog from :func:`qsonic.catalog.mpi_get_local_queue`.
     args: argparse.Namespace
         Options passed to script.
     comm: MPI.COMM_WORLD
@@ -206,10 +209,15 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     if mpi_rank == 0 and args.outdir:
         os_makedirs(args.outdir, exist_ok=True)
 
+    tol = (args.forest_w2 - args.forest_w1) * args.skip
+    zmin_qso = args.wave1 / (args.forest_w2 - tol) - 1
+    zmax_qso = args.wave2 / (args.forest_w1 + tol) - 1
+
     # read catalog
     full_catalog = qsonic.catalog.mpi_read_quasar_catalog(
         args.catalog, comm, mpi_rank, is_mock=args.mock_analysis,
-        keep_surveys=args.keep_surveys)
+        keep_surveys=args.keep_surveys,
+        zmin=zmin_qso, zmax=zmax_qso)
 
     local_queue = qsonic.catalog.mpi_get_local_queue(
         full_catalog, mpi_rank, mpi_size)
@@ -230,8 +238,9 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
         spectra_list, args.forest_w1, args.forest_w2, args.skip, mpi_rank)
 
     # Create smoothed ivar as intermediate variable
-    for spec in spectra_list:
-        spec.set_smooth_ivar()
+    if args.smoothing_scale > 0:
+        for spec in spectra_list:
+            spec.set_smooth_ivar(args.smoothing_scale)
 
     # Continuum fitting
     # -------------------
@@ -270,6 +279,8 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
 
 
 def main():
+    start_time = time.time()
+
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     mpi_rank = comm.Get_rank()
@@ -286,3 +297,6 @@ def main():
         logging.error(f"Unexpected error on Rank{mpi_rank}. Abort.")
         logging.exception(e)
         comm.Abort()
+
+    etime = (time.time() - start_time) / 60  # min
+    logging_mpi(f"Total time spent is {etime:.1f} mins.", mpi_rank)

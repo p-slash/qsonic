@@ -8,8 +8,7 @@ from healpy import ang2pix
 import numpy as np
 from numpy.lib.recfunctions import rename_fields, append_fields
 
-from qsonic import QsonicException
-from qsonic.mpi_utils import logging_mpi, balance_load
+from qsonic.mpi_utils import logging_mpi, balance_load, mpi_fnc_bcast
 
 _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
 """set: Accepted extentions for quasar catalog."""
@@ -53,9 +52,9 @@ def read_quasar_catalog(
         If the catalog is for mocks.
     keep_surveys: None or list(str), default: None
         List of surveys to subselect. None keeps all.
-    zmin: float, default: 2.1
+    zmin: float, default: 0
         Minimum quasar redshift
-    zmax: float, default: 6.0
+    zmax: float, default: 100
         Maximum quasar redshift
 
     Returns
@@ -72,49 +71,47 @@ def read_quasar_catalog(
 
 
 def mpi_read_quasar_catalog(
-        filename, comm, mpi_rank, is_mock,
-        keep_surveys=None, zmin=2.1, zmax=6.0
+        filename, comm=None, mpi_rank=0, is_mock=False,
+        keep_surveys=None, zmin=0, zmax=100
 ):
     """ Returns the same quasar catalog object on all MPI ranks.
 
     It is sorted in the following order: HPXPIXEL, SURVEY (if applicable),
     TARGETID. BAL info included if available. It is required for BAL masking.
 
+    Can be used without MPI by passing ``comm=None`` and ``mpi_rank=0``.
+
     Arguments
     ----------
     filename: str
         Filename to catalog.
-    comm: MPI comm object
+    comm: MPI comm object or None, default: None
         MPI comm object for bcast
-    mpi_rank: int
+    mpi_rank: int, default: 0
         Rank of the MPI process
-    is_mock: bool
+    is_mock: bool, default: False
         If the catalog is for mocks.
     keep_surveys: None or list(str), default: None
         List of surveys to subselect. None keeps all.
-    zmin: float, default: 2.1
+    zmin: float, default: 0
         Minimum quasar redshift
-    zmax: float, default: 6.0
+    zmax: float, default: 100
         Maximum quasar redshift
 
     Returns
     ----------
     catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Sorted catalog on all MPI ranks.
+
+    Raises
+    ------
+    QsonicException
+        If error occurs while reading the catalog.
     """
-    catalog = None
-
-    if mpi_rank == 0:
-        try:
-            catalog = read_quasar_catalog(
-                filename, is_mock, keep_surveys, zmin, zmax)
-        except Exception as e:
-            logging_mpi(e, 0, "error")
-            catalog = None
-
-    catalog = comm.bcast(catalog, root=0)
-    if catalog is None:
-        raise QsonicException("Error while reading catalog.")
+    catalog = mpi_fnc_bcast(
+        read_quasar_catalog,
+        comm, mpi_rank, "Error while reading catalog.",
+        filename, is_mock, keep_surveys, zmin, zmax)
 
     return catalog
 

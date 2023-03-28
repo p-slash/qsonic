@@ -38,18 +38,16 @@ def mypoly1d(coef, x):
     return results
 
 
-def fft_gaussian_smooth(x, sigma_pix=20, pad_size=25, mode='edge'):
+def fft_gaussian_smooth(x, sigma_pix=20, mode='edge'):
     """ My Gaussian smoother using FFTs. Input array is padded with edge
-    values at the boundary by default.
+    values at the boundary by default. Pad size is ``3*sigma_pix``.
 
     Arguments
     ---------
     x: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         1D array to smooth.
     sigma_pix: float, default: 20
-        Smoothing Gaussian sigma
-    pad_size: int, default: 25
-        Number of pixels to pad the array x at the boundary.
+        Smoothing Gaussian sigma in terms of number of pixels.
     mode: str
         Padding method. See :external+numpy:func:`numpy.pad` for options.
 
@@ -60,6 +58,7 @@ def fft_gaussian_smooth(x, sigma_pix=20, pad_size=25, mode='edge'):
     """
     # Pad the input array to get rid of annoying edge effects
     # Pad values are set to the edge value
+    pad_size = max(1, int(3 * sigma_pix))
     arrsize = x.size + 2 * pad_size
     padded_arr = np.pad(x, pad_size, mode=mode)
 
@@ -71,7 +70,7 @@ def fft_gaussian_smooth(x, sigma_pix=20, pad_size=25, mode='edge'):
     return y
 
 
-def get_smooth_ivar(ivar, sigma_pix=20, pad_size=25, esigma=3.5):
+def get_smooth_ivar(ivar, sigma_pix=20, esigma=3.5):
     """ Smoothing ``ivar`` values to reduce signal-noise coupling.
 
     Smoothing is done on ``error=1/sqrt(ivar)``, while replacing ``ivar=0`` and
@@ -83,9 +82,7 @@ def get_smooth_ivar(ivar, sigma_pix=20, pad_size=25, esigma=3.5):
     ivar: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Inverse variance array.
     sigma_pix: float, default: 20
-        Smoothing Gaussian sigma.
-    pad_size: int, default: 25
-        Number of pixels to pad the array at the boundary.
+        Smoothing Gaussian sigma in terms of number of pixels.
     esigma: float, default: 3.5
         Sigma to identify outliers via MAD.
 
@@ -107,7 +104,7 @@ def get_smooth_ivar(ivar, sigma_pix=20, pad_size=25, esigma=3.5):
 
     # Replace them with the median
     error[w2] = median_err
-    error = fft_gaussian_smooth(error, sigma_pix, pad_size)
+    error = fft_gaussian_smooth(error, sigma_pix)
 
     # Restore values of bad pixels
     error[w2] = err_org

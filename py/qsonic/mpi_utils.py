@@ -13,12 +13,13 @@ def mpi_parse(parser, comm, mpi_rank, options=None):
     Arguments
     ---------
     parser: argparse.ArgumentParser
+        Parser to be used.
     comm: MPI.COMM_WORLD
         MPI comm object for bcast
     mpi_rank: int
         Rank of the MPI process.
     options: None or list, default: None
-        Options to parse. None parses sys.argv
+        Options to parse. None parses ``sys.argv``
     """
     if mpi_rank == 0:
         try:
@@ -36,7 +37,7 @@ def mpi_parse(parser, comm, mpi_rank, options=None):
 
 
 def logging_mpi(msg, mpi_rank, fnc="info"):
-    """ Logs only on `mpi_rank=0`.
+    """ Logs only on ``mpi_rank=0``.
 
     Arguments
     ---------
@@ -44,7 +45,7 @@ def logging_mpi(msg, mpi_rank, fnc="info"):
         Message to log.
     mpi_rank: int
         Rank of the MPI process.
-    fnc: logging attr
+    fnc: logging method
         Channel to log, usually info or error.
     """
     if mpi_rank == 0:
@@ -52,7 +53,7 @@ def logging_mpi(msg, mpi_rank, fnc="info"):
 
 
 def warn_mpi(msg, mpi_rank):
-    """ Warns of RuntimeWarning only on `mpi_rank=0`.
+    """ Warns of RuntimeWarning only on ``mpi_rank=0``.
 
     Arguments
     ---------
@@ -64,6 +65,67 @@ def warn_mpi(msg, mpi_rank):
 
     if mpi_rank == 0:
         warnings.warn(msg, RuntimeWarning)
+
+
+class _INVALID_VALUE(object):
+    """ Sentinel for invalid values. """
+
+
+def mpi_fnc_bcast(fnc, comm=None, mpi_rank=0, err_msg="", *args, **kwargs):
+    """ Wrapper function to run function then broadcast. Return value of
+    ``fnc`` must be broadcastable.
+
+    Example::
+
+        # Reading lines of integers
+        # from file `filename_for_integers` using np.loadtxt
+        import numpy as np
+
+        ints_in_file = mpi_fnc_bcast(
+                np.loadtxt,
+                comm, mpi_rank, "Error while reading file.",
+                filename_for_integers, dtype=int)
+
+    Arguments
+    ---------
+    fnc: callable
+        Function to evaluate.
+    comm: MPI.COMM_WORLD or None, default: None
+        MPI comm object for bcast
+    mpi_rank: int, default: 0
+        Rank of the MPI process.
+    err_msg: str, default: ''
+        Error message to use raising QsonicException.
+    *args:
+        Arguments such as ``fnc(3, 4)``.
+    **kwargs:
+        Keyword arguments such as ``fnc(dtype=int)``
+
+    Returns
+    -------
+    result: fnc
+        Function ``fnc(*args, **kwargs)``.
+
+    Raises
+    ------
+    QsonicException
+        If any error occur while doing ``fnc``.
+    """
+    result = _INVALID_VALUE
+    if (mpi_rank == 0 or comm is None):
+        try:
+            result = fnc(*args, **kwargs)
+        except Exception as e:
+            logging_mpi(f"{fnc.__module__}.{fnc.__name__}: {e}", 0, "error")
+            result = _INVALID_VALUE
+
+    if comm is not None:
+        result = comm.bcast(result)
+
+    if result is _INVALID_VALUE:
+        raise QsonicException(err_msg)
+
+    return result
 
 
 def balance_load(split_catalog, mpi_size, mpi_rank):
@@ -81,7 +143,7 @@ def balance_load(split_catalog, mpi_size, mpi_rank):
     Returns
     ---------
     local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-        Spectra that current rank is reponsible for in `split_catalog` format.
+        Spectra that current rank is reponsible for in ``split_catalog`` format
     """
     number_of_spectra = np.zeros(mpi_size, dtype=int)
     local_queue = []

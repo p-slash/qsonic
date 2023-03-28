@@ -1,4 +1,4 @@
-qsonic.mathtools module
+qsonic.mathtools
 =========================
 
 .. automodule:: qsonic.mathtools
