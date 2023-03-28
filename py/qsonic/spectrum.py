@@ -302,12 +302,19 @@ class Spectrum():
         npixels = (1 + self.z_qso) * dforest_wave / self.dwave
         return self.get_real_size() > skip_ratio * npixels
 
-    def set_smooth_ivar(self):
+    def set_smooth_ivar(self, smoothing_size=16.):
         """ Set `forestivar_sm` to smoothed inverse variance. Before this call
-        `forestivar_sm` points to `forestivar`."""
+        `forestivar_sm` points to `forestivar`.
+
+        Arguments
+        ---------
+        smoothing_size: float, default: 16.
+            Gaussian smoothing spread in A.
+        """
         self._forestivar_sm = {}
+        sigma_pix = smoothing_size / self.dwave
         for arm, ivar_arm in self.forestivar.items():
-            self._forestivar_sm[arm] = get_smooth_ivar(ivar_arm)
+            self._forestivar_sm[arm] = get_smooth_ivar(ivar_arm, sigma_pix)
 
     def _coadd_arms_reso(self, nwaves, idxes):
         """Coadd resolution matrix with equal weights."""
@@ -399,6 +406,44 @@ class Spectrum():
             npix += armpix
         return snr / npix
 
+    def mean_resolution(self, arm, weight=None):
+        """ Returns the weighted mean Gaussian sigma of the spectrograph
+        resolution.
+
+        Arguments
+        ---------
+        arm: str
+            Arm.
+        weight: None or ndarray, default: None
+            Weights. If ``None``, forestivar_sm is used.
+
+        Returns
+        -------
+        mean_reso: float or None
+            Gaussian sigma. None if forestreso is not set.
+        """
+        if not self.forestreso:
+            return None
+
+        if weight is None:
+            weight = self.forestivar_sm[arm]
+
+        total_weight = np.sum(weight)
+        reso = np.dot(self.forestreso[arm], weight) / total_weight
+        lambda_eff = np.dot(self.wave[arm], weight) / total_weight
+
+        central_idx = reso.argmax()
+        off_idx = np.array([-2, -1, 1, 2], dtype=int)
+        ratios = reso[central_idx] / reso[central_idx + off_idx]
+        ratios = np.log(ratios)
+        w2 = ratios > 0
+        norm = np.sum(w2)
+        new_ratios = np.zeros_like(ratios)
+        new_ratios[w2] = 1. / np.sqrt(ratios[w2])
+
+        rms_in_pixel = np.abs(off_idx).dot(new_ratios) / np.sqrt(2.) / norm
+        return rms_in_pixel * 3e5 * self.dwave / lambda_eff
+
     def write(self, fts_file, varlss_interp, use_ivar_sm=False):
         """Writes each arm to FITS file separately.
 
@@ -452,6 +497,7 @@ class Spectrum():
 
             cols = [wave_arm, delta, ivar, weight, cont_est]
             if self.forestreso:
+                hdr_dict['MEANRESO'] = self.mean_resolution(arm, weight)
                 cols.append(self.forestreso[arm].T.astype('f8'))
 
             fts_file.write(

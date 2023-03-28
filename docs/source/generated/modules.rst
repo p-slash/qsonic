@@ -22,3 +22,4 @@ Scripts
    :maxdepth: 4
 
    scripts.qsonic_fit
+   scripts.qsonic_calib

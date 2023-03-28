@@ -66,7 +66,7 @@ class SkyMask():
 
             self.mask_rest_frame = mask[mask['frame'] == 'RF']
             self.mask_obs_frame = mask[mask['frame'] == 'OBS']
-        except QsonicException as e:
+        except Exception as e:
             raise QsonicException(
                 f"Error loading SkyMask from mask file {fname}.") from e
 
