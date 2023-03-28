@@ -39,7 +39,7 @@ def add_picca_continuum_parser(parser=None):
         "--rfdwave", type=float, default=0.8,
         help="Rest-frame wave steps. Complies with forest limits")
     cont_group.add_argument(
-        "--no-iterations", type=int, default=5,
+        "--no-iterations", type=int, default=10,
         help="Number of iterations for continuum fitting.")
     cont_group.add_argument(
         "--fiducial-meanflux", help="Fiducial mean flux FITS file.")
@@ -49,8 +49,18 @@ def add_picca_continuum_parser(parser=None):
         "--cont-order", type=int, default=1,
         help="Order of continuum fitting polynomial.")
     cont_group.add_argument(
+        "--fit-eta", action="store_true",
+        help="NOT IMPLEMENTED: Fit for noise calibration (eta).")
+    cont_group.add_argument(
+        "--normalize-stacked-flux", action="store_true",
+        help="NOT IMPLEMENTED: Force stacked flux to be one at the end.")
+    cont_group.add_argument(
+        "--error-method-vardelta", default="regJack",
+        choices=VarLSSFitter.accepted_vardelta_error_methods,
+        help="Error estimation method for var_delta.")
+    cont_group.add_argument(
         "--minimizer", default="iminuit", choices=["iminuit", "l_bfgs_b"],
-        help="Minimizer to use fitting continuum.")
+        help="Minimizer to fit the continuum.")
 
     return parser
 
@@ -62,6 +72,10 @@ class PiccaContinuumFitter():
     be smoothed before fitting. Mean continuum and var_lss are smoothed using
     inverse weights and cubic spline to help numerical stability.
 
+    When fitting for var_lss, number of wavelength bins in the observed frame
+    for variance fitting ``nwbins`` are calculated by demanding 120 A steps
+    between bins as closely as possible by :class:`VarLSSFitter`.
+
     Contruct an instance, then call :meth:`iterate` with local spectra.
 
     Parameters
@@ -69,8 +83,6 @@ class PiccaContinuumFitter():
     args: argparse.Namespace
         Namespace. Wavelength values are taken to be the edges (not centers).
         See respective parsers for default values.
-    nwbins: int
-        Number of wavelength bins in the observed frame for variance fitting.
 
     Attributes
     ----------
@@ -122,6 +134,12 @@ class PiccaContinuumFitter():
         Returns
         -------
         Fast1DInterpolator
+
+        Raises
+        ------
+        QsonicException
+            If 'LAMBDA' is not equally spaced or ``col2read`` is not in the
+            file.
         """
         if self.mpi_rank == 0:
             with fitsio.FITS(fname) as fts:
@@ -164,7 +182,7 @@ class PiccaContinuumFitter():
 
         return Fast1DInterpolator(waves_0, dwave, data, ep=np.zeros(nsize))
 
-    def __init__(self, args, nwbins=20):
+    def __init__(self, args):
         # We first decide how many bins will approximately satisfy
         # rest-frame wavelength spacing. Then we create wavelength edges, and
         # transform these edges into centers
@@ -206,11 +224,13 @@ class PiccaContinuumFitter():
                 args.fiducial_varlss, 'VAR')
         else:
             self.varlss_fitter = VarLSSFitter(
-                args.wave1, args.wave2, nwbins,
+                args.wave1, args.wave2,
+                error_method=args.error_method_vardelta,
                 comm=self.comm)
             self.varlss_interp = Fast1DInterpolator(
                 self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
-                0.1 * np.ones(nwbins), ep=np.zeros(nwbins))
+                0.1 * np.ones(self.varlss_fitter.nwbins),
+                ep=np.zeros(self.varlss_fitter.nwbins))
 
         self.niterations = args.no_iterations
         self.cont_order = args.cont_order
@@ -398,6 +418,13 @@ class PiccaContinuumFitter():
         ---------
         spectra_list: list(Spectrum)
             Spectrum objects to fit.
+
+        Raises
+        ------
+        QsonicException
+            If there are no valid fits.
+        RuntimeWarning
+            If more than 20% spectra have invalid fits.
         """
         no_valid_fits = 0
         no_invalid_fits = 0
@@ -782,8 +809,9 @@ class VarLSSFitter():
         Lower observed wavelength edge.
     w2obs: float
         Upper observed wavelength edge.
-    nwbins: int
-        Number of wavelength bins.
+    nwbins: int, default: None
+        Number of wavelength bins. If none, automatically calculated to yield
+        120 A wavelength spacing.
     var1: float, default: 1e-5
         Lower variance edge.
     var2: float, default: 2
@@ -792,6 +820,9 @@ class VarLSSFitter():
         Number of variance bins.
     nsubsamples: int, default: 100
         Number of subsamples for the Jackknife covariance.
+    error_method: str, default: regJack
+        Error estimation methods for var_delta. Must be one of
+        :attr:`accepted_vardelta_error_methods`.
     comm: MPI.COMM_WORLD or None, default: None
         MPI comm object to allreduce if enabled.
 
@@ -820,6 +851,8 @@ class VarLSSFitter():
     """int: Minimum number of pixels a bin must have to be valid."""
     min_no_qso = 50
     """int: Minimum number of quasars a bin must have to be valid."""
+    accepted_vardelta_error_methods = ["gauss", "regJack"]
+    """list(str): Accepted error estimation methods for var_delta."""
 
     @staticmethod
     def variance_function(var_pipe, var_lss, eta=1):
@@ -847,12 +880,21 @@ class VarLSSFitter():
         return eta * var_pipe + var_lss
 
     def __init__(
-            self, w1obs, w2obs, nwbins,
+            self, w1obs, w2obs, nwbins=None,
             var1=1e-5, var2=2., nvarbins=100,
-            nsubsamples=100, comm=None
+            nsubsamples=100, error_method="regJack",
+            comm=None
     ):
+        assert set(
+            VarLSSFitter.accepted_vardelta_error_methods
+        ).intersection([error_method])
+
+        if nwbins is None:
+            nwbins = int(round((w2obs - w1obs) / 120.))
+
         self.nwbins = nwbins
         self.nvarbins = nvarbins
+        self.error_method = error_method
         self.comm = comm
 
         # Set up wavelength and inverse variance bins
@@ -970,14 +1012,14 @@ class VarLSSFitter():
 
         return fit_results
 
-    def get_var_delta_error(self, method="gauss"):
+    def get_var_delta_error(self, method=None):
         """ Calculate the error (sigma) on var_delta using a given method.
 
         - ``method="gauss"``:
             Observed var2_delta using delta**4 statistics are used as has been
             done before.
 
-        - ``method="regJack"`` and ``method="doubleJack"``:
+        - ``method="regJack"``:
             The variance on var_delta is first calculated by delete-one
             Jackknife
             over ``nsubsamples``. This is regularized by calculated var2_delta
@@ -986,29 +1028,36 @@ class VarLSSFitter():
 
         Arguments
         ---------
-        method: str, default: gauss
+        method: str, default: None
             Method to estimate error on var_delta
 
         Returns
         ---------
         error_estimates: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Error (sigma) on var_delta
+
+        Raises
+        ------
+        ValueError
+            If method is not one of :attr:`accepted_vardelta_error_methods`.
         """
-        assert (
-            method == "gauss" or method == "regJack" or method == "doubleJack")
+        if method is None:
+            method = self.error_method
 
         if method == "gauss":
             error_estimates = np.sqrt(self.subsampler.mean[2])
 
-        else:
+        elif method == "regJack":
             # Regularized jackknife errors
             error_estimates = np.where(
-                self.subsampler.variance[1] > self.var2_delta,
+                self.subsampler.variance[1] > self.subsampler.mean[2],
                 self.subsampler.variance[1],
-                self.var2_delta
+                self.subsampler.mean[2]
             )
 
             error_estimates = np.sqrt(error_estimates)
+        else:
+            raise ValueError(f"Unkown error method {method}.")
 
         return error_estimates[self.wvalid_bins]
 
@@ -1018,7 +1067,7 @@ class VarLSSFitter():
         if arr.ndim == 2:
             assert (arr.shape[1] == 2)
 
-    def fit(self, initial_guess, method="gauss", smooth=True):
+    def fit(self, initial_guess, method=None, smooth=True):
         """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
 
         Second axis always contains ``eta`` values. Example::
@@ -1038,7 +1087,7 @@ class VarLSSFitter():
         initial_guess: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Initial guess for var_lss and eta. If 1D array, eta is fixed to
             one. If 2D, its shape must be ``(nwbins, 2)``.
-        method: str, default: gauss
+        method: str, default: None
             Error estimation method
         smooth: bool, default: True
             Smooth results using UnivariateSpline.
@@ -1160,27 +1209,31 @@ class VarLSSFitter():
 
     @property
     def num_pixels(self):
-        """:class:`ndarray <numpy.ndarray>`: Number of pixels in bins."""
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
+        Number of pixels in bins."""
         return self._num_pixels[self.wvalid_bins]
 
     @property
     def num_qso(self):
-        """:class:`ndarray <numpy.ndarray>`: Number of quasars in bins."""
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
+        Number of quasars in bins."""
         return self._num_qso[self.wvalid_bins]
 
     @property
     def mean_delta(self):
-        """:class:`ndarray <numpy.ndarray>`: Mean delta."""
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`: Mean delta."""
         return self.subsampler.mean[0][self.wvalid_bins]
 
     @property
     def var_delta(self):
-        """:class:`ndarray <numpy.ndarray>`: Variance delta."""
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
+        Variance delta."""
         return self.subsampler.mean[1][self.wvalid_bins]
 
     @property
     def var2_delta(self):
-        """:class:`ndarray <numpy.ndarray>`: Variance delta^2."""
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
+        Variance delta^2."""
         return self.subsampler.mean[2][self.wvalid_bins]
 
 
@@ -1271,10 +1324,10 @@ class FluxStacker():
 
     @property
     def stacked_flux(self):
-        """:class:`ndarray <numpy.ndarray>`: Stacked flux."""
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`: Stacked flux."""
         return self._interp.fp
 
     @property
     def weights(self):
-        """:class:`ndarray <numpy.ndarray>`: Weights."""
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`: Weights."""
         return self._interp.ep
