@@ -8,7 +8,6 @@ from healpy import ang2pix
 import numpy as np
 from numpy.lib.recfunctions import rename_fields, append_fields
 
-from qsonic import QsonicException
 from qsonic.mpi_utils import logging_mpi, balance_load, mpi_fnc_bcast
 
 _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
@@ -53,9 +52,9 @@ def read_quasar_catalog(
         If the catalog is for mocks.
     keep_surveys: None or list(str), default: None
         List of surveys to subselect. None keeps all.
-    zmin: float, default: 2.1
+    zmin: float, default: 0
         Minimum quasar redshift
-    zmax: float, default: 6.0
+    zmax: float, default: 100
         Maximum quasar redshift
 
     Returns
@@ -73,7 +72,7 @@ def read_quasar_catalog(
 
 def mpi_read_quasar_catalog(
         filename, comm=None, mpi_rank=0, is_mock=False,
-        keep_surveys=None, zmin=2.1, zmax=6.0
+        keep_surveys=None, zmin=0, zmax=100
 ):
     """ Returns the same quasar catalog object on all MPI ranks.
 
@@ -94,9 +93,9 @@ def mpi_read_quasar_catalog(
         If the catalog is for mocks.
     keep_surveys: None or list(str), default: None
         List of surveys to subselect. None keeps all.
-    zmin: float, default: 2.1
+    zmin: float, default: 0
         Minimum quasar redshift
-    zmax: float, default: 6.0
+    zmax: float, default: 100
         Maximum quasar redshift
 
     Returns

@@ -42,6 +42,12 @@ def add_io_parser(parser=None):
         "--keep-surveys", nargs='+', default=['sv3', 'main'],
         help="Surveys to keep.")
     ingroup.add_argument(
+        "--zmin-qso", default=2.1, type=float,
+        help="Minimum quasar redshift")
+    ingroup.add_argument(
+        "--zmax-qso", default=4.5, type=float,
+        help="Maximum quasar redshift")
+    ingroup.add_argument(
         "--skip-resomat", action="store_true",
         help="Skip reading resolution matrix for 3D.")
     ingroup.add_argument(
