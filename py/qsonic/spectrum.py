@@ -430,7 +430,7 @@ class Spectrum():
 
         total_weight = np.sum(weight)
         reso = np.dot(self.forestreso[arm], weight) / total_weight
-        lambda_eff = np.dot(self.wave[arm], weight) / total_weight
+        lambda_eff = np.dot(self.forestwave[arm], weight) / total_weight
 
         central_idx = reso.argmax()
         off_idx = np.array([-2, -1, 1, 2], dtype=int)
