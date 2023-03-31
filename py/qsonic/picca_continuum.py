@@ -812,9 +812,9 @@ class VarLSSFitter():
     nwbins: int, default: None
         Number of wavelength bins. If none, automatically calculated to yield
         120 A wavelength spacing.
-    var1: float, default: 1e-5
+    var1: float, default: 1e-4
         Lower variance edge.
-    var2: float, default: 2
+    var2: float, default: 20
         Upper variance edge.
     nvarbins: int, default: 100
         Number of variance bins.
@@ -881,7 +881,7 @@ class VarLSSFitter():
 
     def __init__(
             self, w1obs, w2obs, nwbins=None,
-            var1=1e-5, var2=2., nvarbins=100,
+            var1=1e-4, var2=20., nvarbins=100,
             nsubsamples=100, error_method="regJack",
             comm=None
     ):
