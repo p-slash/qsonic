@@ -178,7 +178,7 @@ def mpi_stack_fluxes(args, comm, deltas_list):
 
     for delta in deltas_list:
         flux = 1 + delta.delta
-        idx = ((delta.wave - args.wave1) / dwave).astype(int)
+        idx = np.round((delta.wave - args.wave1) / dwave).astype(int)
         w = (idx >= 0) & (idx < nwaveobs)
         stacked_flux[idx[w]] += flux[w] * delta.weight[w]
         weights[idx[w]] += delta.weight[w]
