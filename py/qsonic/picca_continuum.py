@@ -812,9 +812,9 @@ class VarLSSFitter():
     nwbins: int, default: None
         Number of wavelength bins. If none, automatically calculated to yield
         120 A wavelength spacing.
-    var1: float, default: 1e-5
+    var1: float, default: 1e-4
         Lower variance edge.
-    var2: float, default: 2
+    var2: float, default: 20
         Upper variance edge.
     nvarbins: int, default: 100
         Number of variance bins.
@@ -841,7 +841,7 @@ class VarLSSFitter():
         Bool array slicer to get non-overflow bins of 1D arrays.
     subsampler: SubsampleCov
         Subsampler object that stores mean_delta in axis=0, var_delta in axis=1
-        , var2_delta in axis=2.
+        , var2_delta in axis=2, mean bin variance in axis=3.
     comm: MPI.COMM_WORLD or None, default: None
         MPI comm object to allreduce if enabled.
     mpi_rank: int
@@ -881,7 +881,7 @@ class VarLSSFitter():
 
     def __init__(
             self, w1obs, w2obs, nwbins=None,
-            var1=1e-5, var2=2., nvarbins=100,
+            var1=1e-4, var2=20., nvarbins=100,
             nsubsamples=100, error_method="regJack",
             comm=None
     ):
@@ -903,8 +903,6 @@ class VarLSSFitter():
         self.waveobs = (wave_edges[1:] + wave_edges[:-1]) / 2
         self.ivar_edges = np.logspace(
             -np.log10(var2), -np.log10(var1), nvarbins + 1)
-        var_edges = 1 / self.ivar_edges
-        self.var_centers = (var_edges[1:] + var_edges[:-1]) / 2
 
         # Set up arrays to store statistics
         self.minlength = (self.nvarbins + 2) * (self.nwbins + 2)
@@ -929,8 +927,9 @@ class VarLSSFitter():
         # Axis 0 is mean
         # Axis 1 is var_delta
         # Axis 2 is var2_delta
+        # Axis 3 is var_centers
         self.subsampler = SubsampleCov(
-            (3, self.minlength), nsubsamples, self.mpi_rank)
+            (4, self.minlength), nsubsamples, self.mpi_rank)
 
     def reset(self):
         """Reset delta and num arrays to zero."""
@@ -956,13 +955,17 @@ class VarLSSFitter():
         wave_indx = ((wave - self.waveobs[0]) / self.dwobs + 1.5).astype(int)
         ivar_indx = np.searchsorted(self.ivar_edges, ivar)
         all_indx = ivar_indx + wave_indx * (self.nvarbins + 2)
+        var = np.zeros_like(ivar)
+        w = ivar > 0
+        var[w] = 1. / ivar[w]
 
         npix = np.bincount(all_indx, minlength=self.minlength)
         self._num_pixels += npix
         xvec = np.array([
             np.bincount(all_indx, weights=delta, minlength=self.minlength),
             np.bincount(all_indx, weights=delta**2, minlength=self.minlength),
-            np.bincount(all_indx, weights=delta**4, minlength=self.minlength)
+            np.bincount(all_indx, weights=delta**4, minlength=self.minlength),
+            np.bincount(all_indx, weights=var, minlength=self.minlength)
         ])
         self.subsampler.add_measurement(xvec, npix)
 
@@ -1131,7 +1134,7 @@ class VarLSSFitter():
             try:
                 pfit, pcov = curve_fit(
                     VarLSSFitter.variance_function,
-                    self.var_centers[w],
+                    self.var_centers[wave_slice][w],
                     self.var_delta[wave_slice][w],
                     p0=initial_guess[iwave],
                     sigma=error_estimates[wave_slice][w],
@@ -1188,18 +1191,18 @@ class VarLSSFitter():
             'WAVE1': self.waveobs[0],
             'WAVE2': self.waveobs[-1],
             'NWBINS': self.nwbins,
-            'VAR1': self.var_centers[-1],
-            'VAR2': self.var_centers[0],
-            'NVARBINS': self.var_centers.size
+            'IVAR1': self.ivar_edges[0],
+            'IVAR2': self.ivar_edges[-1],
+            'NVARBINS': self.nvarbins
         }
 
         data_to_write = [
-            np.repeat(self.waveobs, self.var_centers.size),
-            np.tile(self.var_centers, self.nwbins),
+            np.repeat(self.waveobs, self.nvarbins),
+            self.var_centers, self.e_var_centers,
             self.mean_delta, self.var_delta,
             self.subsampler.variance[1][self.wvalid_bins], self.var2_delta,
             self.num_pixels, self.num_qso]
-        names = ['wave', 'var_pipe', 'mean_delta', 'var_delta',
+        names = ['wave', 'var_pipe', 'e_var_pipe', 'mean_delta', 'var_delta',
                  'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso']
 
         mpi_saver.write(
@@ -1235,6 +1238,18 @@ class VarLSSFitter():
         """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
         Variance delta^2."""
         return self.subsampler.mean[2][self.wvalid_bins]
+
+    @property
+    def var_centers(self):
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
+        Mean variance for the bin centers."""
+        return self.subsampler.mean[3][self.wvalid_bins]
+
+    @property
+    def e_var_centers(self):
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
+        Error on the mean variance for the bin centers."""
+        return np.sqrt(self.subsampler.variance[3][self.wvalid_bins])
 
 
 class FluxStacker():
