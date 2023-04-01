@@ -605,8 +605,9 @@ class PiccaContinuumFitter():
                 cont = spec.cont_params['cont'][arm]
                 delta = spec.forestflux[arm] / cont - 1
                 ivar = spec.forestivar[arm] * cont**2
+                msnr = spec.mean_snr[arm]
 
-                self.varlss_fitter.add(wave_arm, delta, ivar)
+                self.varlss_fitter.add(wave_arm, delta, ivar, msnr)
 
         # Else, fit for var_lss
         logging_mpi("Fitting var_lss", self.mpi_rank)
@@ -916,6 +917,7 @@ class VarLSSFitter():
 
         self._num_pixels = np.zeros(self.minlength, dtype=int)
         self._num_qso = np.zeros(self.minlength, dtype=int)
+        self._mean_snrs = np.zeros(self.minlength, dtype=float)
 
         # If ran with MPI, save mpi_rank first
         # Then shift each container to remove possibly over adding to 0th bin.
@@ -936,8 +938,9 @@ class VarLSSFitter():
         self.subsampler.reset(self.mpi_rank)
         self._num_pixels *= 0
         self._num_qso *= 0
+        self._mean_snrs *= 0
 
-    def add(self, wave, delta, ivar):
+    def add(self, wave, delta, ivar, msnr=0):
         """Add statistics of a single spectrum. Updates delta and num arrays.
 
         Assumes no spectra has ``wave < w1obs`` or ``wave > w2obs``.
@@ -950,6 +953,8 @@ class VarLSSFitter():
             Delta array.
         ivar: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Inverse variance array.
+        msnr: float
+            Mean SNR
         """
         # add 1 to match searchsorted/bincount output/input
         wave_indx = ((wave - self.waveobs[0]) / self.dwobs + 1.5).astype(int)
@@ -971,6 +976,7 @@ class VarLSSFitter():
 
         npix[npix > 0] = 1
         self._num_qso += npix
+        self._mean_snrs += msnr * npix
 
     def _allreduce(self):
         """Sums statistics from all MPI process, and calculates mean, variance
@@ -992,6 +998,7 @@ class VarLSSFitter():
 
         w = self._num_pixels > 0
         self.subsampler.mean[2, w] /= self._num_pixels[w]
+        self._mean_snrs[w] /= self._num_pixels[w]
 
     def _smooth_fit_results(self, fit_results, std_results):
         w = fit_results > 0
@@ -1201,9 +1208,10 @@ class VarLSSFitter():
             self.var_centers, self.e_var_centers,
             self.mean_delta, self.var_delta,
             self.subsampler.variance[1][self.wvalid_bins], self.var2_delta,
-            self.num_pixels, self.num_qso]
+            self.num_pixels, self.num_qso, self.mean_snrs]
         names = ['wave', 'var_pipe', 'e_var_pipe', 'mean_delta', 'var_delta',
-                 'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso']
+                 'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso',
+                 'mean_snr']
 
         mpi_saver.write(
             data_to_write, names=names, extname="VAR_STATS", header=hdr_dict)
@@ -1221,6 +1229,12 @@ class VarLSSFitter():
         """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
         Number of quasars in bins."""
         return self._num_qso[self.wvalid_bins]
+
+    @property
+    def mean_snrs(self):
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
+        Mean SNR in bins."""
+        return self._mean_snrs[self.wvalid_bins]
 
     @property
     def mean_delta(self):
