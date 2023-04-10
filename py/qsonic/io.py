@@ -134,6 +134,35 @@ def read_spectra_onehealpix(
     return spectra_list
 
 
+def read_resolution_matrices_onehealpix_data(
+        catalog_hpx, spectra_list, input_dir, program="dark"
+):
+    unique_surveys, s2 = np.unique(
+        catalog_hpx['SURVEY'], return_index=True)
+    survey_split_cat = np.split(catalog_hpx, s2[1:])
+
+    for cat_by_survey in survey_split_cat:
+        survey = cat_by_survey['SURVEY'][0]
+        pixnum = cat_by_survey['HPXPIXEL'][0]
+        targetids_by_survey = cat_by_survey['TARGETID']
+
+        fspec = (f"{input_dir}/{survey}/{program}/{pixnum//100}/"
+                 f"{pixnum}/coadd-{survey}-{program}-{pixnum}.fits")
+        fitsfile = fitsio.FITS(fspec)
+
+        fbrmap = fitsfile['FIBERMAP'].read(columns='TARGETID')
+        common_targetids, idx_fbr, idx_cat = np.intersect1d(
+            fbrmap, targetids_by_survey, assume_unique=True,
+            return_indices=True)
+        if (common_targetids.size != targetids_by_survey.size):
+            warnings.warn(
+                f"Error reading {fspec}. "
+                "Number of quasars in healpix does not match the catalog "
+                f"catalog:{targetids_by_survey.size} vs "
+                f"healpix:{common_targetids.size}!", RuntimeWarning)
+
+
+
 def read_deltas(fname):
     """ Returns a list of all Delta objects in a file.
 

@@ -79,13 +79,16 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     start_time = time.time()
     logging_mpi("Reading spectra.", mpi_rank)
 
+    skip_resomat = args.skip_resomat or not args.mock_analysis
+
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
         local_specs = qsonic.io.read_spectra_onehealpix(
             cat, args.input_dir, args.arms,
-            args.mock_analysis, args.skip_resomat
+            args.mock_analysis, skip_resomat
         )
+
         for spec in local_specs:
             spec.set_forest_region(
                 args.wave1, args.wave2,
@@ -97,6 +100,16 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
 
         spectra_list.extend(
             [spec for spec in local_specs if spec.rsnr > args.min_rsnr])
+
+        if skip_resomat:
+            continue
+
+        w = np.array(
+            [spec.rsnr > args.min_rsnr for spec in local_specs], dtype=bool)
+
+        # Read resolution matrix hopefully faster
+        qsonic.io.read_resolution_matrices_onehealpix_data(
+            cat[w], spectra_list, args.input_dir)
 
     nspec_all = comm.reduce(len(spectra_list))
     etime = (time.time() - start_time) / 60  # min
