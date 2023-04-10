@@ -6,7 +6,7 @@ import fitsio
 from iminuit import Minuit
 from scipy.optimize import minimize, curve_fit
 from scipy.interpolate import UnivariateSpline
-from scipy.special import legendre
+from scipy.special import legendre, roots_genlaguerre
 
 from mpi4py import MPI
 
@@ -835,54 +835,90 @@ class VarLSSFitter():
         Inverse variance edges.
     var_centers: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Variance centers in **descending** order.
+    snr_edges: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        SNR edges, where centers correspond to generalized Laguerre polynomial
+        roots as follows: ``roots_genlaguerre(nsnrbins, 2)[0] * 0.25``.
     minlength: int
         Minimum size of the combined bin count array. It includes underflow and
-        overflow bins for both wavelength and variance bins.
+        overflow bins for wavelength, variance and SNR bins.
     wvalid_bins: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Bool array slicer to get non-overflow bins of 1D arrays.
     subsampler: SubsampleCov
-        Subsampler object that stores mean_delta in axis=0, var_delta in axis=1
-        , var2_delta in axis=2, mean bin variance in axis=3.
+        Subsampler object that stores mean_delta in i=0, var_delta in i=1
+        , var2_delta in i=2, mean bin variance center in i=3, mean
+        snr bin center in i=4.
     comm: MPI.COMM_WORLD or None, default: None
         MPI comm object to allreduce if enabled.
     mpi_rank: int
         Rank of the MPI process if ``comm!=None``. Zero otherwise.
     """
-    min_no_pix = 500
+    min_no_pix = 50
     """int: Minimum number of pixels a bin must have to be valid."""
-    min_no_qso = 50
+    min_no_qso = 5
     """int: Minimum number of quasars a bin must have to be valid."""
     accepted_vardelta_error_methods = ["gauss", "regJack"]
     """list(str): Accepted error estimation methods for var_delta."""
 
     @staticmethod
-    def variance_function(var_pipe, var_lss, eta=1):
+    def variance_function(var_pipe_snr, var_lss, eta=1, beta=0):
         """Variance model to be fit.
 
         .. math::
 
-            \sigma^2_\mathrm{obs} = \eta \sigma^2_\mathrm{pipe} +
-            \sigma^2_\mathrm{LSS}
+            \sigma^2_\mathrm{obs} =
+            (\eta + \beta / \mathrm{snr}) \sigma^2_\mathrm{pipe}
+            + \sigma^2_\mathrm{LSS}
 
         Arguments
         ---------
-        var_pipe: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Pipeline variance.
+        var_pipe_snr: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            2D array for pipeline variance and mean SNR array. 0th is for
+            variance, 1th is for mean snr.
         var_lss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Large-scale structure variance.
         eta: float
             Pipeline variance calibration scalar.
+        beta: float
+            SNR dependence of variance calibration
 
         Returns
         -------
         :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Expected variance of deltas.
         """
-        return eta * var_pipe + var_lss
+        var_pipe = var_pipe_snr[0]
+        snr = var_pipe_snr[1]
+
+        return (eta + beta / snr) * var_pipe + var_lss
+
+    def get_bin_index(self, var_idx, snr_idx, wave_idx):
+        """ Get the index for 1D array for variance, snr and wave indices.
+        Underflow bins are taken into account.
+
+        Arguments
+        ---------
+        var_idx: :external+numpy:py:class:`ndarray <numpy.ndarray>` or int
+            Index for the variance bin.
+        snr_idx: :external+numpy:py:class:`ndarray <numpy.ndarray>` or int
+            Index for the SNR bin.
+        wave_idx: :external+numpy:py:class:`ndarray <numpy.ndarray>` or int
+            Index for the wavelength bin.
+
+        Returns
+        -------
+        :external+numpy:py:class:`ndarray <numpy.ndarray>` or int
+            Bin index the 1D array.
+        """
+        idx_all = (
+            var_idx + (self.nvarbins + 2) * (
+                snr_idx + (self.nsnrbins + 2) * wave_idx))
+
+        return idx_all
 
     def __init__(
             self, w1obs, w2obs, nwbins=None,
             var1=1e-4, var2=20., nvarbins=100,
+            nsnrbins=15,
             nsubsamples=100, error_method="regJack",
             comm=None
     ):
@@ -895,6 +931,7 @@ class VarLSSFitter():
 
         self.nwbins = nwbins
         self.nvarbins = nvarbins
+        self.nsnrbins = nsnrbins
         self.error_method = error_method
         self.comm = comm
 
@@ -905,19 +942,26 @@ class VarLSSFitter():
         self.ivar_edges = np.logspace(
             -np.log10(var2), -np.log10(var1), nvarbins + 1)
 
+        # Set up mean snr bins
+        snr_centers = roots_genlaguerre(nsnrbins, 2)[0] * 0.25
+        self.snr_edges = np.empty(nsnrbins + 1)
+        self.snr_edges[0] = 0
+        for i in range(nsnrbins):
+            self.snr_edges[i + 1] = 2 * snr_centers[i] - self.snr_edges[i]
+
         # Set up arrays to store statistics
-        self.minlength = (self.nvarbins + 2) * (self.nwbins + 2)
+        self.minlength = (
+            (self.nvarbins + 2) * (self.nwbins + 2) * (self.nsnrbins + 2))
         # Bool array slicer for get non-overflow bins in 1D array
         self.wvalid_bins = np.zeros(self.minlength, dtype=bool)
-        for iwave in range(self.nwbins):
-            i1 = (iwave + 1) * (self.nvarbins + 2) + 1
-            i2 = i1 + self.nvarbins
-            wbinslice = np.s_[i1:i2]
-            self.wvalid_bins[wbinslice] = True
+        for iwave in range(1, self.nwbins + 1):
+            for isnr in range(1, self.nsnrbins + 1):
+                i1 = self.get_bin_index(1, isnr, iwave)
+                i2 = i1 + self.nvarbins
+                self.wvalid_bins[i1:i2] = True
 
         self._num_pixels = np.zeros(self.minlength, dtype=int)
         self._num_qso = np.zeros(self.minlength, dtype=int)
-        self._mean_snrs = np.zeros(self.minlength, dtype=float)
 
         # If ran with MPI, save mpi_rank first
         # Then shift each container to remove possibly over adding to 0th bin.
@@ -926,21 +970,21 @@ class VarLSSFitter():
         else:
             self.mpi_rank = 0
 
-        # Axis 0 is mean
-        # Axis 1 is var_delta
-        # Axis 2 is var2_delta
-        # Axis 3 is var_centers
+        # Index 0 is mean
+        # Index 1 is var_delta
+        # Index 2 is var2_delta
+        # Index 3 is var_centers
+        # Index 4 is snr_centers
         self.subsampler = SubsampleCov(
-            (4, self.minlength), nsubsamples, self.mpi_rank)
+            (5, self.minlength), nsubsamples, self.mpi_rank)
 
     def reset(self):
         """Reset delta and num arrays to zero."""
         self.subsampler.reset(self.mpi_rank)
         self._num_pixels *= 0
         self._num_qso *= 0
-        self._mean_snrs *= 0
 
-    def add(self, wave, delta, ivar, msnr=0):
+    def add(self, wave, delta, ivar, msnr=1):
         """Add statistics of a single spectrum. Updates delta and num arrays.
 
         Assumes no spectra has ``wave < w1obs`` or ``wave > w2obs``.
@@ -959,7 +1003,8 @@ class VarLSSFitter():
         # add 1 to match searchsorted/bincount output/input
         wave_indx = ((wave - self.waveobs[0]) / self.dwobs + 1.5).astype(int)
         ivar_indx = np.searchsorted(self.ivar_edges, ivar)
-        all_indx = ivar_indx + wave_indx * (self.nvarbins + 2)
+        snr_indx = np.searchsorted(self.snr_edges, msnr)
+        all_indx = self.get_bin_index(ivar_indx, snr_indx, wave_indx)
         var = np.zeros_like(ivar)
         w = ivar > 0
         var[w] = 1. / ivar[w]
@@ -970,13 +1015,13 @@ class VarLSSFitter():
             np.bincount(all_indx, weights=delta, minlength=self.minlength),
             np.bincount(all_indx, weights=delta**2, minlength=self.minlength),
             np.bincount(all_indx, weights=delta**4, minlength=self.minlength),
-            np.bincount(all_indx, weights=var, minlength=self.minlength)
+            np.bincount(all_indx, weights=var, minlength=self.minlength),
+            msnr * npix
         ])
         self.subsampler.add_measurement(xvec, npix)
 
         npix[npix > 0] = 1
         self._num_qso += npix
-        self._mean_snrs += msnr * npix
 
     def _allreduce(self):
         """Sums statistics from all MPI process, and calculates mean, variance
@@ -998,7 +1043,6 @@ class VarLSSFitter():
 
         w = self._num_pixels > 0
         self.subsampler.mean[2, w] /= self._num_pixels[w]
-        self._mean_snrs[w] /= self._num_pixels[w]
 
     def _smooth_fit_results(self, fit_results, std_results):
         w = fit_results > 0
@@ -1009,16 +1053,15 @@ class VarLSSFitter():
                 self.waveobs[w], fit_results[w], w=1 / std_results[w])
 
             fit_results = spl(self.waveobs)
-        # else ndim == 2
-        else:
-            w = w[:, 0]
-            spl1 = UnivariateSpline(
-                self.waveobs[w], fit_results[w, 0], w=1 / std_results[w, 0])
-            spl2 = UnivariateSpline(
-                self.waveobs[w], fit_results[w, 1], w=1 / std_results[w, 1])
+            return fit_results
 
-            fit_results[:, 0] = spl1(self.waveobs)
-            fit_results[:, 1] = spl2(self.waveobs)
+        # else ndim >= 2
+        w = w[:, 0]
+        for jj in range(fit_results.ndim):
+            spl = UnivariateSpline(
+                self.waveobs[w], fit_results[w, jj], w=1 / std_results[w, jj])
+
+            fit_results[:, jj] = spl(self.waveobs)
 
         return fit_results
 
@@ -1072,10 +1115,7 @@ class VarLSSFitter():
         return error_estimates[self.wvalid_bins]
 
     def _fit_array_shape_assert(self, arr):
-        assert (arr.ndim == 1 or arr.ndim == 2)
         assert (arr.shape[0] == self.nwbins)
-        if arr.ndim == 2:
-            assert (arr.shape[1] == 2)
 
     def fit(self, initial_guess, method=None, smooth=True):
         """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
@@ -1125,8 +1165,8 @@ class VarLSSFitter():
                      & (self.num_qso > VarLSSFitter.min_no_qso))
 
         for iwave in range(self.nwbins):
-            i1 = iwave * self.nvarbins
-            i2 = i1 + self.nvarbins
+            i1 = iwave * self.nvarbins * self.nsnrbins
+            i2 = i1 + self.nvarbins * self.nsnrbins
             wave_slice = np.s_[i1:i2]
             w = w_gtr_min[wave_slice]
 
@@ -1138,10 +1178,13 @@ class VarLSSFitter():
                     self.mpi_rank)
                 continue
 
+            X = self.subsampler.mean[3:5, self.wvalid_bins]
+            X = X[:, wave_slice][:, w]
+
             try:
                 pfit, pcov = curve_fit(
                     VarLSSFitter.variance_function,
-                    self.var_centers[wave_slice][w],
+                    X,
                     self.var_delta[wave_slice][w],
                     p0=initial_guess[iwave],
                     sigma=error_estimates[wave_slice][w],
@@ -1264,6 +1307,12 @@ class VarLSSFitter():
         """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
         Error on the mean variance for the bin centers."""
         return np.sqrt(self.subsampler.variance[3][self.wvalid_bins])
+
+    @property
+    def snr_centers(self):
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
+        Mean SNR for the bin centers."""
+        return self.subsampler.mean[4][self.wvalid_bins]
 
 
 class FluxStacker():

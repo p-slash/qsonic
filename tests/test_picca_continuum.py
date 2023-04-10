@@ -193,31 +193,55 @@ class TestPiccaContinuum(object):
 class TestVarLSSFitter(object):
     def test_add(self, setup_data):
         nwbins = 4
+        nsnrbins = 2
+        nvarbins = 3
+        binning_vector_size = (nwbins + 2) * (nsnrbins + 2) * (nvarbins + 2)
+
+        def _get_idx(v, s, w):
+            return v + (nvarbins + 2) * (s + (nsnrbins + 2) * w)
+
         dwbins = 300.
         wbins_truth = 3600. + (0.5 + np.arange(nwbins)) * dwbins
+
+        true_ivar_bin = 1
+        true_snr_bin = 1
+        full_bins = np.zeros(binning_vector_size, dtype=bool)
+
         varlss_fitter = VarLSSFitter(
-            3600, 4800, nwbins=nwbins, var1=1e-5, var2=2., nvarbins=3)
+            3600, 4800, nwbins=nwbins, var1=1e-5, var2=2., nvarbins=nvarbins,
+            nsnrbins=nsnrbins)
         npt.assert_almost_equal(varlss_fitter.dwobs, dwbins)
         npt.assert_allclose(varlss_fitter.waveobs, wbins_truth)
 
         cat_by_survey, npix, data = setup_data(1)
         varlss_fitter.add(
-            data['wave']['B'], data['flux']['B'][0], data['ivar']['B'][0])
+            data['wave']['B'], data['flux']['B'][0], data['ivar']['B'][0],
+            0.0001)
 
-        empty_bins = np.s_[-5:]
-        assert all(varlss_fitter._num_pixels[:5] == 0)
-        assert all(varlss_fitter._num_pixels[empty_bins] == 0)
-        expected_numqso = np.zeros((nwbins + 2) * 5, dtype=int)
-        expected_numqso[[6, 11, 16]] = 1
+        # Blue arm only fills up to nwbins - 1 wavelength bin
+        true_wave_bins = np.arange(1, nwbins)
+        true_all_idx = _get_idx(true_ivar_bin, true_snr_bin, true_wave_bins)
+        full_bins[true_all_idx] = 1
+
+        npt.assert_equal(varlss_fitter._num_pixels[~full_bins], 0)
+
+        expected_numqso = np.zeros(binning_vector_size, dtype=int)
+        expected_numqso[full_bins] = 1
         npt.assert_equal(varlss_fitter._num_qso, expected_numqso)
 
         varlss_fitter.add(
-            data['wave']['R'], data['flux']['R'][0], data['ivar']['R'][0])
-        expected_numqso[[11, 16]] = 2
-        expected_numqso[21] = 1
+            data['wave']['R'], data['flux']['R'][0], data['ivar']['R'][0],
+            0.0001)
+
+        # Red arm fills the last 3 wavelength bins. First two overlap with
+        # previous wavelength bins.
+        true_wave_bins = np.arange(2, nwbins)
+        true_all_idx = _get_idx(true_ivar_bin, true_snr_bin, true_wave_bins)
+        expected_numqso[true_all_idx] = 2
+        expected_numqso[_get_idx(true_ivar_bin, true_snr_bin, nwbins)] = 1
         npt.assert_equal(varlss_fitter._num_qso, expected_numqso)
 
-        expected_size = 3 * nwbins
+        expected_size = nwbins * nsnrbins * nvarbins
         varlss_fitter._allreduce()
         npt.assert_equal(varlss_fitter.wvalid_bins.sum(), expected_size)
         npt.assert_equal(varlss_fitter.mean_delta.size, expected_size)
