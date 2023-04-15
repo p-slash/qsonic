@@ -771,7 +771,7 @@ class VarLSSFitter():
     """ Variance fitter for the large-scale fluctuations.
 
     Input wavelengths and variances are the bin edges, so centers will be
-    shifted. Valid bins require at least 500 pixels from 50 quasars. Assumes no
+    shifted. Valid bins require at least 100 pixels from 10 quasars. Assumes no
     spectra has `wave < w1obs` or `wave > w2obs`.
 
     .. note::
@@ -819,6 +819,8 @@ class VarLSSFitter():
         Upper variance edge.
     nvarbins: int, default: 100
         Number of variance bins.
+    nsnrbins: int, default: 15
+        Number of mean SNR bins.
     nsubsamples: int, default: 100
         Number of subsamples for the Jackknife covariance.
     error_method: str, default: regJack
@@ -833,8 +835,6 @@ class VarLSSFitter():
         Wavelength centers in the observed frame.
     ivar_edges: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Inverse variance edges.
-    var_centers: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Variance centers in **descending** order.
     snr_edges: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         SNR edges, where centers correspond to generalized Laguerre polynomial
         roots as follows: ``roots_genlaguerre(nsnrbins, 2)[0] * 0.25``.
@@ -847,17 +847,28 @@ class VarLSSFitter():
         Subsampler object that stores mean_delta in i=0, var_delta in i=1
         , var2_delta in i=2, mean bin variance center in i=3, mean
         snr bin center in i=4.
+    mean_delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Mean delta in valid bins.
+    e_mean_delta: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Jackknife error on mean delta in valid bins.
+    var_centers: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Variance centers in **descending** order in valid bins.
     comm: MPI.COMM_WORLD or None, default: None
         MPI comm object to allreduce if enabled.
     mpi_rank: int
         Rank of the MPI process if ``comm!=None``. Zero otherwise.
     """
-    min_no_pix = 50
+    min_no_pix = 100
     """int: Minimum number of pixels a bin must have to be valid."""
-    min_no_qso = 5
+    min_no_qso = 10
     """int: Minimum number of quasars a bin must have to be valid."""
     accepted_vardelta_error_methods = ["gauss", "regJack"]
     """list(str): Accepted error estimation methods for var_delta."""
+    _name_index_map = {
+        "mean_delta": 0, "var_delta": 1, "var2_delta": 2, "var_centers": 3,
+        "snr_centers": 4
+    }
+    """dict: map to subsampler index."""
 
     @staticmethod
     def variance_function(var_pipe_snr, var_lss, eta=1, beta=0):
@@ -866,14 +877,14 @@ class VarLSSFitter():
         .. math::
 
             \sigma^2_\mathrm{obs} =
-            (\eta + \beta / \mathrm{snr}) \sigma^2_\mathrm{pipe}
+            (\eta + \beta \mathrm{snr}) \sigma^2_\mathrm{pipe}
             + \sigma^2_\mathrm{LSS}
 
         Arguments
         ---------
         var_pipe_snr: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             2D array for pipeline variance and mean SNR array. 0th is for
-            variance, 1th is for mean snr.
+            variance, 1st is for mean snr.
         var_lss: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Large-scale structure variance.
         eta: float
@@ -889,7 +900,7 @@ class VarLSSFitter():
         var_pipe = var_pipe_snr[0]
         snr = var_pipe_snr[1]
 
-        return (eta + beta / snr) * var_pipe + var_lss
+        return (eta + beta * snr) * var_pipe + var_lss
 
     def get_bin_index(self, var_idx, snr_idx, wave_idx):
         """ Get the index for 1D array for variance, snr and wave indices.
@@ -914,6 +925,23 @@ class VarLSSFitter():
                 snr_idx + (self.nsnrbins + 2) * wave_idx))
 
         return idx_all
+
+    def _set_namespace(self):
+        """Sets the namespace for cleaner access to :attr:`subsampler`
+        mean and variance in valid bins. All keys of :attr:`_name_index_map`
+        store means, and errors on the mean are stored with e_ prefix.
+        """
+        kw = {}
+        for key, idx in VarLSSFitter._name_index_map.items():
+            if self.subsampler.mean is None:
+                kw[key] = None
+                kw[f"e_{key}"] = None
+                continue
+
+            kw[key] = self.subsampler.mean[idx, self.wvalid_bins]
+            kw[f"e_{key}"] = np.sqrt(
+                self.subsampler.variance[idx, self.wvalid_bins])
+        self.__dict__.update(kw)
 
     def __init__(
             self, w1obs, w2obs, nwbins=None,
@@ -977,12 +1005,14 @@ class VarLSSFitter():
         # Index 4 is snr_centers
         self.subsampler = SubsampleCov(
             (5, self.minlength), nsubsamples, self.mpi_rank)
+        self._set_namespace()
 
     def reset(self):
         """Reset delta and num arrays to zero."""
         self.subsampler.reset(self.mpi_rank)
         self._num_pixels *= 0
         self._num_qso *= 0
+        self._set_namespace()
 
     def add(self, wave, delta, ivar, msnr=1):
         """Add statistics of a single spectrum. Updates delta and num arrays.
@@ -1043,6 +1073,8 @@ class VarLSSFitter():
 
         w = self._num_pixels > 0
         self.subsampler.mean[2, w] /= self._num_pixels[w]
+
+        self._set_namespace()
 
     def _smooth_fit_results(self, fit_results, std_results):
         w = fit_results > 0
@@ -1120,10 +1152,13 @@ class VarLSSFitter():
     def fit(self, initial_guess, method=None, smooth=True):
         """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
 
-        Second axis always contains ``eta`` values. Example::
+        Second column always contains ``eta`` values. Third colums is the
+        ``beta`` value. Defaults are in :meth:`variance_function` when these
+        columns are not present. Example::
 
             var_lss = initial_guess[:, 0]
             eta = initial_guess[:, 1]
+            beta = initial_guess[:, 2]
 
         This implemented using :func:`scipy.optimize.curve_fit` with
         ``sqrt(var2_delta_subs)`` as absolute errors. Domain is bounded to
@@ -1136,7 +1171,7 @@ class VarLSSFitter():
         ---------
         initial_guess: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Initial guess for var_lss and eta. If 1D array, eta is fixed to
-            one. If 2D, its shape must be ``(nwbins, 2)``.
+            one. If nD, its shape must be ``(nwbins, n)``.
         method: str, default: None
             Error estimation method
         smooth: bool, default: True
@@ -1148,7 +1183,7 @@ class VarLSSFitter():
             Smoothed fit results at observed wavelengths where missing values
             are extrapolated. 1D array containing LSS variance if
             ``initial_guess`` is 1D. 2D containing eta values on the second
-            axis if ``initial_guess`` is 2D ndarray.
+            column if ``initial_guess`` is 2D ndarray.
         std_results: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Error on ``var_lss`` from sqrt of ``curve_fit`` output. Same
             behavior as ``fit_results``.
@@ -1243,18 +1278,20 @@ class VarLSSFitter():
             'NWBINS': self.nwbins,
             'IVAR1': self.ivar_edges[0],
             'IVAR2': self.ivar_edges[-1],
-            'NVARBINS': self.nvarbins
+            'NVARBINS': self.nvarbins,
+            'NSNRBINS': self.nsnrbins
         }
 
         data_to_write = [
-            np.repeat(self.waveobs, self.nvarbins),
+            np.repeat(self.waveobs, self.nvarbins * self.nsnrbins),
             self.var_centers, self.e_var_centers,
+            self.snr_centers, self.e_snr_centers,
             self.mean_delta, self.var_delta,
-            self.subsampler.variance[1][self.wvalid_bins], self.var2_delta,
-            self.num_pixels, self.num_qso, self.mean_snrs]
-        names = ['wave', 'var_pipe', 'e_var_pipe', 'mean_delta', 'var_delta',
-                 'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso',
-                 'mean_snr']
+            self.e_var_delta, self.var2_delta,
+            self.num_pixels, self.num_qso]
+        names = ['wave', 'var_pipe', 'e_var_pipe',
+                 'snr_center', 'e_snr_center', 'mean_delta', 'var_delta',
+                 'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso']
 
         mpi_saver.write(
             data_to_write, names=names, extname="VAR_STATS", header=hdr_dict)
@@ -1272,47 +1309,6 @@ class VarLSSFitter():
         """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
         Number of quasars in bins."""
         return self._num_qso[self.wvalid_bins]
-
-    @property
-    def mean_snrs(self):
-        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
-        Mean SNR in bins."""
-        return self._mean_snrs[self.wvalid_bins]
-
-    @property
-    def mean_delta(self):
-        """:external+numpy:py:class:`ndarray <numpy.ndarray>`: Mean delta."""
-        return self.subsampler.mean[0][self.wvalid_bins]
-
-    @property
-    def var_delta(self):
-        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
-        Variance delta."""
-        return self.subsampler.mean[1][self.wvalid_bins]
-
-    @property
-    def var2_delta(self):
-        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
-        Variance delta^2."""
-        return self.subsampler.mean[2][self.wvalid_bins]
-
-    @property
-    def var_centers(self):
-        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
-        Mean variance for the bin centers."""
-        return self.subsampler.mean[3][self.wvalid_bins]
-
-    @property
-    def e_var_centers(self):
-        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
-        Error on the mean variance for the bin centers."""
-        return np.sqrt(self.subsampler.variance[3][self.wvalid_bins])
-
-    @property
-    def snr_centers(self):
-        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
-        Mean SNR for the bin centers."""
-        return self.subsampler.mean[4][self.wvalid_bins]
 
 
 class FluxStacker():
