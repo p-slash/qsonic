@@ -225,8 +225,8 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     for delta in deltas_list:
         varfitter.add(delta.wave, delta.delta, delta.ivar)
 
-    logging_mpi("Fitting variance for VarLSS and eta", mpi_rank)
-    fit_results = np.ones((varfitter.nwbins, 2))
+    logging_mpi("Fitting variance for VarLSS, eta and beta", mpi_rank)
+    fit_results = np.ones((varfitter.nwbins, 3))
     fit_results[:, 0] = 0.1
     fit_results, std_results = varfitter.fit(fit_results)
 
@@ -239,9 +239,11 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
 
     # Save fits results as well
     mpi_saver.write([
-        varfitter.waveobs, fit_results[:, 0], fit_results[:, 1],
-        std_results[:, 0], std_results[:, 1]],
-        names=["wave", "var_lss", "eta", "e_var_lss", "e_eta"],
+        varfitter.waveobs,
+        fit_results[:, 0], fit_results[:, 1], fit_results[:, 2],
+        std_results[:, 0], std_results[:, 1], std_results[:, 2]],
+        names=["wave", "var_lss", "eta", "beta",
+               "e_var_lss", "e_eta", "e_beta"],
         extname="VAR_FUNC"
     )
 
