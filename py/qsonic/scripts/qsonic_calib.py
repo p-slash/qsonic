@@ -223,7 +223,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     deltas_list = [x for alist in deltas_list for x in alist if _is_kept(x)]
 
     for delta in deltas_list:
-        varfitter.add(delta.wave, delta.delta, delta.ivar)
+        varfitter.add(delta.wave, delta.delta, delta.ivar, delta.mean_snr)
 
     logging_mpi("Fitting variance for VarLSS, eta and beta", mpi_rank)
     fit_results = np.ones((varfitter.nwbins, 3))
