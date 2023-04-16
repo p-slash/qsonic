@@ -101,7 +101,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
         spectra_list.extend(
             [spec for spec in local_specs if spec.rsnr > args.min_rsnr])
 
-        if skip_resomat:
+        if args.skip_resomat:
             continue
 
         w = np.array(
