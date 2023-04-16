@@ -66,7 +66,8 @@ def add_io_parser(parser=None):
 
 def read_spectra_onehealpix(
         catalog_hpx, input_dir, arms_to_keep, mock_analysis, skip_resomat,
-        program="dark"):
+        program="dark"
+):
     """ Returns a list of Spectrum objects for a given catalog of a single
     healpix.
 
@@ -83,7 +84,7 @@ def read_spectra_onehealpix(
         Reads for mock data if true.
     skip_resomat: bool
         If true, do not read resomat.
-    program: str
+    program: str, default: "dark"
         Always use dark program.
 
     Returns
@@ -135,32 +136,53 @@ def read_spectra_onehealpix(
 
 
 def read_resolution_matrices_onehealpix_data(
-        catalog_hpx, spectra_list, input_dir, program="dark"
+        catalog_hpx, input_dir, spectra_list, program="dark"
 ):
+    """ Returns a list of Spectrum objects for a given catalog of a single
+    healpix.
+
+    Arguments
+    ---------
+    catalog_hpx: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Catalog of quasars in a single healpix. If for data 'SURVEY' column
+        must be present and sorted.
+    input_dir: str
+        Input directory
+    spectra_list: list(Spectrum)
+        List of spectra to read resolution matrix
+    program: str, default: "dark"
+        Always use dark program.
+
+    Returns
+    ---------
+    spectra_list: list(Spectrum)
+
+    Raises
+    ---------
+    RuntimeWarning
+        If number of quasars in the healpix file does not match the catalog.
+    """
+    assert (catalog_hpx.size == len(spectra_list))
+
     unique_surveys, s2 = np.unique(
         catalog_hpx['SURVEY'], return_index=True)
     survey_split_cat = np.split(catalog_hpx, s2[1:])
+    s2 = np.append(s2, len(spectra_list))
 
-    for cat_by_survey in survey_split_cat:
+    for ii, cat_by_survey in enumerate(survey_split_cat):
         survey = cat_by_survey['SURVEY'][0]
         pixnum = cat_by_survey['HPXPIXEL'][0]
         targetids_by_survey = cat_by_survey['TARGETID']
 
         fspec = (f"{input_dir}/{survey}/{program}/{pixnum//100}/"
                  f"{pixnum}/coadd-{survey}-{program}-{pixnum}.fits")
-        fitsfile = fitsio.FITS(fspec)
 
-        fbrmap = fitsfile['FIBERMAP'].read(columns='TARGETID')
-        common_targetids, idx_fbr, idx_cat = np.intersect1d(
-            fbrmap, targetids_by_survey, assume_unique=True,
-            return_indices=True)
-        if (common_targetids.size != targetids_by_survey.size):
-            warnings.warn(
-                f"Error reading {fspec}. "
-                "Number of quasars in healpix does not match the catalog "
-                f"catalog:{targetids_by_survey.size} vs "
-                f"healpix:{common_targetids.size}!", RuntimeWarning)
+        i1, i2 = s2[ii], s2[ii + 1]
+        spectra_list[i1:i2] = _read_onehealpix_file_onlyreso(
+            targetids_by_survey, fspec, qsonic.spectrum.Spectrum.wave.keys(),
+            spectra_list[i1:i2])
 
+    return spectra_list
 
 
 def read_deltas(fname):
@@ -277,7 +299,8 @@ def _read_imagehdu(imhdu, quasar_indices, nwave):
 
 
 def _read_onehealpix_file(
-        targetids_by_survey, fspec, arms_to_keep, skip_resomat):
+        targetids_by_survey, fspec, arms_to_keep, skip_resomat
+):
     """ Common function to read a single fits file.
 
     Arguments
@@ -319,8 +342,6 @@ def _read_onehealpix_file(
             f"catalog:{targetids_by_survey.size} vs "
             f"healpix:{common_targetids.size}!", RuntimeWarning)
 
-    fbrmap = fbrmap[idx_fbr]
-
     data = {
         'wave': {},
         'flux': {},
@@ -350,6 +371,66 @@ def _read_onehealpix_file(
     fitsfile.close()
 
     return data, idx_cat
+
+
+def _read_onehealpix_file_onlyreso(
+        targetids_by_survey, fspec, arms_to_keep, spectra_list
+):
+    """ Common function to read a single fits file.
+
+    Arguments
+    ---------
+    targetids_by_survey: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Targetids_by_survey (used to be catalog). If data, split by survey and
+        contains only one survey.
+    fspec: str
+        Filename to open.
+    arms_to_keep: list(str)
+        Must only contain B, R and Z.
+    spectra_list: list(Spectrum)
+        List of spectra that forest region is set. Modified in place and also
+        returned.
+
+    Returns
+    ---------
+    spectra_list: list(Spectrum)
+        List of spectra where forestreso is set.
+
+    Raises
+    ---------
+    RuntimeWarning
+        If number of quasars in the healpix file does not match the catalog.
+    """
+    fitsfile = fitsio.FITS(fspec)
+
+    fbrmap = fitsfile['FIBERMAP'].read(columns='TARGETID')
+    common_targetids, idx_fbr, idx_cat = np.intersect1d(
+        fbrmap, targetids_by_survey, assume_unique=True, return_indices=True)
+    if (common_targetids.size != targetids_by_survey.size):
+        warnings.warn(
+            f"Error reading {fspec}. "
+            "Number of quasars in healpix does not match the catalog "
+            f"catalog:{targetids_by_survey.size} vs "
+            f"healpix:{common_targetids.size}!", RuntimeWarning)
+
+    for arm in arms_to_keep:
+        imhdu = fitsfile[f'{arm}_RESOLUTION']
+
+        jj = -1
+        for spec in spectra_list:
+            jj += 1
+            assert (common_targetids[jj] == spec.targetid)
+
+            if arm not in spec.forestwave.keys():
+                continue
+
+            f1 = spec._f1[arm]
+            f2 = spec._f2[arm]
+            spec._forestreso[arm] = imhdu[jj, :, f1:f2]
+
+    fitsfile.close()
+
+    return spectra_list
 
 
 def read_onehealpix_file_data(
