@@ -690,8 +690,6 @@ class PiccaContinuumFitter():
         fattr.close()
         logging_mpi("All continua are fit.", self.mpi_rank)
 
-        self.save_contchi2_catalog(spectra_list)
-
     def save(self, fattr, it):
         """Save mean continuum and var_lss (if fitting) to a fits file.
 
@@ -737,7 +735,8 @@ class PiccaContinuumFitter():
 
         dtype = np.dtype([
             ('TARGETID', 'int64'), ('Z', 'f4'), ('HPXPIXEL', 'i8'),
-            ('MPI_RANK', 'i4'), ('MEANSNR', 'f4'), ('RSNR', 'f4'),
+            ('ARMS', 'U5'), ('MEANSNR', 'f4', 3), ('RSNR', 'f4'),
+            ('MPI_RANK', 'i4'),
             ('CONT_valid', bool), ('CONT_chi2', 'f4'), ('CONT_dof', 'i4'),
             ('CONT_x', 'f4', corder),
             ('CONT_xcov', 'f4', corder**2)
@@ -745,13 +744,18 @@ class PiccaContinuumFitter():
         local_catalog = np.empty(len(spectra_list), dtype=dtype)
 
         for i, spec in enumerate(spectra_list):
+            mean_snrs = np.zeros(3)
+            _x = list(spec.mean_snr.values())
+            mean_snrs[:len(_x)] = _x
+
             row = local_catalog[i]
             row['TARGETID'] = spec.targetid
             row['Z'] = spec.z_qso
             row['HPXPIXEL'] = spec.catrow['HPXPIXEL']
-            row['MPI_RANK'] = self.mpi_rank
-            row['MEANSNR'] = spec.mean_snr()
+            row['ARMS'] = ",".join(spec.mean_snr.keys())
+            row['MEANSNR'] = mean_snrs
             row['RSNR'] = spec.rsnr
+            row['MPI_RANK'] = self.mpi_rank
             for lbl in ['valid', 'x', 'chi2', 'dof']:
                 row[f'CONT_{lbl}'] = spec.cont_params[lbl]
             row['CONT_xcov'] = spec.cont_params['xcov'].ravel()
