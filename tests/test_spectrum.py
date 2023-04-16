@@ -49,7 +49,7 @@ class TestSpectrum(object):
         spec.set_forest_region(3600., 6000., 1050., 1180.)
 
         npt.assert_almost_equal(spec.rsnr, 2.1)
-        npt.assert_almost_equal(spec.mean_snr(), 2.1)
+        npt.assert_almost_equal(spec.mean_snr['B'], 2.1)
         npt.assert_almost_equal(spec.cont_params['x'], [2.1, 0.])
         npt.assert_allclose(spec.forestflux['B'], 2.1)
         npt.assert_allclose(spec.forestivar['B'], spec.forestivar_sm['B'])
