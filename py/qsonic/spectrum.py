@@ -420,7 +420,7 @@ class Spectrum():
             np.sqrt(coadd_ivar), coadd_flux) / np.sum(coadd_ivar > 0)
         self.mean_snr = {'brz': mean_snr}
 
-        if self.reso:
+        if self.forestreso:
             self._coadd_arms_reso(nwaves, idxes)
 
     def mean_resolution(self, arm, weight=None):
