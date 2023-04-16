@@ -389,7 +389,7 @@ class Spectrum():
         self._forestivar = {'brz': coadd_ivar}
         self.cont_params['cont'] = {'brz': coadd_cont}
 
-        if self.reso:
+        if self.forestreso:
             self._coadd_arms_reso(nwaves, idxes)
 
     def mean_snr(self):
