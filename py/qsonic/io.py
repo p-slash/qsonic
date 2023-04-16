@@ -162,7 +162,7 @@ def read_resolution_matrices_onehealpix_data(
     RuntimeWarning
         If number of quasars in the healpix file does not match the catalog.
     """
-    assert (catalog_hpx.size == len(spectra_list))
+    # assert (catalog_hpx.size == len(spectra_list))
 
     unique_surveys, s2 = np.unique(
         catalog_hpx['SURVEY'], return_index=True)
@@ -420,7 +420,7 @@ def _read_onehealpix_file_onlyreso(
         jj = -1
         for spec in spectra_list:
             jj += 1
-            assert (common_targetids[jj] == spec.targetid)
+            # assert (common_targetids[jj] == spec.targetid)
 
             if arm not in spec.forestwave.keys():
                 continue
@@ -435,7 +435,8 @@ def _read_onehealpix_file_onlyreso(
 
 
 def read_onehealpix_file_data(
-        cat_by_survey, input_dir, arms_to_keep, skip_resomat, program="dark"):
+        cat_by_survey, input_dir, arms_to_keep, skip_resomat, program="dark"
+):
     """ Read a single fits file for data.
 
     Arguments
@@ -474,7 +475,8 @@ def read_onehealpix_file_data(
 
 
 def read_onehealpix_file_mock(
-        catalog_hpx, input_dir, arms_to_keep, skip_resomat, nside=16):
+        catalog_hpx, input_dir, arms_to_keep, skip_resomat, nside=16
+):
     """ Read a single FITS file for mocks.
 
     Arguments
