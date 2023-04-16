@@ -267,12 +267,15 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # Iterate
     qcfit.iterate(spectra_list)
 
-    # Keep only valid spectra
-    spectra_list = list(qsonic.spectrum.valid_spectra(spectra_list))
     if args.coadd_arms:
         logging_mpi("Coadding arms.", mpi_rank)
-        for spec in spectra_list:
+        for spec in qsonic.spectrum.valid_spectra(spectra_list):
             spec.coadd_arms_forest(qcfit.varlss_interp)
+
+    qcfit.save_contchi2_catalog(spectra_list)
+
+    # Keep only valid spectra
+    spectra_list = list(qsonic.spectrum.valid_spectra(spectra_list))
 
     # Final cleaning. Especially important if not coadding arms.
     for spec in spectra_list:

@@ -67,9 +67,9 @@ def get_parser(add_help=True):
         "--nwbins", default=None, type=int,
         help="Number of wavelength bins. None creates bins with 120 A spacing")
     vargroup.add_argument(
-        "--var1", help="Lower variance bin", default=1e-5, type=float)
+        "--var1", help="Lower variance bin", default=1e-4, type=float)
     vargroup.add_argument(
-        "--var2", help="Upper variance bin", default=2., type=float)
+        "--var2", help="Upper variance bin", default=20., type=float)
     vargroup.add_argument(
         "--min-snr", help="Minimum SNR of the forest", default=0, type=float)
     vargroup.add_argument(
