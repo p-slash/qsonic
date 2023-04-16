@@ -427,7 +427,7 @@ def _read_onehealpix_file_onlyreso(
 
             f1 = spec._f1[arm]
             f2 = spec._f2[arm]
-            spec._forestreso[arm] = imhdu[jj, :, f1:f2]
+            spec._forestreso[arm] = imhdu[jj, :, f1:f2][0]
 
     fitsfile.close()
 
