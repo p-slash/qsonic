@@ -991,7 +991,9 @@ class VarLSSFitter():
 
         self.subsampler.get_mean_n_var()
 
-        self.subsampler.mean[1] -= self.subsampler.mean[0]**2
+        m2 = self.subsampler.mean[0]**2
+        self.subsampler.mean[1] -= m2
+        self.subsampler.variance[1] += 4 * m2 * self.subsampler.variance[0]
         self.subsampler.mean[2] -= self.subsampler.mean[1]**2
 
         w = self._num_pixels > 0
