@@ -418,9 +418,7 @@ def _read_onehealpix_file_onlyreso(
     for arm in arms_to_keep:
         imhdu = fitsfile[f'{arm}_RESOLUTION']
 
-        jj = -1
-        for spec in spectra_list:
-            jj += 1
+        for jj, spec in zip(idx_fbr, spectra_list):
             # assert (common_targetids[jj] == spec.targetid)
 
             if arm not in spec.forestwave.keys():
@@ -428,7 +426,7 @@ def _read_onehealpix_file_onlyreso(
 
             f1 = spec._f1[arm]
             f2 = spec._f2[arm]
-            spec._forestreso[arm] = imhdu[jj, :, f1:f2][0]
+            spec._forestreso[arm] = imhdu[int(jj), :, f1:f2][0]
 
     fitsfile.close()
 
