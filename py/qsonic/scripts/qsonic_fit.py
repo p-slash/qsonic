@@ -85,15 +85,11 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     # Each process reads its own list
     for cat in local_queue:
         local_specs = qsonic.io.read_spectra_onehealpix(
-            cat, args.input_dir, args.arms,
-            args.mock_analysis, skip_resomat
-        )
+            cat, args.input_dir, args.arms, args.mock_analysis, skip_resomat)
 
         for spec in local_specs:
             spec.set_forest_region(
-                args.wave1, args.wave2,
-                args.forest_w1, args.forest_w2
-            )
+                args.wave1, args.wave2, args.forest_w1, args.forest_w2)
 
             if not args.keep_nonforest_pixels:
                 spec.remove_nonforest_pixels()
