@@ -169,6 +169,8 @@ def read_resolution_matrices_onehealpix_data(
     survey_split_cat = np.split(catalog_hpx, s2[1:])
     s2 = np.append(s2, len(spectra_list))
 
+    arms_to_keep = spectra_list[0].wave.keys()
+
     for ii, cat_by_survey in enumerate(survey_split_cat):
         survey = cat_by_survey['SURVEY'][0]
         pixnum = cat_by_survey['HPXPIXEL'][0]
@@ -179,8 +181,7 @@ def read_resolution_matrices_onehealpix_data(
 
         i1, i2 = s2[ii], s2[ii + 1]
         spectra_list[i1:i2] = _read_onehealpix_file_onlyreso(
-            targetids_by_survey, fspec, qsonic.spectrum.Spectrum.wave.keys(),
-            spectra_list[i1:i2])
+            targetids_by_survey, fspec, arms_to_keep, spectra_list[i1:i2])
 
     return spectra_list
 
