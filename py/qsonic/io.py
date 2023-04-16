@@ -377,7 +377,8 @@ def _read_onehealpix_file(
 def _read_onehealpix_file_onlyreso(
         targetids_by_survey, fspec, arms_to_keep, spectra_list
 ):
-    """ Common function to read a single fits file.
+    """ Function to read forest region resolution matrix for data. Note reading
+    resolution matrix is already fast for mocks.
 
     Arguments
     ---------
