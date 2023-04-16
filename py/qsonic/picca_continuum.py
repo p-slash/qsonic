@@ -611,8 +611,8 @@ class PiccaContinuumFitter():
 
         # Else, fit for var_lss
         logging_mpi("Fitting var_lss", self.mpi_rank)
-        y, ep = self.varlss_fitter.fit(
-            self.varlss_interp.fp)
+        y, ep = self.varlss_fitter.fit(self.varlss_interp.fp)
+
         if not noupdate:
             self.varlss_interp.fp = y
             self.varlss_interp.ep = ep
@@ -1238,14 +1238,19 @@ class VarLSSFitter():
                 fit_results[iwave] = pfit
                 std_results[iwave] = np.sqrt(np.diag(pcov))
 
-        # Smooth new estimates
-        if smooth:
-            fit_results = self._smooth_fit_results(fit_results, std_results)
+        invalid_ratio = nfails / fit_results.shape[0]
+        if invalid_ratio > 0.4:
+            raise QsonicException(
+                "VarLSSFitter failed at more than 40% points.")
 
         if nfails > 0:
             warn_mpi(
                 f"VarLSSFitter failed and extrapolated at {nfails} points.",
                 self.mpi_rank)
+
+        # Smooth new estimates
+        if smooth:
+            fit_results = self._smooth_fit_results(fit_results, std_results)
 
         return fit_results, std_results
 
