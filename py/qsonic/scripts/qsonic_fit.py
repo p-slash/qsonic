@@ -106,10 +106,12 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
 
         w = np.array(
             [spec.rsnr > args.min_rsnr for spec in local_specs], dtype=bool)
+        nspec = w.sum()
 
         # Read resolution matrix hopefully faster
-        spectra_list = qsonic.io.read_resolution_matrices_onehealpix_data(
-            cat[w], args.input_dir, spectra_list)
+        spectra_list[-nspec:] = \
+            qsonic.io.read_resolution_matrices_onehealpix_data(
+                cat[w], args.input_dir, spectra_list[-nspec:])
 
     nspec_all = comm.reduce(len(spectra_list))
     etime = (time.time() - start_time) / 60  # min
