@@ -83,6 +83,8 @@ class Spectrum():
     ----------
     rsnr: float
         Average SNR above Lya. Calculated in set_forest_region.
+    mean_snr: dict(float)
+        Mean signal-to-noise ratio in the forest.
     _f1, _f2: dict(int)
         Forest indices. Set up using `set_forest_region` method. Then use
         property functions to access forest wave, flux, ivar instead.
@@ -167,7 +169,8 @@ class Spectrum():
         self.ivar = {}
         self.reso = {}
 
-        self.rsnr = 0
+        self.rsnr = None
+        self.mean_snr = None
         self._f1 = {}
         self._f2 = {}
         self._forestwave = {}
@@ -201,9 +204,50 @@ class Spectrum():
         self.cont_params['dof'] = 0
         self.cont_params['cont'] = {}
 
+        self._set_rsnr()
+
+    def _set_rsnr(self):
+        """Calculates and sets SNR above Lya."""
+        self.rsnr = 0
+        rsnr_weight = 1e-6
+
+        for arm, wave_arm in self.wave.items():
+            # Calculate SNR above Lya
+            ii1 = np.searchsorted(
+                wave_arm, (1 + self.z_qso) * Spectrum.WAVE_LYA_A)
+            weight = np.sqrt(self.ivar[arm][ii1:])
+            self.rsnr += np.dot(self.flux[arm][ii1:], weight)
+            rsnr_weight += np.sum(weight > 0)
+
+        self.rsnr /= rsnr_weight
+
+    def _set_forest_related_parameters(self):
+        """Calculates the mean SNR in the forest region and an initial guess
+        for the continuum amplitude."""
+        self.cont_params['x'][0] = 0
+        cont_params_weight = 1e-6
+
+        self.mean_snr = {}
+
+        for arm, ivar_arm in self.forestivar.items():
+            flux_arm = self.forestflux[arm]
+            w = flux_arm > 0
+
+            self.cont_params['x'][0] += np.dot(flux_arm[w], ivar_arm[w])
+            cont_params_weight += np.sum(ivar_arm[w])
+
+            self.mean_snr[arm] = 0
+            armpix = np.sum(ivar_arm > 0)
+            if armpix == 0:
+                continue
+
+            self.mean_snr[arm] = np.dot(np.sqrt(ivar_arm), flux_arm) / armpix
+
+        self.cont_params['x'][0] /= cont_params_weight
+
     def set_forest_region(self, w1, w2, lya1, lya2):
-        """ Sets slices for the forest region. Also calculates
-        average SNR above Lya
+        """ Sets slices for the forest region. Also calculates the mean SNR in
+        the forest and an initial guess for the continuum amplitude.
 
         Arguments
         ---------
@@ -214,18 +258,8 @@ class Spectrum():
         """
         l1 = max(w1, (1 + self.z_qso) * lya1)
         l2 = min(w2, (1 + self.z_qso) * lya2)
-        rsnr_weight = 1e-6
 
-        a0 = 1e-6
-        n0 = 1e-6
         for arm, wave_arm in self.wave.items():
-            # Calculate SNR above Lya
-            ii1 = np.searchsorted(
-                wave_arm, (1 + self.z_qso) * Spectrum.WAVE_LYA_A)
-            weight = np.sqrt(self.ivar[arm][ii1:])
-            self.rsnr += np.dot(self.flux[arm][ii1:], weight)
-            rsnr_weight += np.sum(weight > 0)
-
             # Slice to forest limits
             ii1, ii2 = np.searchsorted(wave_arm, [l1, l2])
             real_size_arm = np.sum(self.ivar[arm][ii1:ii2] > 0)
@@ -241,15 +275,8 @@ class Spectrum():
             if self.reso:
                 self._forestreso[arm] = self.reso[arm][:, ii1:ii2]
 
-            # np.shares_memory(self.forestflux, self.flux)
-            w = self.forestflux[arm] > 0
-
-            a0 += np.dot(self.forestflux[arm][w], self.forestivar[arm][w])
-            n0 += np.sum(self.forestivar[arm][w])
-
-        self.rsnr /= rsnr_weight
-        self.cont_params['x'][0] = a0 / n0
         self._forestivar_sm = self._forestivar
+        self._set_forest_related_parameters()
 
     def drop_short_arms(self, lya1=0, lya2=0, skip_ratio=0):
         """Arms that have less than ``skip_ratio`` pixels are removed from
@@ -338,7 +365,7 @@ class Spectrum():
         """ Coadds different arms using smoothed pipeline ivar and var_lss.
         Resolution matrix is equally weighted!
 
-        Replaces `forest` variables and ``cont_params['cont']`` with a
+        Replaces ``forest`` variables and ``cont_params['cont']`` with a
         dictionary that has a single arm ``brz`` as key to access coadded data.
 
         Arguments
@@ -389,22 +416,12 @@ class Spectrum():
         self._forestivar = {'brz': coadd_ivar}
         self.cont_params['cont'] = {'brz': coadd_cont}
 
+        mean_snr = np.dot(
+            np.sqrt(coadd_ivar), coadd_flux) / np.sum(coadd_ivar > 0)
+        self.mean_snr = {'brz': mean_snr}
+
         if self.forestreso:
             self._coadd_arms_reso(nwaves, idxes)
-
-    def mean_snr(self):
-        """float: Mean signal-to-noise ratio in the forest."""
-        snr = 0
-        npix = 1e-6
-        for arm, ivar_arm in self.forestivar.items():
-            w = ivar_arm > 0
-            armpix = np.sum(w)
-            if armpix == 0:
-                continue
-
-            snr += np.dot(np.sqrt(ivar_arm), self.forestflux[arm])
-            npix += armpix
-        return snr / npix
 
     def mean_resolution(self, arm, weight=None):
         """ Returns the weighted mean Gaussian sigma of the spectrograph
@@ -478,14 +495,10 @@ class Spectrum():
         }
 
         for arm, wave_arm in self.forestwave.items():
-            armpix = np.sum(self.forestivar[arm] > 0)
-            if armpix == 0:
+            if self.mean_snr[arm] == 0:
                 continue
 
-            hdr_dict['MEANSNR'] = np.dot(
-                np.sqrt(self.forestivar[arm]),
-                self.forestflux[arm]
-            ) / armpix
+            hdr_dict['MEANSNR'] = self.mean_snr[arm]
 
             cont_est = self.cont_params['cont'][arm]
             delta = self.forestflux[arm] / cont_est - 1
