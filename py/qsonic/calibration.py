@@ -66,7 +66,7 @@ class NoiseCalibrator():
                     f"{fname}::wave is not equally spaced.")
 
             eta = np.array(data['eta'], dtype='d')
-            eta = eta[eta != 0]
+            eta[eta == 0] = 1
             self.eta_interp = Fast1DInterpolator(waves_0, dwave, eta)
         except Exception as e:
             raise QsonicException(
@@ -124,7 +124,7 @@ class FluxCalibrator():
                     f"{fname}::wave is not equally spaced.")
 
             stacked_flux = np.array(data['stacked_flux'], dtype='d')
-            stacked_flux = stacked_flux[stacked_flux != 0]
+            stacked_flux[stacked_flux == 0] = 1
             self.flux_interp = Fast1DInterpolator(waves_0, dwave, stacked_flux)
         except Exception as e:
             raise QsonicException(
