@@ -236,14 +236,10 @@ class PiccaContinuumFitter():
                 0.1 * np.ones(self.varlss_fitter.nwbins),
                 ep=np.zeros(self.varlss_fitter.nwbins))
 
-        if not args.fit_eta or args.fiducial_varlss:
-            self.eta_interp = Fast1DInterpolator(
-                args.wave1, args.wave2 - args.wave1, np.ones(3))
-        else:
-            self.eta_interp = Fast1DInterpolator(
-                self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
-                np.ones(self.varlss_fitter.nwbins),
-                ep=np.zeros(self.varlss_fitter.nwbins))
+        self.eta_interp = Fast1DInterpolator(
+            self.varlss_interp.xp0, self.varlss_interp.dxp,
+            np.ones_like(self.varlss_interp.fp),
+            ep=np.zeros_like(self.varlss_interp.fp))
 
         self.niterations = args.no_iterations
         self.cont_order = args.cont_order
@@ -640,11 +636,11 @@ class PiccaContinuumFitter():
         if self.mpi_rank != 0:
             return
 
-        step = max(1, self.varlss_fitter.nwbins // 10)
+        step = max(1, self.varlss_fitter.nwbins // 3)
         text = ("------------------------------\n"
                 "wave\t| var_lss +-  error \t|   eta   +-  error \n")
 
-        for i in range(0, y.shape[0], step):
+        for i in range(0, self.varlss_fitter.nwbins, step):
             w = self.varlss_fitter.waveobs[i]
             v = self.varlss_interp.fp[i]
             ve = self.varlss_interp.ep[i]
@@ -698,7 +694,7 @@ class PiccaContinuumFitter():
             logging_mpi(
                 f"Fitting iteration {it+1}/{self.niterations}", self.mpi_rank)
 
-            self.save(fattr, it + 1)
+            self.save(fattr, f"-{it + 1}")
 
             # Fit all continua one by one
             self.fit_continua(spectra_list)
@@ -715,28 +711,29 @@ class PiccaContinuumFitter():
         if not has_converged:
             warn_mpi("Iteration has NOT converged.", self.mpi_rank)
 
+        self.save(fattr)
         fattr.close()
         logging_mpi("All continua are fit.", self.mpi_rank)
 
-    def save(self, fattr, it):
+    def save(self, fattr, suff=''):
         """Save mean continuum and var_lss (if fitting) to a fits file.
 
         Arguments
         ---------
         fattr: MPISaver
             File handler to save only on master node.
-        it: int
-            Current iteration number.
+        suff: str
+            Suffix for the current iteration number.
         """
         fattr.write(
             [self.rfwave, self.meancont_interp.fp, self.meancont_interp.ep],
             names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
-            extname=f'CONT-{it}')
+            extname=f'CONT{suff}')
 
         # fattr.write(
         #     [self.flux_stacker.waveobs, self.flux_stacker.stacked_flux],
         #     names=['lambda', 'stacked_flux'],
-        #     extname=f'STACKED_FLUX-{it}')
+        #     extname=f'STACKED_FLUX{suff}')
 
         if self.varlss_fitter is None:
             return
@@ -746,7 +743,7 @@ class PiccaContinuumFitter():
              self.varlss_interp.fp, self.varlss_interp.ep,
              self.eta_interp.fp, self.eta_interp.ep],
             names=['lambda', 'var_lss', 'e_var_lss', 'eta', 'e_eta'],
-            extname=f'VAR_FUNC-{it}')
+            extname=f'VAR_FUNC{suff}')
 
     def save_contchi2_catalog(self, spectra_list):
         """Save chi2 catalog if ``self.outdir`` is set. All values are gathered
