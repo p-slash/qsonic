@@ -85,7 +85,7 @@ class NoiseCalibrator():
         for spec in spectra_list:
             for arm, wave_arm in spec.forestwave.items():
                 eta = self.eta_interp(wave_arm)
-                spec.forestivar /= eta
+                spec.forestivar[arm] /= eta
 
 
 class FluxCalibrator():
@@ -144,5 +144,5 @@ class FluxCalibrator():
         for spec in spectra_list:
             for arm, wave_arm in spec.forestwave.items():
                 stacked_flux = self.stacked_flux_interp(wave_arm)
-                spec.forestflux /= stacked_flux
-                spec.forestivar *= stacked_flux**2
+                spec.forestflux[arm] /= stacked_flux
+                spec.forestivar[arm] *= stacked_flux**2
