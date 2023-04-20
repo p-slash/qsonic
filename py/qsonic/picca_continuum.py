@@ -398,7 +398,6 @@ class PiccaContinuumFitter():
 
         if spec.cont_params['valid']:
             spec.cont_params['cont'] = {}
-            chi2 = 0
             for arm, wave_arm in spec.forestwave.items():
                 cont_est = self.get_continuum_model(
                     result['x'], wave_arm / (1 + spec.z_qso))
@@ -410,14 +409,10 @@ class PiccaContinuumFitter():
                 cont_est *= self.meanflux_interp(wave_arm)
                 # cont_est *= self.flux_stacker(wave_arm)
                 spec.cont_params['cont'][arm] = cont_est
-                var_lss = self.varlss_interp(wave_arm) * cont_est**2
-                weight = 1. / (1 + spec.forestivar_sm[arm] * var_lss)
-                weight *= spec.forestivar_sm[arm]
 
-                chi2 += np.dot(weight, (spec.forestflux[arm] - cont_est)**2)
-
-            # We can further eliminate spectra based chi2
-            spec.cont_params['chi2'] = chi2
+        spec.set_forest_weight(self.varlss_interp, self.eta_interp)
+        # We can further eliminate spectra based chi2
+        spec.calc_continuum_chi2()
 
         if spec.cont_params['valid']:
             spec.cont_params['x'] = result['x']
@@ -538,11 +533,8 @@ class PiccaContinuumFitter():
 
                 cont = spec.cont_params['cont'][arm]
                 flux = spec.forestflux[arm] / cont
+                weight = spec.forestweight[arm] * cont**2
                 # Deconvolve resolution matrix ?
-
-                var_lss = self.varlss_interp(wave_arm)
-                weight = spec.forestivar_sm[arm] * cont**2
-                weight = weight / (1 + weight * var_lss)
 
                 norm_flux += np.bincount(
                     bin_idx, weights=flux * weight, minlength=self.nbins)
