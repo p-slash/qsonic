@@ -866,8 +866,6 @@ class VarLSSFitter():
         Wavelength centers in the observed frame.
     ivar_edges: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Inverse variance edges.
-    var_centers: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Variance centers in **descending** order.
     minlength: int
         Minimum size of the combined bin count array. It includes underflow and
         overflow bins for both wavelength and variance bins.
@@ -894,8 +892,8 @@ class VarLSSFitter():
 
         .. math::
 
-            \sigma^2_\mathrm{obs} = \eta \sigma^2_\mathrm{pipe} +
-            \sigma^2_\mathrm{LSS}
+            \\sigma^2_\\mathrm{obs} = \\eta \\sigma^2_\\mathrm{pipe} +
+            \\sigma^2_\\mathrm{LSS}
 
         Arguments
         ---------
@@ -1283,7 +1281,7 @@ class VarLSSFitter():
     @property
     def var_centers(self):
         """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
-        Mean variance for the bin centers."""
+        Mean variance for the bin centers in **descending** order."""
         return self.subsampler.mean[3][self.wvalid_bins]
 
     @property

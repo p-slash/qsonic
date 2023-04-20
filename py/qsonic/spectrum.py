@@ -336,7 +336,7 @@ class Spectrum():
     def set_smooth_ivar(self, smoothing_size=16.):
         """ Set :attr:`forestivar_sm` to smoothed inverse variance. Before this
         call :attr:`forestivar_sm` points to :attr:`forestivar`. If
-        ``smoothing_size`` is <= 0, smoothing is undone such that ivar_sm
+        ``smoothing_size <= 0``, smoothing is undone such that ivar_sm
         points to ivar.
 
 
@@ -345,7 +345,7 @@ class Spectrum():
 
         Arguments
         ---------
-        smoothing_size: float, default: 16.
+        smoothing_size: float, default: 16
             Gaussian smoothing spread in A.
         """
         self._forestivar_sm = {}
@@ -370,16 +370,15 @@ class Spectrum():
 
         .. math::
 
-            \mathrm{weight} = \mathrm{ivar} / (
-            \eta + \mathrm{ivar} sigma^2_\mathrm{LSS} C^2),
+            w = i / (\\eta + i \\sigma^2_\\mathrm{LSS} C^2),
 
-        where C is the continuum.
+        where i is IVAR and C is the continuum.
 
         Arguments
         ---------
-        varlss_interp: Fast1DInterpolator, default: 0.
+        varlss_interp: Fast1DInterpolator, default: 0
             LSS variance interpolator.
-        eta_interp: Fast1DInterpolator, default: 1.
+        eta_interp: Fast1DInterpolator, default: 1
             eta interpolator.
         """
         self._forestweight = {}
@@ -450,9 +449,9 @@ class Spectrum():
 
         Arguments
         ---------
-        varlss_interp: Fast1DInterpolator, default: 0.
+        varlss_interp: Fast1DInterpolator, default: 0
             LSS variance interpolator.
-        eta_interp: Fast1DInterpolator, default: 1.
+        eta_interp: Fast1DInterpolator, default: 1
             eta interpolator.
         """
         if not self.cont_params['valid'] or not self.cont_params['cont']:
