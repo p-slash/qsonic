@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 
 from qsonic import QsonicException
-from qsonic.mathtools import get_smooth_ivar
+from qsonic.mathtools import _zero_function, _one_function, get_smooth_ivar
 
 
 def add_wave_region_parser(parser=None):
@@ -90,7 +90,6 @@ class Spectrum():
         property functions to access forest wave, flux, ivar instead.
     cont_params: dict
         Continuum parameters. Initial estimates are constructed.
-
     """
     WAVE_LYA_A = 1215.67
     """float: Lya wavelength in A."""
@@ -178,6 +177,9 @@ class Spectrum():
         self._forestivar = {}
         self._forestivar_sm = {}
         self._forestreso = {}
+        self._forestweight = {}
+
+        self._smoothing_scale = 0
 
         for arm, wave_arm in self.wave.items():
             self._f1[arm], self._f2[arm] = 0, wave_arm.size
@@ -276,6 +278,7 @@ class Spectrum():
                 self._forestreso[arm] = self.reso[arm][:, ii1:ii2]
 
         self._forestivar_sm = self._forestivar
+        self._forestweight = self._forestivar
         self._set_forest_related_parameters()
 
     def drop_short_arms(self, lya1=0, lya2=0, skip_ratio=0):
@@ -299,6 +302,7 @@ class Spectrum():
             self._forestivar.pop(arm, None)
             self._forestreso.pop(arm, None)
             self._forestivar_sm.pop(arm, None)
+            self._forestweight.pop(arm, None)
             self.cont_params['cont'].pop(arm, None)
 
     def remove_nonforest_pixels(self):
@@ -330,8 +334,14 @@ class Spectrum():
         return self.get_real_size() > skip_ratio * npixels
 
     def set_smooth_ivar(self, smoothing_size=16.):
-        """ Set `forestivar_sm` to smoothed inverse variance. Before this call
-        `forestivar_sm` points to `forestivar`.
+        """ Set :attr:`forestivar_sm` to smoothed inverse variance. Before this
+        call :attr:`forestivar_sm` points to :attr:`forestivar`. If
+        ``smoothing_size`` is <= 0, smoothing is undone such that ivar_sm
+        points to ivar.
+
+
+        ``smoothing_size`` is saved to a private :attr:`_smoothing_scale`
+        variable for future use.
 
         Arguments
         ---------
@@ -339,39 +349,111 @@ class Spectrum():
             Gaussian smoothing spread in A.
         """
         self._forestivar_sm = {}
+        if smoothing_size <= 0:
+            self._smoothing_scale = 0
+            self._forestivar_sm = self._forestivar
+            return
+
+        self._smoothing_scale = smoothing_size
         sigma_pix = smoothing_size / self.dwave
         for arm, ivar_arm in self.forestivar.items():
             self._forestivar_sm[arm] = get_smooth_ivar(ivar_arm, sigma_pix)
 
+    def set_forest_weight(
+            self,
+            varlss_interp=_zero_function,
+            eta_interp=_one_function
+    ):
+        """ Sets :attr:`forestweight` for a given var_lss and eta correction.
+        Always uses :attr:`forestivar_sm`, which is not actually smoothed if
+        :meth:`set_smooth_ivar` is not called.
+
+        .. math::
+
+            \mathrm{weight} = \mathrm{ivar} / (
+            \eta + \mathrm{ivar} sigma^2_\mathrm{LSS} C^2),
+
+        where C is the continuum.
+
+        Arguments
+        ---------
+        varlss_interp: Fast1DInterpolator, default: 0.
+            LSS variance interpolator.
+        eta_interp: Fast1DInterpolator, default: 1.
+            eta interpolator.
+        """
+        self._forestweight = {}
+        if not self.cont_params['valid'] or not self.cont_params['cont']:
+            return
+
+        for arm, wave_arm in self.forestwave.items():
+            cont_est = self.cont_params['cont'][arm]
+            var_lss = varlss_interp(wave_arm) * cont_est**2
+            eta = eta_interp(wave_arm)
+            ivar_arm = self.forestivar_sm[arm]
+            self._forestweight[arm] = ivar_arm / (eta + ivar_arm * var_lss)
+
+    def calc_continuum_chi2(self):
+        """ Calculate the chi2 of the continuum fitting. This is just a sum
+        of weight * (flux - cont)^2.
+
+        Returns
+        -------
+        chi2: float
+        """
+        if not self.cont_params['valid'] or not self.cont_params['cont']:
+            self.cont_params['chi2'] = -1
+            return -1
+
+        chi2 = 0
+        for arm, wave_arm in self.forestwave.items():
+            cont_est = self.cont_params['cont'][arm]
+            weight = self.forestweight[arm]
+            flux = self.forestflux[arm]
+            chi2 += np.dot(weight, (flux - cont_est)**2)
+
+        self.cont_params['chi2'] = chi2
+
+        return chi2
+
     def _coadd_arms_reso(self, nwaves, idxes):
-        """Coadd resolution matrix with equal weights."""
+        """Coadd resolution matrix"""
         max_ndia = np.max([reso.shape[0] for reso in self.forestreso.values()])
         coadd_reso = np.zeros((max_ndia, nwaves))
         creso_norm = np.zeros(nwaves)
 
         for arm, reso_arm in self.forestreso.items():
+            weight = self.forestweight[arm].copy()
+            weight[weight == 0] = 1e-8
+
             reso_arm = self.forestreso[arm]
             ddia = max_ndia - reso_arm.shape[0]
             if ddia > 0:
                 reso_arm = np.pad(reso_arm, ((ddia, ddia), (0, 0)))
 
-            coadd_reso[:, idxes[arm]] += reso_arm
-            creso_norm[idxes[arm]] += 1
+            coadd_reso[:, idxes[arm]] += weight * reso_arm
+            creso_norm[idxes[arm]] += weight
 
         coadd_reso /= creso_norm
         self._forestreso = {'brz': coadd_reso}
 
-    def coadd_arms_forest(self, varlss_interp):
-        """ Coadds different arms using smoothed pipeline ivar and var_lss.
-        Resolution matrix is equally weighted!
+    def coadd_arms_forest(
+            self,
+            varlss_interp=_zero_function,
+            eta_interp=_one_function
+    ):
+        """ Coadds different arms using :attr:`forestweight`. Interpolators are
+        needed to reset :attr:`forestweight`.
 
         Replaces ``forest`` variables and ``cont_params['cont']`` with a
         dictionary that has a single arm ``brz`` as key to access coadded data.
 
         Arguments
         ---------
-        varlss_interp: Fast1DInterpolator or any other interpolator.
+        varlss_interp: Fast1DInterpolator, default: 0.
             LSS variance interpolator.
+        eta_interp: Fast1DInterpolator, default: 1.
+            eta interpolator.
         """
         if not self.cont_params['valid'] or not self.cont_params['cont']:
             raise QsonicException("Continuum needed for coadding.")
@@ -379,7 +461,7 @@ class Spectrum():
         min_wave = np.min([wave[0] for wave in self.forestwave.values()])
         max_wave = np.max([wave[-1] for wave in self.forestwave.values()])
 
-        nwaves = int((max_wave - min_wave) / self.dwave + 0.5) + 1
+        nwaves = int((max_wave - min_wave) / self.dwave + 0.1) + 1
         coadd_wave = np.arange(nwaves) * self.dwave + min_wave
         coadd_flux = np.zeros(nwaves)
         coadd_ivar = np.zeros(nwaves)
@@ -388,15 +470,12 @@ class Spectrum():
 
         idxes = {}
         for arm, wave_arm in self.forestwave.items():
-            idx = ((wave_arm - min_wave) / self.dwave + 0.5).astype(int)
+            idx = ((wave_arm - min_wave) / self.dwave + 0.1).astype(int)
             idxes[arm] = idx
 
-            var_lss = varlss_interp(wave_arm)
-            var_lss *= self.cont_params['cont'][arm]**2
-            ivar2 = self.forestivar_sm[arm]
-            weight = ivar2 / (1 + ivar2 * var_lss)
+            weight = self.forestweight[arm]
 
-            var = np.zeros_like(ivar2)
+            var = np.zeros_like(weight)
             w = self.forestivar[arm] > 0
             var[w] = 1 / self.forestivar[arm][w]
 
@@ -416,6 +495,10 @@ class Spectrum():
         self._forestivar = {'brz': coadd_ivar}
         self.cont_params['cont'] = {'brz': coadd_cont}
 
+        self.set_smooth_ivar(self._smoothing_scale)
+        self._forestweight = {}
+        self.set_forest_weight(varlss_interp, eta_interp)
+
         mean_snr = np.dot(
             np.sqrt(coadd_ivar), coadd_flux) / np.sum(coadd_ivar > 0)
         self.mean_snr = {'brz': mean_snr}
@@ -432,7 +515,7 @@ class Spectrum():
         arm: str
             Arm.
         weight: None or ndarray, default: None
-            Weights. If ``None``, forestivar_sm is used.
+            Weights. If ``None``, :attr:`forestweight` is used.
 
         Returns
         -------
@@ -443,7 +526,7 @@ class Spectrum():
             return None
 
         if weight is None:
-            weight = self.forestivar_sm[arm]
+            weight = self.forestweight[arm]
 
         total_weight = np.sum(weight)
         reso = np.dot(self.forestreso[arm], weight) / total_weight
@@ -461,24 +544,18 @@ class Spectrum():
         rms_in_pixel = np.abs(off_idx).dot(new_ratios) / np.sqrt(2.) / norm
         return rms_in_pixel * 3e5 * self.dwave / lambda_eff
 
-    def write(self, fts_file, varlss_interp, use_ivar_sm=False):
+    def write(self, fts_file):
         """Writes each arm to FITS file separately.
 
         Writes 'LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT' columns and
         'RESOMAT' column if resolution matrix is present to extention name
         ``targetid-arm``. FITS file must be initialized before.
-        Each arm has its own `MEANSNR`. "WEIGHT" in the file do not use
-        smoothed inverse variance by default, which can be changed by
-        ``use_ivar_sm=True``.
+        Each arm has its own `MEANSNR`.
 
         Arguments
         ---------
         fts_file: FITS file
             The file handler, not filename.
-        varlss_interp: Fast1DInterpolator or any other interpolator.
-            LSS variance interpolator.
-        use_ivar_sm: bool, default: False
-            Use :attr:`forestivar_sm` in weights instead.
         """
         hdr_dict = {
             'LOS_ID': self.targetid,
@@ -491,7 +568,7 @@ class Spectrum():
             'MEANSNR': 0.,
             'RSNR': self.rsnr,
             'DELTA_LAMBDA': self.dwave,
-            'SMWEIGHT': use_ivar_sm,
+            'SMSCALE': self._smoothing_scale
         }
 
         for arm, wave_arm in self.forestwave.items():
@@ -503,14 +580,11 @@ class Spectrum():
             cont_est = self.cont_params['cont'][arm]
             delta = self.forestflux[arm] / cont_est - 1
             ivar = self.forestivar[arm] * cont_est**2
-            var_lss = varlss_interp(wave_arm)
-            ivar_w = (
-                self.forestivar_sm[arm] * cont_est**2 if use_ivar_sm else ivar)
-            weight = ivar_w / (1 + ivar_w * var_lss)
+            weight = self.forestweight[arm] * cont_est**2
 
             cols = [wave_arm, delta, ivar, weight, cont_est]
             if self.forestreso:
-                hdr_dict['MEANRESO'] = self.mean_resolution(arm, weight)
+                hdr_dict['MEANRESO'] = self.mean_resolution(arm)
                 cols.append(self.forestreso[arm].T.astype('f8'))
 
             fts_file.write(
@@ -579,6 +653,12 @@ class Spectrum():
         Initially equal to :attr:`.forestivar`. Smoothed if
         :meth:`.set_smooth_ivar` is called."""
         return self._forestivar_sm
+
+    @property
+    def forestweight(self):
+        """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Forest
+        weight field. Initially equal to :attr:`.forestivar`."""
+        return self._forestweight
 
     @property
     def forestreso(self):

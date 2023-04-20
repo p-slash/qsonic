@@ -271,7 +271,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     if args.coadd_arms:
         logging_mpi("Coadding arms.", mpi_rank)
         for spec in qsonic.spectrum.valid_spectra(spectra_list):
-            spec.coadd_arms_forest(qcfit.varlss_interp)
+            spec.coadd_arms_forest(qcfit.varlss_interp, qcfit.eta_interp)
 
     qcfit.save_contchi2_catalog(spectra_list)
 
@@ -289,7 +289,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # Save deltas
     logging_mpi("Saving deltas.", mpi_rank)
     qsonic.io.save_deltas(
-        spectra_list, args.outdir, qcfit.varlss_interp,
+        spectra_list, args.outdir,
         save_by_hpx=args.save_by_hpx, mpi_rank=mpi_rank)
 
 
