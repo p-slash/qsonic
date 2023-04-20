@@ -7,6 +7,7 @@ from os import makedirs as os_makedirs
 import numpy as np
 
 from qsonic import QsonicException
+import qsonic.calibration
 import qsonic.catalog
 import qsonic.io
 import qsonic.spectrum
@@ -33,6 +34,7 @@ def get_parser(add_help=True):
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser = qsonic.io.add_io_parser(parser)
+    parser = qsonic.calibration.add_calibration_parser(parser)
 
     analysis_group = parser.add_argument_group('Analysis options')
     analysis_group.add_argument(
@@ -116,6 +118,18 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
         f"All {nspec_all} spectra are read in {etime:.1f} mins.", mpi_rank)
 
     return spectra_list
+
+
+def mpi_noise_flux_calibrate(spectra_list, args, mpi_rank):
+    if args.noise_calibration:
+        logging_mpi("Applying noise calibration.", mpi_rank)
+        ncal = qsonic.calibration.NoiseCalibrator(args.noise_calibration)
+        ncal.apply(spectra_list)
+
+    if args.flux_calibration:
+        logging_mpi("Applying flux calibration.", mpi_rank)
+        fcal = qsonic.calibration.FluxCalibrator(args.flux_calibration)
+        fcal.apply(spectra_list)
 
 
 def mpi_read_masks(local_queue, args, comm, mpi_rank):
@@ -242,6 +256,8 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
 
     spectra_list = mpi_read_spectra_local_queue(
         local_queue, args, comm, mpi_rank)
+
+    mpi_noise_flux_calibrate(spectra_list, args, mpi_rank)
 
     apply_masks(maskers, spectra_list, mpi_rank)
 

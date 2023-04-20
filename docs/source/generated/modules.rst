@@ -7,6 +7,7 @@ Modules
 .. toctree::
    :maxdepth: 4
 
+   calibration
    catalog
    io
    masks
