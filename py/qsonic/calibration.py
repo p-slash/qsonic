@@ -42,14 +42,19 @@ class NoiseCalibrator():
 
     where i is IVAR.
 
-    FITS file must have 'VAR_FUNC' extension. This extension columns for 'wave'
-    and 'eta'. Wavelength array must be linearly and equally spaced. Uses
-    cubic spline.
+    FITS file must have 'VAR_FUNC' extension. This extension must have columns
+    for 'lambda' and 'eta'. Wavelength array must be linearly and equally
+    spaced. Uses cubic spline.
 
     Parameters
     ----------
     fname: str
         Filename to read by ``fitsio``.
+
+    Attributes
+    ----------
+    eta_interp: FastCubic1DInterp
+        Eta interpolator.
     """
 
     def __init__(self, fname):
@@ -57,7 +62,7 @@ class NoiseCalibrator():
             with fitsio.FITS(fname) as fts:
                 data = fts['VAR_FUNC'].read()
 
-            waves = data['wave']
+            waves = data['lambda']
             waves_0 = waves[0]
             dwave = waves[1] - waves[0]
 
@@ -100,14 +105,19 @@ class FluxCalibrator():
 
     where i is IVAR and s is the stacked flux.
 
-    FITS file must have 'STACKED_FLUX' extension. This extension columns for
-    'wave' and 'stacked_flux'. Wavelength array must be linearly and equally
-    spaced.
+    FITS file must have 'STACKED_FLUX' extension. This extension must have
+    columns for 'lambda' and 'stacked_flux'. Wavelength array must be linearly
+    and equally spaced. Uses linear interpolation.
 
     Parameters
     ----------
     fname: str
         Filename to read by ``fitsio``.
+
+    Attributes
+    ----------
+    flux_interp: FastLinear1DInterp
+        Flux interpolator.
     """
 
     def __init__(self, fname):
@@ -115,7 +125,7 @@ class FluxCalibrator():
             with fitsio.FITS(fname) as fts:
                 data = fts['STACKED_FLUX'].read()
 
-            waves = data['wave']
+            waves = data['lambda']
             waves_0 = waves[0]
             dwave = waves[1] - waves[0]
 
