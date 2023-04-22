@@ -376,9 +376,9 @@ class Spectrum():
 
         Arguments
         ---------
-        varlss_interp: Fast1DInterpolator, default: 0
+        varlss_interp: Callable[[ndarray], ndarray], default: 0
             LSS variance interpolator.
-        eta_interp: Fast1DInterpolator, default: 1
+        eta_interp: Callable[[ndarray], ndarray], default: 1
             eta interpolator.
         """
         self._forestweight = {}
@@ -449,10 +449,10 @@ class Spectrum():
 
         Arguments
         ---------
-        varlss_interp: Fast1DInterpolator, default: 0
-            LSS variance interpolator.
-        eta_interp: Fast1DInterpolator, default: 1
-            eta interpolator.
+        varlss_interp: Callable[[ndarray], ndarray], default: 0
+            LSS variance interpolator or function.
+        eta_interp: Callable[[ndarray], ndarray], default: 1
+            eta interpolator or function.
         """
         if not self.cont_params['valid'] or not self.cont_params['cont']:
             raise QsonicException("Continuum needed for coadding.")
