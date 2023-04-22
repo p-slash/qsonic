@@ -370,8 +370,8 @@ class Spectrum():
 
         Arguments
         ---------
-        varlss_interp: Fast1DInterpolator or any other interpolator.
-            LSS variance interpolator.
+        varlss_interp: Callable[[ndarray], ndarray].
+            LSS variance interpolator or function.
         """
         if not self.cont_params['valid'] or not self.cont_params['cont']:
             raise QsonicException("Continuum needed for coadding.")
@@ -475,8 +475,8 @@ class Spectrum():
         ---------
         fts_file: FITS file
             The file handler, not filename.
-        varlss_interp: Fast1DInterpolator or any other interpolator.
-            LSS variance interpolator.
+        varlss_interp: Callable[[ndarray], ndarray]
+            LSS variance interpolator or function
         use_ivar_sm: bool, default: False
             Use :attr:`forestivar_sm` in weights instead.
         """
