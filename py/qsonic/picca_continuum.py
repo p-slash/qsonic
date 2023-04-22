@@ -581,7 +581,7 @@ class PiccaContinuumFitter():
 
         text = ("Continuum updates\n" "rfwave\t| update\t| error\n")
 
-        sl = np.s_[::max(1, int(self.nbins / 10))]
+        sl = np.s_[::max(1, self.nbins // 10)]
         for w, n, e in zip(self.rfwave[sl], norm_flux[sl], std_flux[sl]):
             text += f"{w:7.2f}\t| {n:7.2e}\t| +- {e:7.2e}\n"
 
@@ -635,7 +635,7 @@ class PiccaContinuumFitter():
         if self.mpi_rank != 0:
             return
 
-        step = max(1, self.varlss_fitter.nwbins // 3)
+        step = max(1, self.varlss_fitter.nwbins // 10)
         text = ("------------------------------\n"
                 "wave\t| var_lss +-  error \t|   eta   +-  error \n")
 
