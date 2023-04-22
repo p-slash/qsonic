@@ -6,7 +6,7 @@ import numpy as np
 import numpy.testing as npt
 
 import qsonic.spectrum
-from qsonic.mathtools import Fast1DInterpolator
+from qsonic.mathtools import FastLinear1DInterp
 
 
 class TestSpecParsers(object):
@@ -108,7 +108,7 @@ class TestSpectrum(object):
             cat_by_survey, data)
 
         # var_lss zero
-        varlss_interp = Fast1DInterpolator(0, 1, np.zeros(3))
+        varlss_interp = FastLinear1DInterp(0, 1, np.zeros(3))
         spec = copy.deepcopy(spectra_list[0])
         spec.set_forest_region(3600., 6000., 1050., 1300.)
         spec.cont_params['valid'] = True
@@ -126,7 +126,7 @@ class TestSpectrum(object):
         npt.assert_almost_equal(spec.forestivar['brz'][~w], 2)
 
         # var_lss non-zero
-        varlss_interp = Fast1DInterpolator(0, 1, 0.5 * np.ones(3))
+        varlss_interp = FastLinear1DInterp(0, 1, 0.5 * np.ones(3))
         spec = copy.deepcopy(spectra_list[0])
         spec.set_forest_region(3600., 6000., 1050., 1300.)
         spec.cont_params['valid'] = True
