@@ -5,7 +5,7 @@ import fitsio
 import numpy as np
 
 from qsonic import QsonicException
-from qsonic.mathtools import Fast1DInterpolator
+from qsonic.mathtools import FastCubic1DInterp, FastLinear1DInterp
 
 
 def add_calibration_parser(parser=None):
@@ -43,7 +43,8 @@ class NoiseCalibrator():
     where i is IVAR.
 
     FITS file must have 'VAR_FUNC' extension. This extension columns for 'wave'
-    and 'eta'. Wavelength array must be linearly and equally spaced.
+    and 'eta'. Wavelength array must be linearly and equally spaced. Uses
+    cubic spline.
 
     Parameters
     ----------
@@ -67,7 +68,7 @@ class NoiseCalibrator():
 
             eta = np.array(data['eta'], dtype='d')
             eta[eta == 0] = 1
-            self.eta_interp = Fast1DInterpolator(waves_0, dwave, eta)
+            self.eta_interp = FastCubic1DInterp(waves_0, dwave, eta)
         except Exception as e:
             raise QsonicException(
                 f"Error loading NoiseCalibrator from file {fname}.") from e
@@ -125,7 +126,7 @@ class FluxCalibrator():
 
             stacked_flux = np.array(data['stacked_flux'], dtype='d')
             stacked_flux[stacked_flux == 0] = 1
-            self.flux_interp = Fast1DInterpolator(waves_0, dwave, stacked_flux)
+            self.flux_interp = FastLinear1DInterp(waves_0, dwave, stacked_flux)
         except Exception as e:
             raise QsonicException(
                 f"Error loading FluxCalibrator from file {fname}.") from e
