@@ -14,7 +14,7 @@ def _one_function(x):
 
 
 @njit("f8[:](f8[:], f8, f8, f8[:])")
-def _fast_eval_interp1d(x, xp0, dxp, fp):
+def _fast_eval_interp1d_lin(x, xp0, dxp, fp):
     xx = (x - xp0) / dxp
     idx = np.clip(xx, 0, fp.size - 1 - 1e-8).astype(np.int_)
 
@@ -22,6 +22,60 @@ def _fast_eval_interp1d(x, xp0, dxp, fp):
     y1, y2 = fp[idx], fp[idx + 1]
 
     return y1 * (1 - d_idx) + y2 * d_idx
+
+
+@njit("f8[:](f8[:], f8, f8, f8[:], f8[:])")
+def _fast_eval_interp1d_cubic(x, xp0, dxp, fp, y2p):
+    xx = (x - xp0) / dxp
+    idx = np.clip(xx, 0, fp.size - 1 - 1e-8).astype(np.int_)
+
+    d_idx = xx - idx
+    a, b = 1 - d_idx, d_idx
+    y1, y2 = fp[idx], fp[idx + 1]
+    ypp1, ypp2 = y2p[idx], y2p[idx + 1]
+
+    r1 = a * y1 + b * y2
+    r2 = ((a + 1) * ypp1 + (b + 1) * ypp2) * (-a * b * dxp**2 / 6.)
+
+    return r1 + r2
+
+
+@njit("f8[:](f8[:], f8)")
+def _spline_cubic(fp, dxp):
+    """ Constructs the second derivative array.
+
+    As coded in Numerical Recipes in C Chaper 3.3, but specialized for equally
+    spaced input data.
+
+    Arguments
+    ---------
+    fp: ndarray
+        1D data points array to interpolate.
+    dxp: float
+        Spacing of x points.
+
+    Returns
+    -------
+    y2p: ndarray
+        Second derivative array. Same size as ``fp``.
+    """
+    y2p = np.empty(fp.size)
+    u = np.empty(fp.size - 1)
+    u[0] = 0
+    y2p[0] = y2p[-1] = 0
+
+    sig = 0.5
+
+    for ii in range(1, fp.size - 1):
+        p = sig * y2p[ii - 1] + 2.
+        y2p[ii] = (sig - 1) / p
+        u[ii] = (fp[ii + 1] + fp[ii - 1] - 2 * fp[ii]) / dxp
+        u[ii] = (3 * u[ii] / dxp - sig * u[ii - 1]) / p
+
+    for ii in range(fp.size - 2, 0, -1):
+        y2p[ii] = y2p[ii] * y2p[ii + 1] + u[ii]
+
+    return y2p
 
 
 @njit("f8[:](f8[:], f8[:])")
@@ -122,27 +176,27 @@ def get_smooth_ivar(ivar, sigma_pix=20, esigma=3.5):
     return ivar2
 
 
-class Fast1DInterpolator():
+class FastLinear1DInterp():
     """Fast interpolator class for equally spaced data. Out of domain points
     are linearly extrapolated without producing any warnings or errors.
 
     Example::
 
-        one_interp = Fast1DInterpolator(0., 1., np.ones(3))
+        one_interp = FastLinear1DInterp(0., 1., np.ones(3))
         one_interp(5) # = 1
 
     Parameters
     ----------
     xp0: float
         Initial x point for interpolation data.
-    dxp0: float
+    dxp: float
         Spacing of x points.
     fp: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Function calculated at interpolation points.
-    ep: :external+numpy:py:class:`ndarray <numpy.ndarray>`, optional
-        Error on fp points. Not used! Bookkeeping purposes only.
     copy: bool, default: False
         Copy input data, specifically fp.
+    ep: :external+numpy:py:class:`ndarray <numpy.ndarray>`, optional
+        Error on fp points. Not used! Bookkeeping purposes only.
     """
 
     def __init__(self, xp0, dxp, fp, copy=False, ep=None):
@@ -155,7 +209,58 @@ class Fast1DInterpolator():
         self.ep = ep
 
     def __call__(self, x):
-        return _fast_eval_interp1d(x, self.xp0, self.dxp, self.fp)
+        return _fast_eval_interp1d_lin(x, self.xp0, self.dxp, self.fp)
+
+    def reset(self, fp, copy=False, ep=None):
+        if copy:
+            self.fp = fp.copy()
+        else:
+            self.fp = fp
+
+        self.ep = ep
+
+
+class FastCubic1DInterp():
+    """ Fast cubic spline for equally spaced data. Out of domain points
+    are linearly extrapolated without producing any warnings or errors.
+
+    Parameters
+    ----------
+    xp0: float
+        Initial x point for interpolation data.
+    dxp: float
+        Spacing of x points.
+    fp: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Function calculated at interpolation points.
+    copy: bool, default: False
+        Copy input data, specifically fp.
+    ep: :external+numpy:py:class:`ndarray <numpy.ndarray>`, optional
+        Error on fp points. Not used! Bookkeeping purposes only.
+    """
+
+    def __init__(self, xp0, dxp, fp, copy=False, ep=None):
+        self.xp0 = float(xp0)
+        self.dxp = float(dxp)
+        if copy:
+            self.fp = fp.copy()
+        else:
+            self.fp = fp
+        self._y2p = _spline_cubic(fp, dxp)
+        self.ep = ep
+
+    def __call__(self, x):
+        return _fast_eval_interp1d_cubic(
+            x, self.xp0, self.dxp, self.fp, self._y2p)
+
+    def reset(self, fp, copy=False, ep=None):
+        if copy:
+            self.fp = fp.copy()
+        else:
+            self.fp = fp
+
+        self.ep = ep
+
+        self._y2p = _spline_cubic(fp, self.dxp)
 
 
 class SubsampleCov():

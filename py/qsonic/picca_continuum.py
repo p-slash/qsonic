@@ -13,7 +13,11 @@ from mpi4py import MPI
 from qsonic import QsonicException
 from qsonic.spectrum import valid_spectra
 from qsonic.mpi_utils import logging_mpi, warn_mpi, MPISaver
-from qsonic.mathtools import mypoly1d, Fast1DInterpolator, SubsampleCov
+from qsonic.mathtools import (
+    mypoly1d,
+    FastLinear1DInterp, FastCubic1DInterp,
+    SubsampleCov
+)
 
 
 def add_picca_continuum_parser(parser=None):
@@ -92,23 +96,23 @@ class PiccaContinuumFitter():
         Rest-frame wavelength centers for the mean continuum.
     _denom: float
         Denominator for the slope term in the continuum model.
-    meancont_interp: Fast1DInterpolator
-        Fast linear interpolator object for the mean continuum.
+    meancont_interp: FastCubic1DInterp
+        Fast cubic spline object for the mean continuum.
     minimizer: function
         Function that points to one of the minimizer options.
     comm: MPI.COMM_WORLD
         MPI comm object to reduce, broadcast etc.
     mpi_rank: int
         Rank of the MPI process.
-    meanflux_interp: Fast1DInterpolator
+    meanflux_interp: FastLinear1DInterp
         Interpolator for mean flux. If fiducial is not set, this equals to 1.
     flux_stacker: FluxStacker (disabled)
         Stacks flux. Set up with 8 A wavelength bin size.
     varlss_fitter: VarLSSFitter or None
         None if fiducials are set for var_lss.
-    varlss_interp: Fast1DInterpolator
-        Interpolator for var_lss.
-    eta_interp: Fast1DInterpolator
+    varlss_interp: FastLinear1DInterp or FastCubic1DInterp
+        Cubic spline for var_lss if fitting. Linear if from file.
+    eta_interp: FastCubic1DInterp
         Interpolator for eta. Returns one if fiducial var_lss is set.
     niterations: int
         Number of iterations from `args.no_iterations`.
@@ -126,7 +130,7 @@ class PiccaContinuumFitter():
         FITS file must have a 'STATS' extention, which must have 'LAMBDA',
         'MEANFLUX' and 'VAR' columns. This is the same format as raw_io output
         from picca. 'LAMBDA' must be linearly and equally spaced.
-        This function sets up ``col2read`` as Fast1DInterpolator object.
+        This function sets up ``col2read`` as FastLinear1DInterp object.
 
         Arguments
         ---------
@@ -137,7 +141,7 @@ class PiccaContinuumFitter():
 
         Returns
         -------
-        Fast1DInterpolator
+        FastLinear1DInterp
 
         Raises
         ------
@@ -184,7 +188,7 @@ class PiccaContinuumFitter():
 
         self.comm.Bcast([data, MPI.DOUBLE])
 
-        return Fast1DInterpolator(waves_0, dwave, data, ep=np.zeros(nsize))
+        return FastLinear1DInterp(waves_0, dwave, data, ep=np.zeros(nsize))
 
     def __init__(self, args):
         # We first decide how many bins will approximately satisfy
@@ -197,7 +201,7 @@ class PiccaContinuumFitter():
         self.rfwave = (edges[1:] + edges[:-1]) / 2
         self._denom = np.log(self.rfwave[-1] / self.rfwave[0])
 
-        self.meancont_interp = Fast1DInterpolator(
+        self.meancont_interp = FastCubic1DInterp(
             self.rfwave[0], self.dwrf, np.ones(self.nbins),
             ep=np.zeros(self.nbins))
 
@@ -216,7 +220,7 @@ class PiccaContinuumFitter():
             self.meanflux_interp = self._get_fiducial_interp(
                 args.fiducial_meanflux, 'MEANFLUX')
         else:
-            self.meanflux_interp = Fast1DInterpolator(
+            self.meanflux_interp = FastLinear1DInterp(
                 args.wave1, args.wave2 - args.wave1, np.ones(3))
 
         # self.flux_stacker = FluxStacker(
@@ -231,12 +235,12 @@ class PiccaContinuumFitter():
                 args.wave1, args.wave2,
                 error_method=args.error_method_vardelta,
                 comm=self.comm)
-            self.varlss_interp = Fast1DInterpolator(
+            self.varlss_interp = FastCubic1DInterp(
                 self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
                 0.1 * np.ones(self.varlss_fitter.nwbins),
                 ep=np.zeros(self.varlss_fitter.nwbins))
 
-        self.eta_interp = Fast1DInterpolator(
+        self.eta_interp = FastCubic1DInterp(
             self.varlss_interp.xp0, self.varlss_interp.dxp,
             np.ones_like(self.varlss_interp.fp),
             ep=np.zeros_like(self.varlss_interp.fp))
@@ -566,8 +570,7 @@ class PiccaContinuumFitter():
         std_flux /= mean_
 
         if not noupdate:
-            self.meancont_interp.fp = new_meancont
-            self.meancont_interp.ep = std_flux
+            self.meancont_interp.reset(new_meancont, ep=std_flux)
 
         all_pt_test = np.all(np.abs(norm_flux) < 0.33 * std_flux)
         chi2_change = np.sum((norm_flux / std_flux)**2) / self.nbins
@@ -624,14 +627,10 @@ class PiccaContinuumFitter():
         y, ep = self.varlss_fitter.fit(initial_guess)
 
         if not noupdate and not self.fit_eta:
-            self.varlss_interp.fp = y
-            self.varlss_interp.ep = ep
+            self.varlss_interp.reset(y, ep=ep)
         if not noupdate and self.fit_eta:
-            self.varlss_interp.fp = y[:, 0]
-            self.varlss_interp.ep = ep[:, 0]
-
-            self.eta_interp.fp = y[:, 1]
-            self.eta_interp.ep = ep[:, 1]
+            self.varlss_interp.reset(y[:, 0], ep=ep[:, 0])
+            self.eta_interp.reset(y[:, 1], ep=ep[:, 1])
 
         if self.mpi_rank != 0:
             return
@@ -1314,7 +1313,7 @@ class FluxStacker():
         Number of wavelength bins
     dwobs: float
         Wavelength spacing. Usually same as observed grid.
-    _interp: Fast1DInterpolator
+    _interp: FastLinear1DInterp
         Interpolator. Saves stacked_flux in fp and weights in ep.
     comm: MPI.COMM_WORLD or None, default: None
         MPI comm object to allreduce if enabled.
@@ -1329,7 +1328,7 @@ class FluxStacker():
 
         self.comm = comm
 
-        self._interp = Fast1DInterpolator(
+        self._interp = FastLinear1DInterp(
             self.waveobs[0], self.dwobs,
             np.ones(self.nwbins), ep=np.zeros(self.nwbins))
 
