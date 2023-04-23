@@ -15,6 +15,7 @@ def _one_function(x):
 
 @njit("f8[:](f8[:], f8, f8, f8[:])")
 def _fast_eval_interp1d_lin(x, xp0, dxp, fp):
+    """JIT fast linear interpolation."""
     xx = (x - xp0) / dxp
     idx = np.clip(xx, 0, fp.size - 1 - 1e-8).astype(np.int_)
 
@@ -26,6 +27,7 @@ def _fast_eval_interp1d_lin(x, xp0, dxp, fp):
 
 @njit("f8[:](f8[:], f8, f8, f8[:], f8[:])")
 def _fast_eval_interp1d_cubic(x, xp0, dxp, fp, y2p):
+    """JIT fast cubic spline."""
     xx = (x - xp0) / dxp
     idx = np.clip(xx, 0, fp.size - 1 - 1e-8).astype(np.int_)
 
@@ -98,6 +100,54 @@ def mypoly1d(coef, x):
     for i, a in enumerate(coef):
         results += a * x**i
     return results
+
+
+@njit
+def block_covariance_of_square(mean, var, cov):
+    """ Return the block covariance of x^2, i.e. :math:`<x_i^2 x_j^2>_c`.
+    Compatible with ``blockdim`` argument of
+    :meth:`SubsampleCov.get_mean_n_cov`.
+
+    .. math::
+
+        Cov[x_i^2, x_j^2] &= Var[x_i] Var[x_j] + Cov(x_i, x_j)^2 \\\\
+        &+ 2 Cov(x_i, x_j) E[x_i] E[x_j] \\\\
+        &+  Var[x_i] E[x_j]^2 + Var[x_j] E[x_i]^2
+
+    Arguments
+    ---------
+    mean: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        1D array mean values.
+    var: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        1D array variance values.
+    cov: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        3D array covariance. Shape is ``(nblock, ndata, ndata)``.
+
+    Returns
+    -------
+    new_cov: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        3D array propagated covariance.
+    """
+    nblock = cov.shape[0]
+    ndata = cov.shape[1]
+    assert (nblock * ndata == mean.size)
+    assert (var.size == mean.size)
+    new_cov = np.empty_like(cov)
+
+    for jj in range(nblock):
+        i1 = jj * ndata
+        i2 = i1 + ndata
+        v = var[i1:i2]
+        m = mean[i1:i2]
+
+        new_cov[jj] = np.outer(v, v)
+        new_cov[jj] += cov[jj]**2
+        new_cov[jj] += 2 * cov[jj] * np.outer(m, m)
+
+        C1 = np.outer(v, m**2)
+        new_cov[jj] += C1 + C1.T
+
+    return new_cov
 
 
 def fft_gaussian_smooth(x, sigma_pix=20, mode='edge'):
@@ -180,6 +230,8 @@ class FastLinear1DInterp():
     """Fast interpolator class for equally spaced data. Out of domain points
     are linearly extrapolated without producing any warnings or errors.
 
+    Uses :func:`_fast_eval_interp1d_lin`.
+
     Example::
 
         one_interp = FastLinear1DInterp(0., 1., np.ones(3))
@@ -223,6 +275,8 @@ class FastLinear1DInterp():
 class FastCubic1DInterp():
     """ Fast cubic spline for equally spaced data. Out of domain points
     are linearly extrapolated without producing any warnings or errors.
+
+    Uses :func:`_spline_cubic` and :func:`_fast_eval_interp1d_cubic`.
 
     Parameters
     ----------
@@ -285,35 +339,33 @@ class SubsampleCov():
 
     Parameters
     ----------
-    ndata: int
-        Size of the data vector.
+    ndata: int or tuple(int)
+        Size or shape of the data vector. If tuple, it should be
+        ``(nset, size1d)``. For example, 3 quantities share the same
+        weights, data vector shape should pass ``ndata=(3, size1d)``.
     nsamples: int
-        Number of samples.
+        Number of samples. You can add more measurements then this.
     istart: int, default: 0
         Start index for the subsampling array
 
     Attributes
     ----------
-    ndata: int or tuple(int)
-        Size or shape of the data vector. If 3 quantities share the same
-        weights, data vector shape should be (3, size1d).
-    nsamples: int
-        Number of samples. You can more measurements then this.
     _isample: int
         Sample counter. Wraps around nsamples
     _is_normalized: bool
         If the weights are normalized. Keeps track if :func:`_normalize` is
         called.
     all_measurements: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        2D array of zeros of shape ``(nsamples, ndata)``.
+        3D array of shape ``(nsamples, nset, ndata)``.
     all_weights: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        2D array of zeros of shape ``(nsamples, ndata)``.
+        3D array of shape ``(nsamples, nset, ndata)``.
     mean: :class:`ndarray <numpy.ndarray>` or None
-        Mean. 1D array of size ``ndata``
-    covariance: :class:`ndarray <numpy.ndarray>` or None
-        Covariance. 2D array of shape ``(ndata, ndata)``
+        Mean. 2D array of shape ``(nset, ndata)``
     variance: :class:`ndarray <numpy.ndarray>` or None
-        Variance. 1D array of size ``ndata``
+        Variance. 2D array of shape ``(nset, ndata)``
+    covariance: list(:class:`ndarray <numpy.ndarray>`) or None
+        Covariance. 2D arrays of shape ``(ndata, ndata)`` or 3D arrays of
+        shape ``(nblock, blockdim, blockdim)``.
     """
 
     def __init__(self, ndata, nsamples, istart=0):
@@ -428,7 +480,7 @@ class SubsampleCov():
 
         return mean_xvec, xdiff
 
-    def get_mean_n_cov(self, indices=None, bias_correct=False):
+    def get_mean_n_cov(self, indices=None, blockdim=None, bias_correct=False):
         """ Get the mean and covariance of the mean using delete-one Jackknife.
 
         Also sets :attr:`mean` and :attr:`covariance`.
@@ -442,6 +494,8 @@ class SubsampleCov():
         ---------
         indices: list(int), default: None
             Data set indices to estimate the covariance.
+        blockdim: int, default: None
+            Calculate covariance by this block size instead of the full space.
         bias_correct: bool, default: False
             Jackknife bias correction term for the mean.
 
@@ -458,15 +512,27 @@ class SubsampleCov():
         if indices is None:
             indices = np.arange(self.all_measurements.shape[1])
 
+        if blockdim is not None:
+            assert (self.ndata % blockdim == 0)
+
         self.covariance = []
         for jj in range(self.all_measurements.shape[1]):
+            if jj not in indices:
+                self.covariance.append(None)
+                continue
+
             x = xdiff[:, jj, :]
 
-            if jj in indices:
+            if blockdim is None:
                 cov = np.dot(x.T, x) * (self.nsamples - 1) / self.nsamples
-            else:
-                cov = None
+                self.covariance.append(cov)
+                continue
 
+            nblock = self.ndata // blockdim
+            cov = np.empty((nblock, blockdim, blockdim))
+            for kk in range(nblock):
+                y = x[:, kk * blockdim:(kk + 1) * blockdim]
+                cov[kk] = np.dot(y.T, y) * (self.nsamples - 1) / self.nsamples
             self.covariance.append(cov)
 
         return self.mean, self.covariance

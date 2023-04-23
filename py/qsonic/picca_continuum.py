@@ -14,7 +14,7 @@ from qsonic import QsonicException
 from qsonic.spectrum import valid_spectra
 from qsonic.mpi_utils import logging_mpi, warn_mpi, MPISaver
 from qsonic.mathtools import (
-    mypoly1d,
+    mypoly1d, block_covariance_of_square,
     FastLinear1DInterp, FastCubic1DInterp,
     SubsampleCov
 )
@@ -55,6 +55,9 @@ def add_picca_continuum_parser(parser=None):
     cont_group.add_argument(
         "--fit-eta", action="store_true",
         help="Fit for noise calibration (eta).")
+    cont_group.add_argument(
+        "--use-cov", action="store_true",
+        help="Use covariance in varlss-eta fitting.")
     cont_group.add_argument(
         "--normalize-stacked-flux", action="store_true",
         help="NOT IMPLEMENTED: Force stacked flux to be one at the end.")
@@ -228,7 +231,7 @@ class PiccaContinuumFitter():
                 args.fiducial_varlss, 'VAR')
         else:
             self.varlss_fitter = VarLSSFitter(
-                args.wave1, args.wave2, comm=self.comm)
+                args.wave1, args.wave2, use_cov=args.use_cov, comm=self.comm)
             self.varlss_interp = FastCubic1DInterp(
                 self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
                 0.1 * np.ones(self.varlss_fitter.nwbins),
@@ -844,7 +847,7 @@ class VarLSSFitter():
         Number of variance bins.
     nsubsamples: int, default: None
         Number of subsamples for the Jackknife covariance. Auto determined by
-        number of bins (:attr:`nvarbins`^2) if None.
+        number of bins (``nvarbins^2``) if None.
     use_cov: bool, default: False
         Use the Jackknife covariance when fitting.
     comm: MPI.COMM_WORLD or None, default: None
@@ -1011,10 +1014,15 @@ class VarLSSFitter():
         estimates, then it is regularized by calculated var2_delta
         (Gaussian estimates), where if Jackknife variance is smaller than
         the Gaussian estimate, it is replaced by the Gaussian estimate.
+
+        Covariance is calculated if :attr:`use_cov` is set to True in init.
+        Covariance of mean_delta^2 is propagated using the formula in
+        :func:`qsonic.mathtools.block_covariance_of_square`.
         """
         self.subsampler.get_mean_n_var()
         if self.use_cov:
-            self.subsampler.get_mean_n_cov(indices=[0, 1])
+            self.subsampler.get_mean_n_cov(
+                indices=[0, 1], blockdim=self.nvarbins + 2)
 
         m2 = self.subsampler.mean[0]**2
         self.subsampler.mean[1] -= m2
@@ -1025,16 +1033,10 @@ class VarLSSFitter():
 
         # Update variance / covariance
         if self.use_cov:
-            var_mean = self.subsampler.variance[0]
-            self.subsampler.covariance[1] += np.outer(var_mean, var_mean)
-            self.subsampler.covariance[1] += self.subsampler.covariance[0]**2
-
-            mij = np.outer(self.subsampler.mean[0], self.subsampler.mean[0])
-            self.subsampler.covariance[1] += \
-                2 * mij * self.subsampler.covariance[0]
-
-            C1 = np.outer(var_mean, m2)
-            self.subsampler.covariance[1] += C1 + C1.T
+            self.subsampler.covariance[1] += block_covariance_of_square(
+                self.subsampler.mean[0],
+                self.subsampler.variance[0],
+                self.subsampler.covariance[0])
         else:
             self.subsampler.variance[1] += 4 * m2 * self.subsampler.variance[0]
             self.subsampler.variance[1] += 2 * self.subsampler.variance[0]**2
@@ -1138,8 +1140,7 @@ class VarLSSFitter():
                 continue
 
             if self.use_cov:
-                err2use = err_base[:, wave_slice][wave_slice, :]
-                err2use = err2use[:, w][w, :]
+                err2use = err_base[iwave][:, w][w, :]
             else:
                 err2use = err_base[wave_slice][w]
 
@@ -1223,7 +1224,9 @@ class VarLSSFitter():
                  'mean_delta', 'var2_delta', 'num_pixels', 'num_qso']
 
         if self.use_cov:
-            data_to_write.append(self.cov_var_delta)
+            cov_data = self.cov_var_delta.reshape(
+                self.nwbins * self.nvarbins, self.nvarbins)
+            data_to_write.append(cov_data)
             names.append("cov_var_delta")
 
         mpi_saver.write(
@@ -1266,13 +1269,15 @@ class VarLSSFitter():
     @property
     def cov_var_delta(self):
         """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
-        Variance on variance delta using delete-one Jackknife. The covariance
-        of :attr:`mean_delta` is propagated. See source code of
-        :meth:`_calc_subsampler_stats`. None if :attr:`use_cov` is False."""
+        3D array of shape ``(nwbins, nvarbins, nvarbins)`` for the covariance
+        on variance delta using delete-one Jackknife. The covariance
+        of :attr:`mean_delta` is propagated. See
+        :func:`qsonic.mathtools.block_covariance_of_square` for details.
+        None if :attr:`use_cov` is False."""
         if not self.use_cov:
             return None
         cov = self.subsampler.covariance[1]
-        return cov[:, self.wvalid_bins][self.wvalid_bins, :]
+        return cov[1:-1, 1:-1, 1:-1]
 
     @property
     def var2_delta(self):
