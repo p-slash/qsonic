@@ -56,9 +56,6 @@ def add_io_parser(parser=None):
         "--coadd-arms", action="store_true",
         help="Coadds arms when saving.")
     outgroup.add_argument(
-        "--save-smooth-weights", action="store_true",
-        help="Save smoothed weights instead.")
-    outgroup.add_argument(
         "--save-by-hpx", action="store_true",
         help="Save by healpix. If not, saves by MPI rank.")
     return parser
@@ -215,8 +212,7 @@ def read_deltas(fname):
 
 
 def save_deltas(
-        spectra_list, outdir, varlss_interp,
-        save_by_hpx=False, mpi_rank=None, use_ivar_sm=False
+        spectra_list, outdir, save_by_hpx=False, mpi_rank=None
 ):
     """ Saves given list of spectra as deltas. NO coaddition of arms.
     Each arm is saved separately. Only valid spectra are saved.
@@ -227,14 +223,10 @@ def save_deltas(
         Continuum fitted spectra objects. All must be valid!
     outdir: str
         Output directory. Does not save if empty of None
-    varlss_interp: Interpolator
-        Interpolator for LSS variance
     save_by_hpx: bool, default: False
         Saves by healpix if True. Has priority over mpi_rank
     mpi_rank: int, default: None
         Rank of the MPI process. Save by `mpi_rank` if passed.
-    use_ivar_sm: bool, default: False
-        Use :attr:`Spectrum.forestivar_sm` in weights instead.
 
     Raises
     ---------
@@ -266,7 +258,7 @@ def save_deltas(
             f"{outdir}/delta-{healpix}.fits", 'rw', clobber=True)
 
         for spec in qsonic.spectrum.valid_spectra(hp_specs):
-            spec.write(results, varlss_interp, use_ivar_sm)
+            spec.write(results)
 
         results.close()
 

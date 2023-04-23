@@ -22,11 +22,12 @@ The key differences
 - Coadding of spectrograph arms is optional and performed after continuum fitting.
 - Continuum is multiplied by a fiducial mean flux when provided.
 - You can pass fiducial var_lss (column ``VAR``) and mean flux (column ``MEANFLUX``) for observed wavelength ``LAMBDA`` in ``STATS`` extention of a FITS file. Wavelength should be linearly and equally spaced. This is the same format as rawio output from picca.
-- If no fiducial is passed, we fit only for var_lss (no eta fitting currently).
-- Internal weights for continuum fitting and coadding are based on smoothed ``IVAR``, but output ``WEIGHT`` is **not** smoothed.
+- If no fiducial is passed, we fit only for var_lss (no eta fitting by default). Eta fitting can be enabled, but is not recommended for Lya forest.
+- Internal weights for continuum fitting and coadding are based on smoothed ``IVAR``, and output ``WEIGHT`` is based on this smoothed ivar. This smoothing can be turned off.
 - Chi2 information as well as best fits are saved in continuum_chi2_catalog.fits. Chi2 is calculated using smooth ivar and var_lss, and does not subtract sum of ln(weights).
 
 Similarities
 ------------
 + Delta files are the same. `CONT` column is mean flux times continuum even when fiducial mean flux is passed.
 + ``MEANSNR`` in header file and chi2 catalog is average of flux times square root of positive ivar values. Header values are per arm, but catalog values are the average over all arms.
++ Eta fitting does not rescale ``IVAR`` output. Pipeline noise will be modified with explicit calibration option.
