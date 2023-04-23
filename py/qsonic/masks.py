@@ -68,7 +68,7 @@ class SkyMask():
         mask = mpi_fnc_bcast(
             asread, comm, mpi_rank,
             f"Error loading SkyMask from mask file {fname}.",
-            names=SkyMask.column_names)
+            fname, names=SkyMask.column_names)
 
         self.mask_rest_frame = mask[mask['frame'] == 'RF']
         self.mask_obs_frame = mask[mask['frame'] == 'OBS']
