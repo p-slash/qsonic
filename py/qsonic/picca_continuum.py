@@ -54,7 +54,7 @@ def add_picca_continuum_parser(parser=None):
         help="Order of continuum fitting polynomial.")
     cont_group.add_argument(
         "--fit-eta", action="store_true",
-        help="NOT IMPLEMENTED: Fit for noise calibration (eta).")
+        help="Fit for noise calibration (eta).")
     cont_group.add_argument(
         "--normalize-stacked-flux", action="store_true",
         help="NOT IMPLEMENTED: Force stacked flux to be one at the end.")
@@ -112,12 +112,16 @@ class PiccaContinuumFitter():
         None if fiducials are set for var_lss.
     varlss_interp: FastLinear1DInterp or FastCubic1DInterp
         Cubic spline for var_lss if fitting. Linear if from file.
+    eta_interp: FastCubic1DInterp
+        Interpolator for eta. Returns one if fiducial var_lss is set.
     niterations: int
         Number of iterations from `args.no_iterations`.
     cont_order: int
         Order of continuum polynomial from `args.cont_order`.
     outdir: str or None
         Directory to save catalogs. If None or empty, does not save.
+    fit_eta: bool
+        True if fitting eta and fiducial var_lss is not set.
     """
 
     def _get_fiducial_interp(self, fname, col2read):
@@ -236,9 +240,15 @@ class PiccaContinuumFitter():
                 0.1 * np.ones(self.varlss_fitter.nwbins),
                 ep=np.zeros(self.varlss_fitter.nwbins))
 
+        self.eta_interp = FastCubic1DInterp(
+            self.varlss_interp.xp0, self.varlss_interp.dxp,
+            np.ones_like(self.varlss_interp.fp),
+            ep=np.zeros_like(self.varlss_interp.fp))
+
         self.niterations = args.no_iterations
         self.cont_order = args.cont_order
         self.outdir = args.outdir
+        self.fit_eta = args.fit_eta
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
         """ Cost function to minimize for each quasar.
@@ -274,7 +284,8 @@ class PiccaContinuumFitter():
             cont_est *= self.meanflux_interp(wave_arm)
 
             var_lss = self.varlss_interp(wave_arm) * cont_est**2
-            weight = ivar_sm[arm] / (1 + ivar_sm[arm] * var_lss)
+            eta = self.eta_interp(wave_arm)
+            weight = ivar_sm[arm] / (eta + ivar_sm[arm] * var_lss)
             w = weight > 0
 
             cost += np.dot(
@@ -387,7 +398,6 @@ class PiccaContinuumFitter():
 
         if spec.cont_params['valid']:
             spec.cont_params['cont'] = {}
-            chi2 = 0
             for arm, wave_arm in spec.forestwave.items():
                 cont_est = self.get_continuum_model(
                     result['x'], wave_arm / (1 + spec.z_qso))
@@ -399,14 +409,10 @@ class PiccaContinuumFitter():
                 cont_est *= self.meanflux_interp(wave_arm)
                 # cont_est *= self.flux_stacker(wave_arm)
                 spec.cont_params['cont'][arm] = cont_est
-                var_lss = self.varlss_interp(wave_arm) * cont_est**2
-                weight = 1. / (1 + spec.forestivar_sm[arm] * var_lss)
-                weight *= spec.forestivar_sm[arm]
 
-                chi2 += np.dot(weight, (spec.forestflux[arm] - cont_est)**2)
-
-            # We can further eliminate spectra based chi2
-            spec.cont_params['chi2'] = chi2
+        spec.set_forest_weight(self.varlss_interp, self.eta_interp)
+        # We can further eliminate spectra based chi2
+        spec.calc_continuum_chi2()
 
         if spec.cont_params['valid']:
             spec.cont_params['x'] = result['x']
@@ -527,11 +533,8 @@ class PiccaContinuumFitter():
 
                 cont = spec.cont_params['cont'][arm]
                 flux = spec.forestflux[arm] / cont
+                weight = spec.forestweight[arm] * cont**2
                 # Deconvolve resolution matrix ?
-
-                var_lss = self.varlss_interp(wave_arm)
-                weight = spec.forestivar_sm[arm] * cont**2
-                weight = weight / (1 + weight * var_lss)
 
                 norm_flux += np.bincount(
                     bin_idx, weights=flux * weight, minlength=self.nbins)
@@ -578,18 +581,18 @@ class PiccaContinuumFitter():
 
         text = ("Continuum updates\n" "rfwave\t| update\t| error\n")
 
-        sl = np.s_[::max(1, int(self.nbins / 10))]
+        sl = np.s_[::max(1, self.nbins // 10)]
         for w, n, e in zip(self.rfwave[sl], norm_flux[sl], std_flux[sl]):
-            text += f"{w:7.2f}\t| {n:7.2e}\t| pm {e:7.2e}\n"
+            text += f"{w:7.2f}\t| {n:7.2e}\t| +- {e:7.2e}\n"
 
         text += f"Change in chi2: {chi2_change*100:.4e}%"
         logging_mpi(text, 0)
 
         return has_converged
 
-    def update_var_lss(self, spectra_list, noupdate):
-        """ Fit and update var_lss. See :class:`VarLSSFitter` for fitting
-        details.
+    def update_var_lss_eta(self, spectra_list, noupdate):
+        """ Fit and update var_lss and eta if enabled. See
+        :class:`VarLSSFitter` for fitting details.
 
         Arguments
         ---------
@@ -612,20 +615,38 @@ class PiccaContinuumFitter():
                 self.varlss_fitter.add(wave_arm, delta, ivar)
 
         # Else, fit for var_lss
-        logging_mpi("Fitting var_lss", self.mpi_rank)
-        y, ep = self.varlss_fitter.fit(self.varlss_interp.fp)
+        if self.fit_eta:
+            text = "Fitting var_lss and eta"
+            initial_guess = np.vstack(
+                (self.varlss_interp.fp, self.eta_interp.fp)).T
+        else:
+            text = "Fitting var_lss"
+            initial_guess = self.varlss_interp.fp
 
-        if not noupdate:
+        logging_mpi(text, self.mpi_rank)
+        y, ep = self.varlss_fitter.fit(initial_guess)
+
+        if not noupdate and not self.fit_eta:
             self.varlss_interp.reset(y, ep=ep)
+        if not noupdate and self.fit_eta:
+            self.varlss_interp.reset(y[:, 0], ep=ep[:, 0])
+            self.eta_interp.reset(y[:, 1], ep=ep[:, 1])
 
         if self.mpi_rank != 0:
             return
 
-        sl = np.s_[::max(1, int(y.size / 10))]
+        step = max(1, self.varlss_fitter.nwbins // 10)
         text = ("------------------------------\n"
-                "wave\t| var_lss\t| error\n")
-        for w, v, e in zip(self.varlss_fitter.waveobs[sl], y[sl], ep[sl]):
-            text += f"{w:7.2f}\t| {v:7.2e} \t| {e:7.2e}\n"
+                "wave\t| var_lss +-  error \t|   eta   +-  error \n")
+
+        for i in range(0, self.varlss_fitter.nwbins, step):
+            w = self.varlss_fitter.waveobs[i]
+            v = self.varlss_interp.fp[i]
+            ve = self.varlss_interp.ep[i]
+            n = self.eta_interp.fp[i]
+            ne = self.eta_interp.ep[i]
+            text += \
+                f"{w:7.2f}\t| {v:7.2e} +- {ve:7.2e}\t| {n:7.2e} +- {ne:7.2e}\n"
         text += "------------------------------"
         logging_mpi(text, 0)
 
@@ -668,19 +689,19 @@ class PiccaContinuumFitter():
         fattr = MPISaver(fname, self.mpi_rank)
 
         for it in range(self.niterations):
+            is_last_it = it == self.niterations - 1
             logging_mpi(
                 f"Fitting iteration {it+1}/{self.niterations}", self.mpi_rank)
 
-            self.save(fattr, it + 1)
+            self.save(fattr, f"-{it + 1}")
 
             # Fit all continua one by one
             self.fit_continua(spectra_list)
             # Stack all spectra in each process
             # Broadcast and recalculate global functions
-            has_converged = self.update_mean_cont(
-                spectra_list, it == self.niterations - 1)
+            has_converged = self.update_mean_cont(spectra_list, is_last_it)
 
-            self.update_var_lss(spectra_list, it == self.niterations - 1)
+            self.update_var_lss_eta(spectra_list, is_last_it)
 
             if has_converged:
                 logging_mpi("Iteration has converged.", self.mpi_rank)
@@ -689,36 +710,39 @@ class PiccaContinuumFitter():
         if not has_converged:
             warn_mpi("Iteration has NOT converged.", self.mpi_rank)
 
+        self.save(fattr)
         fattr.close()
         logging_mpi("All continua are fit.", self.mpi_rank)
 
-    def save(self, fattr, it):
+    def save(self, fattr, suff=''):
         """Save mean continuum and var_lss (if fitting) to a fits file.
 
         Arguments
         ---------
         fattr: MPISaver
             File handler to save only on master node.
-        it: int
-            Current iteration number.
+        suff: str
+            Suffix for the current iteration number.
         """
         fattr.write(
             [self.rfwave, self.meancont_interp.fp, self.meancont_interp.ep],
             names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
-            extname=f'CONT-{it}')
+            extname=f'CONT{suff}')
 
         # fattr.write(
         #     [self.flux_stacker.waveobs, self.flux_stacker.stacked_flux],
         #     names=['lambda', 'stacked_flux'],
-        #     extname=f'STACKED_FLUX-{it}')
+        #     extname=f'STACKED_FLUX{suff}')
 
         if self.varlss_fitter is None:
             return
 
         fattr.write(
-            [self.varlss_fitter.waveobs, self.varlss_interp.fp,
-             self.varlss_interp.ep],
-            names=['lambda', 'var_lss', 'e_var_lss'], extname=f'VAR_FUNC-{it}')
+            [self.varlss_fitter.waveobs,
+             self.varlss_interp.fp, self.varlss_interp.ep,
+             self.eta_interp.fp, self.eta_interp.ep],
+            names=['lambda', 'var_lss', 'e_var_lss', 'eta', 'e_eta'],
+            extname=f'VAR_FUNC{suff}')
 
     def save_contchi2_catalog(self, spectra_list):
         """Save chi2 catalog if ``self.outdir`` is set. All values are gathered
@@ -838,8 +862,6 @@ class VarLSSFitter():
         Wavelength centers in the observed frame.
     ivar_edges: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Inverse variance edges.
-    var_centers: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Variance centers in **descending** order.
     minlength: int
         Minimum size of the combined bin count array. It includes underflow and
         overflow bins for both wavelength and variance bins.
@@ -866,8 +888,8 @@ class VarLSSFitter():
 
         .. math::
 
-            \sigma^2_\mathrm{obs} = \eta \sigma^2_\mathrm{pipe} +
-            \sigma^2_\mathrm{LSS}
+            \\sigma^2_\\mathrm{obs} = \\eta \\sigma^2_\\mathrm{pipe} +
+            \\sigma^2_\\mathrm{LSS}
 
         Arguments
         ---------
@@ -1255,7 +1277,7 @@ class VarLSSFitter():
     @property
     def var_centers(self):
         """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
-        Mean variance for the bin centers."""
+        Mean variance for the bin centers in **descending** order."""
         return self.subsampler.mean[3][self.wvalid_bins]
 
     @property

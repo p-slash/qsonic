@@ -115,6 +115,7 @@ class TestSpectrum(object):
         spec.cont_params['cont'] = {
             arm: np.ones_like(farm) for arm, farm in spec.forestflux.items()
         }
+        spec.set_forest_weight(varlss_interp)
         spec.coadd_arms_forest(varlss_interp)
 
         assert ('brz' in spec.forestflux.keys())
@@ -133,6 +134,7 @@ class TestSpectrum(object):
         spec.cont_params['cont'] = {
             arm: np.ones_like(farm) for arm, farm in spec.forestflux.items()
         }
+        spec.set_forest_weight(varlss_interp)
         spec.coadd_arms_forest(varlss_interp)
 
         assert ('brz' in spec.forestflux.keys())
