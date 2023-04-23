@@ -120,15 +120,17 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     return spectra_list
 
 
-def mpi_noise_flux_calibrate(spectra_list, args, mpi_rank):
+def mpi_noise_flux_calibrate(spectra_list, args, comm, mpi_rank):
     if args.noise_calibration:
         logging_mpi("Applying noise calibration.", mpi_rank)
-        ncal = qsonic.calibration.NoiseCalibrator(args.noise_calibration)
+        ncal = qsonic.calibration.NoiseCalibrator(
+            args.noise_calibration, comm, mpi_rank)
         ncal.apply(spectra_list)
 
     if args.flux_calibration:
         logging_mpi("Applying flux calibration.", mpi_rank)
-        fcal = qsonic.calibration.FluxCalibrator(args.flux_calibration)
+        fcal = qsonic.calibration.FluxCalibrator(
+            args.flux_calibration, comm, mpi_rank)
         fcal.apply(spectra_list)
 
 
@@ -257,7 +259,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     spectra_list = mpi_read_spectra_local_queue(
         local_queue, args, comm, mpi_rank)
 
-    mpi_noise_flux_calibrate(spectra_list, args, mpi_rank)
+    mpi_noise_flux_calibrate(spectra_list, args, comm, mpi_rank)
 
     apply_masks(maskers, spectra_list, mpi_rank)
 
