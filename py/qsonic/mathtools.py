@@ -428,7 +428,7 @@ class SubsampleCov():
 
         return mean_xvec, xdiff
 
-    def get_mean_n_cov(self, bias_correct=False):
+    def get_mean_n_cov(self, indices=None, bias_correct=False):
         """ Get the mean and covariance of the mean using delete-one Jackknife.
 
         Also sets :attr:`mean` and :attr:`covariance`.
@@ -440,6 +440,8 @@ class SubsampleCov():
 
         Arguments
         ---------
+        indices: list(int), default: None
+            Data set indices to estimate the covariance.
         bias_correct: bool, default: False
             Jackknife bias correction term for the mean.
 
@@ -447,19 +449,25 @@ class SubsampleCov():
         -------
         mean: :class:`ndarray <numpy.ndarray>`
             Mean.
-        cov: :class:`ndarray <numpy.ndarray>`
-            Covariance of the mean. 2D array
+        cov: list(:class:`ndarray <numpy.ndarray>`)
+            Covariances of the mean.
         """
         mean_xvec = self.get_mean()
         self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
 
-        covshape = (self.all_measurements.shape[1], self.ndata, self.ndata)
-        self.covariance = np.empty(covshape)
+        if indices is None:
+            indices = np.arange(self.all_measurements.shape[1])
+
+        self.covariance = []
         for jj in range(self.all_measurements.shape[1]):
             x = xdiff[:, jj, :]
-            self.covariance[jj] = (
-                np.dot(x.T, x) * (self.nsamples - 1) / self.nsamples
-            )
+
+            if jj in indices:
+                cov = np.dot(x.T, x) * (self.nsamples - 1) / self.nsamples
+            else:
+                cov = None
+
+            self.covariance.append(cov)
 
         return self.mean, self.covariance
 
