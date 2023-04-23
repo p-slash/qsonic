@@ -116,7 +116,8 @@ def mpi_fnc_bcast(fnc, comm=None, mpi_rank=0, err_msg="", *args, **kwargs):
         try:
             result = fnc(*args, **kwargs)
         except Exception as e:
-            logging_mpi(f"{fnc.__module__}.{fnc.__name__}: {e}", 0, "error")
+            logging.exception(e)
+            logging.error(f"Error in {fnc.__module__}.{fnc.__name__}.")
             result = _INVALID_VALUE
 
     if comm is not None:
