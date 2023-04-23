@@ -85,8 +85,8 @@ class NoiseCalibrator():
 
         Arguments
         ----------
-        spec: Spectrum
-            Spectrum object to mask.
+        spectra_list: list(Spectrum)
+            Spectrum objects to noise calibrate.
         """
         for spec in spectra_list:
             for arm, wave_arm in spec.forestwave.items():
@@ -149,8 +149,8 @@ class FluxCalibrator():
 
         Arguments
         ----------
-        spec: Spectrum
-            Spectrum object to mask.
+        spectra_list: list(Spectrum)
+            Spectrum objects to flux calibrate.
         """
         for spec in spectra_list:
             for arm, wave_arm in spec.forestwave.items():
