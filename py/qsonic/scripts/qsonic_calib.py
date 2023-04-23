@@ -61,19 +61,24 @@ def get_parser(add_help=True):
     vargroup = parser.add_argument_group(
         'Variance fitting parameters')
     vargroup.add_argument(
-        "--nvarbins", help="Number of variance bins (logarithmically spaced)",
+        "--nvarbins", help="Number of variance bins (logarithmically spaced).",
         default=100, type=int)
+    vargroup.add_argument(
+        "--use-cov", action="store_true",
+        help="Use covariance in varlss-eta fitting.")
     vargroup.add_argument(
         "--nwbins", default=None, type=int,
         help="Number of wavelength bins. None creates bins with 120 A spacing")
     vargroup.add_argument(
-        "--var1", help="Lower variance bin", default=1e-4, type=float)
+        "--var1", help="Lower variance bin.", default=1e-4, type=float)
     vargroup.add_argument(
-        "--var2", help="Upper variance bin", default=20., type=float)
+        "--var2", help="Upper variance bin.", default=20., type=float)
     vargroup.add_argument(
-        "--min-snr", help="Minimum SNR of the forest", default=0, type=float)
+        "--min-snr", help="Minimum SNR of the forest.",
+        default=0, type=float)
     vargroup.add_argument(
-        "--max-snr", help="Maximum SNR of the forest", default=100, type=float)
+        "--max-snr", help="Maximum SNR of the forest.",
+        default=100, type=float)
 
     parser = add_wave_region_parser(parser)
 
@@ -207,7 +212,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     varfitter = VarLSSFitter(
         args.wave1, args.wave2, args.nwbins,
         args.var1, args.var2, args.nvarbins,
-        nsubsamples=100, comm=comm)
+        use_cov=args.use_cov, comm=comm)
 
     ids_to_remove = mpi_set_targetid_list_to_remove(args, comm, mpi_rank)
 
