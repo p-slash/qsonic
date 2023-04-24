@@ -102,11 +102,11 @@ def mypoly1d(coef, x):
     return results
 
 
-@njit("f8[:, :, :](f8[:, :], f8)")
+@njit  # ("f8[:, :, :](f8[:, :], f8)") This is problematic
 def _jackknife_block_covariance(x, blockdim):
     nsamples, ndata = x.shape
     nblock = ndata // blockdim
-    cov = np.empty((nblock, blockdim, blockdim))
+    cov = np.empty((nblock, blockdim, blockdim), dtype=np.float_)
     for kk in range(nblock):
         y = x[:, kk * blockdim:(kk + 1) * blockdim]
         cov[kk] = np.dot(y.T, y) * (nsamples - 1) / nsamples
