@@ -95,6 +95,13 @@ class TestMathtools(object):
         for jj in range(3):
             npt.assert_equal(cov[jj].shape, (10, 10))
 
+        mean, cov = subsampler.get_mean_n_cov(indices=[0, 1], blockdim=5)
+        npt.assert_allclose(mean, true_mean)
+        assert (len(cov) == 3)
+        for jj in range(2):
+            npt.assert_equal(cov[jj].shape, (2, 5, 5))
+        assert cov[2] is None
+
     def test_SubsampleCov_reset(self):
         subsampler = qsonic.mathtools.SubsampleCov((3, 10), 20)
         subsampler.reset()
