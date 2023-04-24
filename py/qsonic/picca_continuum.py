@@ -956,7 +956,7 @@ class VarLSSFitter():
 
     def reset(self):
         """Reset delta and num arrays to zero."""
-        self.subsampler.reset(self.mpi_rank)
+        self.subsampler.reset()
         self._num_pixels *= 0
         self._num_qso *= 0
 
