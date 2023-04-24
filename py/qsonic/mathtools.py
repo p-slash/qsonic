@@ -360,6 +360,8 @@ class SubsampleCov():
 
     Attributes
     ----------
+    _istart: int
+        Sampler initial index.
     _isample: int
         Sample counter. Wraps around nsamples
     _is_normalized: bool
@@ -380,7 +382,8 @@ class SubsampleCov():
 
     def __init__(self, ndata, nsamples, istart=0):
         self.nsamples = nsamples
-        self._isample = istart % nsamples
+        self._istart = istart % nsamples
+        self._isample = self._istart
 
         if isinstance(ndata, int):
             newshape = (nsamples, 1, ndata)
@@ -567,8 +570,8 @@ class SubsampleCov():
 
         return self.mean, self.variance
 
-    def reset(self, istart=0):
-        self._isample = istart % self.nsamples
+    def reset(self):
+        self._isample = self._istart
 
         self.all_measurements *= 0
         self.all_weights *= 0
