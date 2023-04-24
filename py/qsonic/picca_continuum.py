@@ -53,10 +53,10 @@ def add_picca_continuum_parser(parser=None):
         "--cont-order", type=int, default=1,
         help="Order of continuum fitting polynomial.")
     cont_group.add_argument(
-        "--fit-eta", action="store_true",
+        "--var-fit-eta", action="store_true",
         help="Fit for noise calibration (eta).")
     cont_group.add_argument(
-        "--use-cov", action="store_true",
+        "--var-use-cov", action="store_true",
         help="Use covariance in varlss-eta fitting.")
     cont_group.add_argument(
         "--normalize-stacked-flux", action="store_true",
@@ -231,7 +231,8 @@ class PiccaContinuumFitter():
                 args.fiducial_varlss, 'VAR')
         else:
             self.varlss_fitter = VarLSSFitter(
-                args.wave1, args.wave2, use_cov=args.use_cov, comm=self.comm)
+                args.wave1, args.wave2, use_cov=args.var_use_cov,
+                comm=self.comm)
             self.varlss_interp = FastCubic1DInterp(
                 self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
                 0.1 * np.ones(self.varlss_fitter.nwbins),
@@ -245,7 +246,7 @@ class PiccaContinuumFitter():
         self.niterations = args.no_iterations
         self.cont_order = args.cont_order
         self.outdir = args.outdir
-        self.fit_eta = args.fit_eta
+        self.fit_eta = args.var_fit_eta
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
         """ Cost function to minimize for each quasar.
