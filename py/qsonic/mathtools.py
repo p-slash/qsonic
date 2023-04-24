@@ -102,7 +102,19 @@ def mypoly1d(coef, x):
     return results
 
 
-@njit
+@njit("f8[:, :, :](f8[:, :], f8)")
+def _jackknife_block_covariance(x, blockdim):
+    nsamples, ndata = x.shape
+    nblock = ndata // blockdim
+    cov = np.empty((nblock, blockdim, blockdim))
+    for kk in range(nblock):
+        y = x[:, kk * blockdim:(kk + 1) * blockdim]
+        cov[kk] = np.dot(y.T, y) * (nsamples - 1) / nsamples
+
+    return cov
+
+
+@njit("f8[:, :, :](f8[:], f8[:], f8[:, :, :])")
 def block_covariance_of_square(mean, var, cov):
     """ Return the block covariance of x^2, i.e. :math:`<x_i^2 x_j^2>_c`.
     Compatible with ``blockdim`` argument of
@@ -130,8 +142,6 @@ def block_covariance_of_square(mean, var, cov):
     """
     nblock = cov.shape[0]
     ndata = cov.shape[1]
-    assert (nblock * ndata == mean.size)
-    assert (var.size == mean.size)
     new_cov = np.empty_like(cov)
 
     for jj in range(nblock):
@@ -140,7 +150,7 @@ def block_covariance_of_square(mean, var, cov):
         v = var[i1:i2]
         m = mean[i1:i2]
 
-        new_cov[jj] = np.outer(v, v)
+        np.outer(v, v, out=new_cov[jj])
         new_cov[jj] += cov[jj]**2
         new_cov[jj] += 2 * cov[jj] * np.outer(m, m)
 
@@ -510,30 +520,20 @@ class SubsampleCov():
         self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
 
         if indices is None:
-            indices = np.arange(self.all_measurements.shape[1])
+            indices = range(self.all_measurements.shape[1])
 
         if blockdim is not None:
             assert (self.ndata % blockdim == 0)
 
-        self.covariance = []
-        for jj in range(self.all_measurements.shape[1]):
-            if jj not in indices:
-                self.covariance.append(None)
-                continue
-
+        self.covariance = [None] * self.all_measurements.shape[1]
+        for jj in indices:
             x = xdiff[:, jj, :]
 
             if blockdim is None:
                 cov = np.dot(x.T, x) * (self.nsamples - 1) / self.nsamples
-                self.covariance.append(cov)
-                continue
-
-            nblock = self.ndata // blockdim
-            cov = np.empty((nblock, blockdim, blockdim))
-            for kk in range(nblock):
-                y = x[:, kk * blockdim:(kk + 1) * blockdim]
-                cov[kk] = np.dot(y.T, y) * (self.nsamples - 1) / self.nsamples
-            self.covariance.append(cov)
+            else:
+                cov = _jackknife_block_covariance(x, blockdim)
+            self.covariance[jj] = cov
 
         return self.mean, self.covariance
 
