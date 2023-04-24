@@ -64,7 +64,7 @@ def get_parser(add_help=True):
         "--nvarbins", help="Number of variance bins (logarithmically spaced).",
         default=100, type=int)
     vargroup.add_argument(
-        "--use-cov", action="store_true",
+        "--var-use-cov", action="store_true",
         help="Use covariance in varlss-eta fitting.")
     vargroup.add_argument(
         "--nwbins", default=None, type=int,
@@ -212,7 +212,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     varfitter = VarLSSFitter(
         args.wave1, args.wave2, args.nwbins,
         args.var1, args.var2, args.nvarbins,
-        use_cov=args.use_cov, comm=comm)
+        use_cov=args.var_use_cov, comm=comm)
 
     ids_to_remove = mpi_set_targetid_list_to_remove(args, comm, mpi_rank)
 
