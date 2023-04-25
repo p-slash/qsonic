@@ -116,9 +116,9 @@ def _jackknife_block_covariance(x, blockdim):
 
 @njit("f8[:, :, :](f8[:], f8[:], f8[:, :, :])")
 def block_covariance_of_square(mean, var, cov):
-    """ Return the block covariance of x^2, i.e. :math:`<x_i^2 x_j^2>_c`.
-    Compatible with ``blockdim`` argument of
-    :meth:`SubsampleCov.get_mean_n_cov`.
+    """ Return the block covariance of x^2, i.e.
+    :math:`<x_i^2 x_j^2> - <x_i^2><x_j^2>`. Compatible with ``blockdim``
+    argument of :meth:`SubsampleCov.get_mean_n_cov`.
 
     .. math::
 
