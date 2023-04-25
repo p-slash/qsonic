@@ -105,7 +105,7 @@ class PiccaContinuumFitter():
         Rank of the MPI process.
     meanflux_interp: FastLinear1DInterp
         Interpolator for mean flux. If fiducial is not set, this equals to 1.
-    flux_stacker: FluxStacker (disabled)
+    flux_stacker: FluxStacker
         Stacks flux. Set up with 8 A wavelength bin size.
     varlss_fitter: VarLSSFitter or None
         None if fiducials are set for var_lss.
@@ -204,8 +204,8 @@ class PiccaContinuumFitter():
             self.meanflux_interp = FastLinear1DInterp(
                 args.wave1, args.wave2 - args.wave1, np.ones(3))
 
-        # self.flux_stacker = FluxStacker(
-        #     args.wave1, args.wave2, 8., comm=self.comm)
+        self.flux_stacker = FluxStacker(
+            args.wave1, args.wave2, 8., comm=self.comm)
 
         if args.fiducial_varlss:
             self.varlss_fitter = None
@@ -502,7 +502,7 @@ class PiccaContinuumFitter():
         norm_flux = np.zeros(self.nbins)
         std_flux = np.empty(self.nbins)
         counts = np.zeros(self.nbins)
-        # self.flux_stacker.reset()
+        self.flux_stacker.reset()
 
         for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
@@ -521,9 +521,9 @@ class PiccaContinuumFitter():
                 counts += np.bincount(
                     bin_idx, weights=weight, minlength=self.nbins)
 
-                # self.flux_stacker.add(wave_arm, flux, weight)
+                self.flux_stacker.add(wave_arm, flux, weight)
 
-        # self.flux_stacker.calculate()
+        self.flux_stacker.calculate()
         self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
         self.comm.Allreduce(MPI.IN_PLACE, counts)
         w = counts > 0
@@ -710,10 +710,10 @@ class PiccaContinuumFitter():
             names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
             extname=f'CONT{suff}')
 
-        # fattr.write(
-        #     [self.flux_stacker.waveobs, self.flux_stacker.stacked_flux],
-        #     names=['lambda', 'stacked_flux'],
-        #     extname=f'STACKED_FLUX{suff}')
+        fattr.write(
+            [self.flux_stacker.waveobs, self.flux_stacker.stacked_flux],
+            names=['lambda', 'stacked_flux'],
+            extname=f'STACKED_FLUX{suff}')
 
         if self.varlss_fitter is None:
             return
@@ -1307,7 +1307,7 @@ class FluxStacker():
 
     def __init__(self, w1obs, w2obs, dwobs, comm=None):
         # Set up wavelength and inverse variance bins
-        self.nwbins = int((w2obs - w1obs) / dwobs)
+        self.nwbins = int(round((w2obs - w1obs) / dwobs))
         wave_edges, self.dwobs = np.linspace(
             w1obs, w2obs, self.nwbins + 1, retstep=True)
         self.waveobs = (wave_edges[1:] + wave_edges[:-1]) / 2
