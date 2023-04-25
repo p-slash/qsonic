@@ -12,7 +12,7 @@ from mpi4py import MPI
 
 from qsonic import QsonicException
 from qsonic.spectrum import valid_spectra
-from qsonic.mpi_utils import logging_mpi, warn_mpi, MPISaver
+from qsonic.mpi_utils import logging_mpi, warn_mpi, mpi_fnc_bcast, MPISaver
 from qsonic.mathtools import (
     mypoly1d, block_covariance_of_square,
     FastLinear1DInterp, FastCubic1DInterp,
@@ -148,7 +148,7 @@ class PiccaContinuumFitter():
             If 'LAMBDA' is not equally spaced or ``col2read`` is not in the
             file.
         """
-        if self.mpi_rank == 0:
+        def _read(fname, col2read):
             with fitsio.FITS(fname) as fts:
                 data = fts['STATS'].read()
 
@@ -158,36 +158,18 @@ class PiccaContinuumFitter():
             nsize = waves.size
 
             if not np.allclose(np.diff(waves), dwave):
-                # Set nsize to 0, later will be used to diagnose and exit
-                # for uneven wavelength array.
-                nsize = 0
-            elif col2read not in data.dtype.names:
-                nsize = -1
-            else:
-                data = np.array(data[col2read], dtype='d')
-        else:
-            waves_0 = 0.
-            dwave = 0.
-            nsize = 0
+                raise Exception(
+                    "Failed to construct fiducial mean flux or varlss from "
+                    f"{fname}::LAMBDA is not equally spaced.")
 
-        nsize, waves_0, dwave = self.comm.bcast([nsize, waves_0, dwave])
+            data = np.array(data[col2read], dtype='d')
 
-        if nsize == 0:
-            raise QsonicException(
-                "Failed to construct fiducial mean flux or varlss from "
-                f"{fname}::LAMBDA is not equally spaced.")
+            return FastLinear1DInterp(waves_0, dwave, data, ep=np.zeros(nsize))
 
-        if nsize == -1:
-            raise QsonicException(
-                "Failed to construct fiducial mean flux or varlss from "
-                f"{fname}::{col2read} is not in file.")
-
-        if self.mpi_rank != 0:
-            data = np.empty(nsize, dtype='d')
-
-        self.comm.Bcast([data, MPI.DOUBLE])
-
-        return FastLinear1DInterp(waves_0, dwave, data, ep=np.zeros(nsize))
+        return mpi_fnc_bcast(
+            _read, self.comm, self.mpi_rank,
+            f"Failed to construct fiducial mean flux or varlss from {fname}.",
+            fname, col2read)
 
     def __init__(self, args):
         # We first decide how many bins will approximately satisfy
