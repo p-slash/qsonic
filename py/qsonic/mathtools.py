@@ -102,18 +102,6 @@ def mypoly1d(coef, x):
     return results
 
 
-@njit  # ("f8[:, :, :](f8[:, :], f8)") This is problematic
-def _jackknife_block_covariance(x, blockdim):
-    nsamples, ndata = x.shape
-    nblock = ndata // blockdim
-    cov = np.empty((nblock, blockdim, blockdim), dtype=np.float_)
-    for kk in range(nblock):
-        y = x[:, kk * blockdim:(kk + 1) * blockdim]
-        cov[kk] = np.dot(y.T, y) * (nsamples - 1) / nsamples
-
-    return cov
-
-
 @njit("f8[:, :, :](f8[:], f8[:], f8[:, :, :])")
 def block_covariance_of_square(mean, var, cov):
     """ Return the block covariance of x^2, i.e.
@@ -493,6 +481,15 @@ class SubsampleCov():
 
         return mean_xvec, xdiff
 
+    def _get_block_covariance(self, x, blockdim):
+        nblock = self.ndata // blockdim
+        cov = np.empty((nblock, blockdim, blockdim), dtype=np.float_)
+        for kk in range(nblock):
+            y = x[:, kk * blockdim:(kk + 1) * blockdim]
+            cov[kk] = (y.T @ y) * (self.nsamples - 1) / self.nsamples
+
+        return cov
+
     def get_mean_n_cov(self, indices=None, blockdim=None, bias_correct=False):
         """ Get the mean and covariance of the mean using delete-one Jackknife.
 
@@ -533,9 +530,9 @@ class SubsampleCov():
             x = xdiff[:, jj, :]
 
             if blockdim is None:
-                cov = np.dot(x.T, x) * (self.nsamples - 1) / self.nsamples
+                cov = (x.T @ x) * (self.nsamples - 1) / self.nsamples
             else:
-                cov = _jackknife_block_covariance(x, blockdim)
+                cov = self._get_block_covariance(x, blockdim)
             self.covariance[jj] = cov
 
         return self.mean, self.covariance
