@@ -70,7 +70,7 @@ class TestMathtools(object):
         mean, cov = subsampler.get_mean_n_cov()
 
         npt.assert_allclose(mean, true_mean)
-        npt.assert_almost_equal(cov[0, 0], var_on_mean, decimal=4)
+        npt.assert_almost_equal(cov[0][0], var_on_mean, decimal=4)
 
     def test_SubsampleCov_shape(self):
         subsampler = qsonic.mathtools.SubsampleCov((3, 10), 20)
@@ -91,7 +91,16 @@ class TestMathtools(object):
 
         mean, cov = subsampler.get_mean_n_cov()
         npt.assert_allclose(mean, true_mean)
-        npt.assert_equal(cov.shape, (3, 10, 10))
+        assert (len(cov) == 3)
+        for jj in range(3):
+            npt.assert_equal(cov[jj].shape, (10, 10))
+
+        mean, cov = subsampler.get_mean_n_cov(indices=[0, 1], blockdim=5)
+        npt.assert_allclose(mean, true_mean)
+        assert (len(cov) == 3)
+        for jj in range(2):
+            npt.assert_equal(cov[jj].shape, (2, 5, 5))
+        assert cov[2] is None
 
     def test_SubsampleCov_reset(self):
         subsampler = qsonic.mathtools.SubsampleCov((3, 10), 20)

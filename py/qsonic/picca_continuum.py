@@ -14,7 +14,7 @@ from qsonic import QsonicException
 from qsonic.spectrum import valid_spectra
 from qsonic.mpi_utils import logging_mpi, warn_mpi, mpi_fnc_bcast, MPISaver
 from qsonic.mathtools import (
-    mypoly1d,
+    mypoly1d, block_covariance_of_square,
     FastLinear1DInterp, FastCubic1DInterp,
     SubsampleCov
 )
@@ -53,15 +53,14 @@ def add_picca_continuum_parser(parser=None):
         "--cont-order", type=int, default=1,
         help="Order of continuum fitting polynomial.")
     cont_group.add_argument(
-        "--fit-eta", action="store_true",
+        "--var-fit-eta", action="store_true",
         help="Fit for noise calibration (eta).")
+    cont_group.add_argument(
+        "--var-use-cov", action="store_true",
+        help="Use covariance in varlss-eta fitting.")
     cont_group.add_argument(
         "--normalize-stacked-flux", action="store_true",
         help="NOT IMPLEMENTED: Force stacked flux to be one at the end.")
-    cont_group.add_argument(
-        "--error-method-vardelta", default="regJack",
-        choices=VarLSSFitter.accepted_vardelta_error_methods,
-        help="Error estimation method for var_delta.")
     cont_group.add_argument(
         "--minimizer", default="iminuit", choices=["iminuit", "l_bfgs_b"],
         help="Minimizer to fit the continuum.")
@@ -214,8 +213,7 @@ class PiccaContinuumFitter():
                 args.fiducial_varlss, 'VAR')
         else:
             self.varlss_fitter = VarLSSFitter(
-                args.wave1, args.wave2,
-                error_method=args.error_method_vardelta,
+                args.wave1, args.wave2, use_cov=args.var_use_cov,
                 comm=self.comm)
             self.varlss_interp = FastCubic1DInterp(
                 self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
@@ -230,7 +228,7 @@ class PiccaContinuumFitter():
         self.niterations = args.no_iterations
         self.cont_order = args.cont_order
         self.outdir = args.outdir
-        self.fit_eta = args.fit_eta
+        self.fit_eta = args.var_fit_eta
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
         """ Cost function to minimize for each quasar.
@@ -693,6 +691,7 @@ class PiccaContinuumFitter():
             warn_mpi("Iteration has NOT converged.", self.mpi_rank)
 
         self.save(fattr)
+        self.varlss_fitter.write(fattr)
         fattr.close()
         logging_mpi("All continua are fit.", self.mpi_rank)
 
@@ -830,11 +829,11 @@ class VarLSSFitter():
         Upper variance edge.
     nvarbins: int, default: 100
         Number of variance bins.
-    nsubsamples: int, default: 100
-        Number of subsamples for the Jackknife covariance.
-    error_method: str, default: regJack
-        Error estimation methods for var_delta. Must be one of
-        :attr:`accepted_vardelta_error_methods`.
+    nsubsamples: int, default: None
+        Number of subsamples for the Jackknife covariance. Auto determined by
+        number of bins (``nvarbins^2``) if None.
+    use_cov: bool, default: False
+        Use the Jackknife covariance when fitting.
     comm: MPI.COMM_WORLD or None, default: None
         MPI comm object to allreduce if enabled.
 
@@ -861,8 +860,6 @@ class VarLSSFitter():
     """int: Minimum number of pixels a bin must have to be valid."""
     min_no_qso = 50
     """int: Minimum number of quasars a bin must have to be valid."""
-    accepted_vardelta_error_methods = ["gauss", "regJack"]
-    """list(str): Accepted error estimation methods for var_delta."""
 
     @staticmethod
     def variance_function(var_pipe, var_lss, eta=1):
@@ -892,19 +889,14 @@ class VarLSSFitter():
     def __init__(
             self, w1obs, w2obs, nwbins=None,
             var1=1e-4, var2=20., nvarbins=100,
-            nsubsamples=100, error_method="regJack",
-            comm=None
+            nsubsamples=None, use_cov=False, comm=None
     ):
-        assert set(
-            VarLSSFitter.accepted_vardelta_error_methods
-        ).intersection([error_method])
-
         if nwbins is None:
             nwbins = int(round((w2obs - w1obs) / 120.))
 
         self.nwbins = nwbins
         self.nvarbins = nvarbins
-        self.error_method = error_method
+        self.use_cov = use_cov
         self.comm = comm
 
         # Set up wavelength and inverse variance bins
@@ -931,19 +923,24 @@ class VarLSSFitter():
         # Then shift each container to remove possibly over adding to 0th bin.
         if comm is not None:
             self.mpi_rank = comm.Get_rank()
+            mpi_size = comm.Get_size()
         else:
             self.mpi_rank = 0
+            mpi_size = 1
 
+        if nsubsamples is None:
+            nsubsamples = self.nvarbins**2
+        istart = (self.mpi_rank * nsubsamples) // mpi_size
         # Axis 0 is mean
         # Axis 1 is var_delta
         # Axis 2 is var2_delta
         # Axis 3 is var_centers
         self.subsampler = SubsampleCov(
-            (4, self.minlength), nsubsamples, self.mpi_rank)
+            (4, self.minlength), nsubsamples, istart)
 
     def reset(self):
         """Reset delta and num arrays to zero."""
-        self.subsampler.reset(self.mpi_rank)
+        self.subsampler.reset()
         self._num_pixels *= 0
         self._num_qso *= 0
 
@@ -983,27 +980,56 @@ class VarLSSFitter():
         self._num_qso += npix
 
     def _allreduce(self):
-        """Sums statistics from all MPI process, and calculates mean, variance
-        and error on the variance.
+        """ Sums statistics from all MPI process in place."""
+        if self.comm is None:
+            return
 
-        It also calculates the delete-one Jackknife variance of var_delta over
+        self.subsampler.allreduce(self.comm, MPI.IN_PLACE)
+
+        self.comm.Allreduce(MPI.IN_PLACE, self._num_pixels)
+        self.comm.Allreduce(MPI.IN_PLACE, self._num_qso)
+
+    def _calc_subsampler_stats(self):
+        """ Calculates mean, variance and error on the variance.
+
+        It also calculates the delete-one Jackknife variance over
         ``nsubsamples``.
+        The variance on var_delta is updated with the variance on the mean
+        estimates, then it is regularized by calculated var2_delta
+        (Gaussian estimates), where if Jackknife variance is smaller than
+        the Gaussian estimate, it is replaced by the Gaussian estimate.
+
+        Covariance is calculated if :attr:`use_cov` is set to True in init.
+        Covariance of mean_delta^2 is propagated using the formula in
+        :func:`qsonic.mathtools.block_covariance_of_square`.
         """
-        if self.comm is not None:
-            self.subsampler.allreduce(self.comm, MPI.IN_PLACE)
-
-            self.comm.Allreduce(MPI.IN_PLACE, self._num_pixels)
-            self.comm.Allreduce(MPI.IN_PLACE, self._num_qso)
-
         self.subsampler.get_mean_n_var()
+        if self.use_cov:
+            self.subsampler.get_mean_n_cov(
+                indices=[0, 1], blockdim=self.nvarbins + 2)
 
         m2 = self.subsampler.mean[0]**2
         self.subsampler.mean[1] -= m2
-        self.subsampler.variance[1] += 4 * m2 * self.subsampler.variance[0]
         self.subsampler.mean[2] -= self.subsampler.mean[1]**2
 
         w = self._num_pixels > 0
         self.subsampler.mean[2, w] /= self._num_pixels[w]
+
+        # Update variance / covariance
+        if self.use_cov:
+            self.subsampler.covariance[1] += block_covariance_of_square(
+                self.subsampler.mean[0],
+                self.subsampler.variance[0],
+                self.subsampler.covariance[0])
+        else:
+            self.subsampler.variance[1] += 4 * m2 * self.subsampler.variance[0]
+            self.subsampler.variance[1] += 2 * self.subsampler.variance[0]**2
+            # Regularized jackknife errors
+            self.subsampler.variance[1] = np.where(
+                self.subsampler.variance[1] > self.subsampler.mean[2],
+                self.subsampler.variance[1],
+                self.subsampler.mean[2]
+            )
 
     def _smooth_fit_results(self, fit_results, std_results):
         w = fit_results > 0
@@ -1027,62 +1053,13 @@ class VarLSSFitter():
 
         return fit_results
 
-    def get_var_delta_error(self, method=None):
-        """ Calculate the error (sigma) on var_delta using a given method.
-
-        - ``method="gauss"``:
-            Observed var2_delta using delta**4 statistics are used as has been
-            done before.
-
-        - ``method="regJack"``:
-            The variance on var_delta is first calculated by delete-one
-            Jackknife
-            over ``nsubsamples``. This is regularized by calculated var2_delta
-            (Gaussian estimates), where if Jackknife variance is smaller than
-            the Gaussian estimate, it is replaced by the Gaussian estimate.
-
-        Arguments
-        ---------
-        method: str, default: None
-            Method to estimate error on var_delta
-
-        Returns
-        ---------
-        error_estimates: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Error (sigma) on var_delta
-
-        Raises
-        ------
-        ValueError
-            If method is not one of :attr:`accepted_vardelta_error_methods`.
-        """
-        if method is None:
-            method = self.error_method
-
-        if method == "gauss":
-            error_estimates = np.sqrt(self.subsampler.mean[2])
-
-        elif method == "regJack":
-            # Regularized jackknife errors
-            error_estimates = np.where(
-                self.subsampler.variance[1] > self.subsampler.mean[2],
-                self.subsampler.variance[1],
-                self.subsampler.mean[2]
-            )
-
-            error_estimates = np.sqrt(error_estimates)
-        else:
-            raise ValueError(f"Unkown error method {method}.")
-
-        return error_estimates[self.wvalid_bins]
-
     def _fit_array_shape_assert(self, arr):
         assert (arr.ndim == 1 or arr.ndim == 2)
         assert (arr.shape[0] == self.nwbins)
         if arr.ndim == 2:
             assert (arr.shape[1] == 2)
 
-    def fit(self, initial_guess, method=None, smooth=True):
+    def fit(self, initial_guess, smooth=True):
         """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
 
         Second axis always contains ``eta`` values. Example::
@@ -1091,8 +1068,8 @@ class VarLSSFitter():
             eta = initial_guess[:, 1]
 
         This implemented using :func:`scipy.optimize.curve_fit` with
-        ``sqrt(var2_delta_subs)`` as absolute errors. Domain is bounded to
-        ``(0, 2)``. These fits are then smoothed via
+        :attr:`e_var_delta` or :attr:`cov_var_delta` as absolute errors. Domain
+        is bounded to ``(0, 2)``. These fits are then smoothed via
         :external+scipy:py:class:`scipy.interpolate.UnivariateSpline`
         using weights from ``curve_fit``,
         while missing values or failed wavelength bins are extrapolated.
@@ -1102,8 +1079,6 @@ class VarLSSFitter():
         initial_guess: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Initial guess for var_lss and eta. If 1D array, eta is fixed to
             one. If 2D, its shape must be ``(nwbins, 2)``.
-        method: str, default: None
-            Error estimation method
         smooth: bool, default: True
             Smooth results using UnivariateSpline.
 
@@ -1120,14 +1095,19 @@ class VarLSSFitter():
         """
         self._fit_array_shape_assert(initial_guess)
         self._allreduce()
+        self._calc_subsampler_stats()
 
         nfails = 0
         fit_results = np.zeros_like(initial_guess)
         std_results = np.zeros_like(initial_guess)
 
-        error_estimates = self.get_var_delta_error(method)
         w_gtr_min = ((self.num_pixels > VarLSSFitter.min_no_pix)
                      & (self.num_qso > VarLSSFitter.min_no_qso))
+
+        if self.use_cov:
+            err_base = self.cov_var_delta
+        else:
+            err_base = self.e_var_delta
 
         for iwave in range(self.nwbins):
             i1 = iwave * self.nvarbins
@@ -1143,13 +1123,18 @@ class VarLSSFitter():
                     self.mpi_rank)
                 continue
 
+            if self.use_cov:
+                err2use = err_base[iwave][:, w][w, :]
+            else:
+                err2use = err_base[wave_slice][w]
+
             try:
                 pfit, pcov = curve_fit(
                     VarLSSFitter.variance_function,
                     self.var_centers[wave_slice][w],
                     self.var_delta[wave_slice][w],
                     p0=initial_guess[iwave],
-                    sigma=error_estimates[wave_slice][w],
+                    sigma=err2use,
                     absolute_sigma=True,
                     check_finite=True,
                     bounds=(0, 2)
@@ -1181,25 +1166,18 @@ class VarLSSFitter():
 
         return fit_results, std_results
 
-    def save(self, fname, min_snr=0, max_snr=100):
-        """Save variance statistics to FITS file.
+    def write(self, mpi_saver, min_snr=0, max_snr=100):
+        """ Write variance statistics to FITS file in 'VAR_STATS' extention.
 
         Arguments
         ---------
-        fname: str
-            Filename to be written. It is always overwritten.
+        mpi_saver: MPISaver
+            MPI FITS file handler.
         min_snr: float, default: 0
             Minimum SNR in this sample to be written into header.
         max_snr: float, default: 100
-            Maximum SNR in this sampleto be written into header.
-
-        Returns
-        -------
-        mpi_saver: MPISaver
-            To save additional data or to close manually.
+            Maximum SNR in this sample to be written into header.
         """
-        mpi_saver = MPISaver(fname, self.mpi_rank)
-
         hdr_dict = {
             'MINNPIX': VarLSSFitter.min_no_pix,
             'MINNQSO': VarLSSFitter.min_no_qso,
@@ -1216,16 +1194,20 @@ class VarLSSFitter():
         data_to_write = [
             np.repeat(self.waveobs, self.nvarbins),
             self.var_centers, self.e_var_centers,
-            self.mean_delta, self.var_delta,
-            self.subsampler.variance[1][self.wvalid_bins], self.var2_delta,
-            self.num_pixels, self.num_qso]
-        names = ['wave', 'var_pipe', 'e_var_pipe', 'mean_delta', 'var_delta',
-                 'varjack_delta', 'var2_delta', 'num_pixels', 'num_qso']
+            self.var_delta, self.e_var_delta,
+            self.mean_delta, self.var2_delta, self.num_pixels, self.num_qso]
+
+        names = ['wave', 'var_pipe', 'e_var_pipe', 'var_delta', 'e_var_delta',
+                 'mean_delta', 'var2_delta', 'num_pixels', 'num_qso']
+
+        if self.use_cov:
+            cov_data = self.cov_var_delta.reshape(
+                self.nwbins * self.nvarbins, self.nvarbins)
+            data_to_write.append(cov_data)
+            names.append("cov_var_delta")
 
         mpi_saver.write(
             data_to_write, names=names, extname="VAR_STATS", header=hdr_dict)
-
-        return mpi_saver
 
     @property
     def num_pixels(self):
@@ -1249,6 +1231,28 @@ class VarLSSFitter():
         """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
         Variance delta."""
         return self.subsampler.mean[1][self.wvalid_bins]
+
+    @property
+    def e_var_delta(self):
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
+        Error on variance delta using delete-one Jackknife. The error of
+        :attr:`mean_delta` is propagated, then regularized using
+        :attr:`var2_delta`. See source code of :meth:`_calc_subsampler_stats`.
+        """
+        return np.sqrt(self.subsampler.variance[1][self.wvalid_bins])
+
+    @property
+    def cov_var_delta(self):
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
+        3D array of shape ``(nwbins, nvarbins, nvarbins)`` for the covariance
+        on variance delta using delete-one Jackknife. The covariance
+        of :attr:`mean_delta` is propagated. See
+        :func:`qsonic.mathtools.block_covariance_of_square` for details.
+        None if :attr:`use_cov` is False."""
+        if not self.use_cov:
+            return None
+        cov = self.subsampler.covariance[1]
+        return cov[1:-1, 1:-1, 1:-1]
 
     @property
     def var2_delta(self):
