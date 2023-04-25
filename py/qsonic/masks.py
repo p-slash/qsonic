@@ -7,6 +7,8 @@ from numpy.lib.recfunctions import rename_fields
 import fitsio
 
 from qsonic import QsonicException
+from qsonic.mpi_utils import mpi_fnc_bcast
+
 
 LIGHT_SPEED = 299792.458
 """float: Speed of light in km/s."""
@@ -56,19 +58,20 @@ class SkyMask():
         Filename to read by `astropy.io.ascii`. Must have four columns ordered
         as type, minimum wavelength, maximum wavelength and frame (must be 'RF'
         or 'OBS').
+    comm: None or MPI.COMM_WORLD, default: None
+    mpi_rank: int, default: 0
     """
     column_names = ('type', 'wave_min', 'wave_max', 'frame')
     """tuple: Assumed ordering of columns in the text file."""
 
-    def __init__(self, fname):
-        try:
-            mask = asread(fname, names=SkyMask.column_names)
+    def __init__(self, fname, comm=None, mpi_rank=0):
+        mask = mpi_fnc_bcast(
+            asread, comm, mpi_rank,
+            f"Error loading SkyMask from mask file {fname}.",
+            fname, names=SkyMask.column_names)
 
-            self.mask_rest_frame = mask[mask['frame'] == 'RF']
-            self.mask_obs_frame = mask[mask['frame'] == 'OBS']
-        except Exception as e:
-            raise QsonicException(
-                f"Error loading SkyMask from mask file {fname}.") from e
+        self.mask_rest_frame = mask[mask['frame'] == 'RF']
+        self.mask_obs_frame = mask[mask['frame'] == 'OBS']
 
     def apply(self, spec):
         """ Apply the mask by setting **only** ``spec.forestivar`` to zero.
@@ -385,7 +388,9 @@ class DLAMask():
 
         if not z_colname:
             fts.close()
-            return None
+            raise ValueError(
+                "DLA mask error::Z colname has to be one of "
+                f"{', '.join(DLAMask.accepted_zcolnames)}")
 
         z_colname = z_colname.pop()
         columns_list = ["TARGETID", z_colname, "NHI"]
@@ -401,19 +406,12 @@ class DLAMask():
     def __init__(
             self, fname, local_targetids=None, comm=None, mpi_rank=0,
             dla_mask_limit=0.8):
-        catalog = None
         self.dla_mask_limit = dla_mask_limit
 
-        if mpi_rank == 0:
-            catalog = DLAMask._read_catalog(fname)
-
-        if comm is not None:
-            catalog = comm.bcast(catalog)
-
-        if catalog is None:
-            raise ValueError(
-                "DLA mask error::Z colname has to be one of "
-                f"{', '.join(DLAMask.accepted_zcolnames)}")
+        catalog = mpi_fnc_bcast(
+            DLAMask._read_catalog, comm, mpi_rank,
+            f"Error loading DLAMask from file {fname}.",
+            fname)
 
         if local_targetids is not None:
             w = np.isin(catalog['TARGETID'], local_targetids)
