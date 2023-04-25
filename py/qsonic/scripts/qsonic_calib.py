@@ -11,7 +11,7 @@ from qsonic import QsonicException
 import qsonic.catalog
 import qsonic.io
 from qsonic.masks import BALMask
-from qsonic.mpi_utils import logging_mpi, mpi_parse, mpi_fnc_bcast
+from qsonic.mpi_utils import logging_mpi, mpi_parse, mpi_fnc_bcast, MPISaver
 from qsonic.picca_continuum import VarLSSFitter
 from qsonic.spectrum import add_wave_region_parser
 
@@ -239,7 +239,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     logging_mpi("Saving variance stats to files", mpi_rank)
     suffix = f"snr{args.min_snr:.1f}-{args.max_snr:.1f}"
     tmpfilename = f"{args.outdir}/{args.fbase}-{suffix}-variance-stats.fits"
-    mpi_saver = qsonic.io.MPISaver(tmpfilename, mpi_rank)
+    mpi_saver = MPISaver(tmpfilename, mpi_rank)
     varfitter.write(mpi_saver, args.min_snr, args.max_snr)
     logging_mpi(f"Variance stats saved in {tmpfilename}.", mpi_rank)
 
