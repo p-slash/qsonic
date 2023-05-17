@@ -2,6 +2,7 @@
 import argparse
 
 import numpy as np
+from numba import njit
 import fitsio
 from iminuit import Minuit
 from scipy.optimize import minimize, curve_fit
@@ -777,6 +778,21 @@ class PiccaContinuumFitter():
             fts.close()
 
 
+@njit("f8[:, :](i8[:], f8[:], f8[:], i8)")
+def _fast_weighted_vector_bincount(x, delta, var, minlength):
+    xvec = np.zeros((4, minlength), dtype=np.float_)
+    y = delta**2
+    y2 = y**2
+
+    for i in range(x.size):
+        xvec[0, x[i]] += delta[i]
+        xvec[1, x[i]] += y[i]
+        xvec[2, x[i]] += y2[i]
+        xvec[3, x[i]] += var[i]
+
+    return xvec
+
+
 class VarLSSFitter():
     """ Variance fitter for the large-scale fluctuations.
 
@@ -968,12 +984,8 @@ class VarLSSFitter():
 
         npix = np.bincount(all_indx, minlength=self.minlength)
         self._num_pixels += npix
-        xvec = np.array([
-            np.bincount(all_indx, weights=delta, minlength=self.minlength),
-            np.bincount(all_indx, weights=delta**2, minlength=self.minlength),
-            np.bincount(all_indx, weights=delta**4, minlength=self.minlength),
-            np.bincount(all_indx, weights=var, minlength=self.minlength)
-        ])
+        xvec = _fast_weighted_vector_bincount(
+            all_indx, delta, var, self.minlength)
         self.subsampler.add_measurement(xvec, npix)
 
         npix[npix > 0] = 1
