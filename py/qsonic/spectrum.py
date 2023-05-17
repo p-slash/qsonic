@@ -427,6 +427,8 @@ class Spectrum():
 
             reso_arm = self.forestreso[arm]
             ddia = max_ndia - reso_arm.shape[0]
+            # Assumption ddia cannot be odd
+            ddia = ddia // 2
             if ddia > 0:
                 reso_arm = np.pad(reso_arm, ((ddia, ddia), (0, 0)))
 
@@ -493,6 +495,8 @@ class Spectrum():
         self._forestflux = {'brz': coadd_flux}
         self._forestivar = {'brz': coadd_ivar}
         self.cont_params['cont'] = {'brz': coadd_cont}
+        if self.forestreso:
+            self._coadd_arms_reso(nwaves, idxes)
 
         self.set_smooth_ivar(self._smoothing_scale)
         self._forestweight = {}
@@ -501,9 +505,6 @@ class Spectrum():
         mean_snr = np.dot(
             np.sqrt(coadd_ivar), coadd_flux) / np.sum(coadd_ivar > 0)
         self.mean_snr = {'brz': mean_snr}
-
-        if self.forestreso:
-            self._coadd_arms_reso(nwaves, idxes)
 
     def mean_resolution(self, arm, weight=None):
         """ Returns the weighted mean Gaussian sigma of the spectrograph
