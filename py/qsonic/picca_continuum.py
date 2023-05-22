@@ -417,28 +417,28 @@ class PiccaContinuumFitter():
         RuntimeWarning
             If more than 20% spectra have invalid fits.
         """
-        no_valid_fits = 0
-        no_invalid_fits = 0
+        num_valid_fits = 0
+        num_invalid_fits = 0
 
         # For each forest fit continuum
         for spec in spectra_list:
             self.fit_continuum(spec)
 
             if not spec.cont_params['valid']:
-                no_invalid_fits += 1
+                num_invalid_fits += 1
             else:
-                no_valid_fits += 1
+                num_valid_fits += 1
 
-        no_valid_fits = self.comm.allreduce(no_valid_fits)
-        no_invalid_fits = self.comm.allreduce(no_invalid_fits)
-        logging_mpi(f"Number of valid fits: {no_valid_fits}", self.mpi_rank)
-        logging_mpi(f"Number of invalid fits: {no_invalid_fits}",
+        num_valid_fits = self.comm.allreduce(num_valid_fits)
+        num_invalid_fits = self.comm.allreduce(num_invalid_fits)
+        logging_mpi(f"Number of valid fits: {num_valid_fits}", self.mpi_rank)
+        logging_mpi(f"Number of invalid fits: {num_invalid_fits}",
                     self.mpi_rank)
 
-        if no_valid_fits == 0:
+        if num_valid_fits == 0:
             raise QsonicException("Crucial error: No valid continuum fits!")
 
-        invalid_ratio = no_invalid_fits / (no_valid_fits + no_invalid_fits)
+        invalid_ratio = num_invalid_fits / (num_valid_fits + num_invalid_fits)
         if invalid_ratio > 0.2:
             warn_mpi("More than 20% spectra have invalid fits.", self.mpi_rank)
 
@@ -815,8 +815,8 @@ class VarLSSFitter():
             var1, var2, nvarbins,
             nsubsamples=100, comm=comm)
         # Change static minimum numbers for valid statistics
-        VarLSSFitter.min_no_pix = min_no_pix
-        VarLSSFitter.min_no_qso = min_no_qso
+        VarLSSFitter.min_num_pix = min_num_pix
+        VarLSSFitter.min_num_qso = min_num_qso
 
         for delta in deltas_list:
             varfitter.add(delta.wave, delta.delta, delta.ivar)
@@ -872,9 +872,9 @@ class VarLSSFitter():
     mpi_rank: int
         Rank of the MPI process if ``comm!=None``. Zero otherwise.
     """
-    min_no_pix = 500
+    min_num_pix = 500
     """int: Minimum number of pixels a bin must have to be valid."""
-    min_no_qso = 50
+    min_num_qso = 50
     """int: Minimum number of quasars a bin must have to be valid."""
 
     @staticmethod
@@ -1113,8 +1113,8 @@ class VarLSSFitter():
         fit_results = np.zeros_like(initial_guess)
         std_results = np.zeros_like(initial_guess)
 
-        w_gtr_min = ((self.num_pixels > VarLSSFitter.min_no_pix)
-                     & (self.num_qso > VarLSSFitter.min_no_qso))
+        w_gtr_min = ((self.num_pixels > VarLSSFitter.min_num_pix)
+                     & (self.num_qso > VarLSSFitter.min_num_qso))
 
         if self.use_cov:
             err_base = self.cov_var_delta
@@ -1191,8 +1191,8 @@ class VarLSSFitter():
             Maximum SNR in this sample to be written into header.
         """
         hdr_dict = {
-            'MINNPIX': VarLSSFitter.min_no_pix,
-            'MINNQSO': VarLSSFitter.min_no_qso,
+            'MINNPIX': VarLSSFitter.min_num_pix,
+            'MINNQSO': VarLSSFitter.min_num_qso,
             'MINSNR': min_snr,
             'MAXSNR': max_snr,
             'WAVE1': self.waveobs[0],
