@@ -38,6 +38,9 @@ def get_parser(add_help=True):
 
     analysis_group = parser.add_argument_group('Analysis options')
     analysis_group.add_argument(
+        "--true-continuum", action="store_true",
+        help="True continuum analysis deltas if mock analysis")
+    analysis_group.add_argument(
         "--smoothing-scale", default=16., type=float,
         help="Smoothing scale for pipeline noise in A.")
     analysis_group.add_argument(
@@ -232,6 +235,43 @@ def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank=0):
     return spectra_list
 
 
+def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
+    # Continuum fitting
+    # -------------------
+    # Initialize continuum fitter & global functions
+    logging_mpi("Initializing continuum fitter.", mpi_rank)
+    start_time = time.time()
+    qcfit = PiccaContinuumFitter(args)
+    logging_mpi("Fitting continuum.", mpi_rank)
+
+    # Fit continua
+    # Stack all spectra in each process
+    # Broadcast and recalculate global functions
+    # Iterate
+    qcfit.iterate(spectra_list)
+
+    if args.coadd_arms:
+        logging_mpi("Coadding arms.", mpi_rank)
+        for spec in qsonic.spectrum.valid_spectra(spectra_list):
+            spec.coadd_arms_forest(qcfit.varlss_interp, qcfit.eta_interp)
+            spec.calc_continuum_chi2()
+
+    qcfit.save_contchi2_catalog(spectra_list)
+
+    # Keep only valid spectra
+    spectra_list = list(qsonic.spectrum.valid_spectra(spectra_list))
+
+    # Final cleaning. Especially important if not coadding arms.
+    for spec in spectra_list:
+        spec.drop_short_arms(args.forest_w1, args.forest_w2, args.skip)
+
+    etime = (time.time() - start_time) / 60  # min
+    logging_mpi(f"Continuum fitting and tweaking took {etime:.1f} mins.",
+                mpi_rank)
+
+    return spectra_list
+
+
 def mpi_run_all(comm, mpi_rank, mpi_size):
     args = mpi_parse(get_parser(), comm, mpi_rank)
     if mpi_rank == 0 and args.outdir:
@@ -273,36 +313,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
             spec.set_smooth_ivar(args.smoothing_scale)
 
     # Continuum fitting
-    # -------------------
-    # Initialize continuum fitter & global functions
-    logging_mpi("Initializing continuum fitter.", mpi_rank)
-    start_time = time.time()
-    qcfit = PiccaContinuumFitter(args)
-    logging_mpi("Fitting continuum.", mpi_rank)
-
-    # Fit continua
-    # Stack all spectra in each process
-    # Broadcast and recalculate global functions
-    # Iterate
-    qcfit.iterate(spectra_list)
-
-    if args.coadd_arms:
-        logging_mpi("Coadding arms.", mpi_rank)
-        for spec in qsonic.spectrum.valid_spectra(spectra_list):
-            spec.coadd_arms_forest(qcfit.varlss_interp, qcfit.eta_interp)
-
-    qcfit.save_contchi2_catalog(spectra_list)
-
-    # Keep only valid spectra
-    spectra_list = list(qsonic.spectrum.valid_spectra(spectra_list))
-
-    # Final cleaning. Especially important if not coadding arms.
-    for spec in spectra_list:
-        spec.drop_short_arms(args.forest_w1, args.forest_w2, args.skip)
-
-    etime = (time.time() - start_time) / 60  # min
-    logging_mpi(f"Continuum fitting and tweaking took {etime:.1f} mins.",
-                mpi_rank)
+    spectra_list = mpi_continuum_fitting(spectra_list, args, comm, mpi_rank)
 
     # Save deltas
     logging_mpi("Saving deltas.", mpi_rank)
