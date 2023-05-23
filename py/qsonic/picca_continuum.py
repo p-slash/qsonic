@@ -664,7 +664,8 @@ class PiccaContinuumFitter():
             spec.cont_params['x'] = np.append(
                 spec.cont_params['x'][0], np.zeros(self.cont_order))
             spec.cont_params['xcov'] = np.eye(self.cont_order + 1)
-            spec.cont_params['dof'] = spec.get_real_size()
+            spec.cont_params['dof'] = \
+                spec.get_real_size() - self.cont_order - 1
 
         fname = f"{self.outdir}/attributes.fits" if self.outdir else ""
         fattr = MPISaver(fname, self.mpi_rank)

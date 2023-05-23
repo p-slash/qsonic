@@ -247,6 +247,25 @@ class Spectrum():
 
         self.cont_params['x'][0] /= cont_params_weight
 
+    def set_true_cont(
+            self, tcont_interp, meanflux_interp, varlss_interp,
+            coadd_arms
+    ):
+        self.cont_params['method'] = 'true'
+        self.cont_params['valid'] = True
+
+        for arm, wave_arm in self.wave.items():
+            cont_est = tcont_interp(wave_arm) * meanflux_interp(wave_arm)
+            self.cont_params['cont'][arm] = cont_est
+
+        self.set_forest_weight(varlss_interp)
+        if coadd_arms:
+            self.coadd_arms_forest(varlss_interp)
+        self.cont_params['dof'] = self.get_real_size()
+
+        self.calc_continuum_chi2()
+        # raise NotImplementedError
+
     def set_forest_region(self, w1, w2, lya1, lya2):
         """ Sets slices for the forest region. Also calculates the mean SNR in
         the forest and an initial guess for the continuum amplitude.
