@@ -13,6 +13,7 @@ Welcome to qsonic's documentation!
    readme
    installation
    example
+   howitworks
    lookChi2Catalog
    generated/modules
 
