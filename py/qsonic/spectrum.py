@@ -82,11 +82,11 @@ class Spectrum():
     Attributes
     ----------
     rsnr: float
-        Average SNR above Lya. Calculated in set_forest_region.
+        Average SNR above Lya. Calculated in :meth:`set_forest_region`.
     mean_snr: dict(float)
         Mean signal-to-noise ratio in the forest.
     _f1, _f2: dict(int)
-        Forest indices. Set up using `set_forest_region` method. Then use
+        Forest indices. Set up using :meth:`set_forest_region` method. Then use
         property functions to access forest wave, flux, ivar instead.
     cont_params: dict
         Continuum parameters. Initial estimates are constructed.
@@ -310,7 +310,7 @@ class Spectrum():
 
         This equates `flux` to `forestflux` etc, but `wave` is not modified,
         since it is a static variable. Good practive is to loop using, e.g.,
-        `for arm, wave_arm in self.forestwave.items():`.
+        ``for arm, wave_arm in self.forestwave.items():``.
         """
         self.flux = self.forestflux
         self.ivar = self.forestivar
