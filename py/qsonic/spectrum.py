@@ -548,7 +548,7 @@ class Spectrum():
         """Writes each arm to FITS file separately.
 
         Writes 'LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT' columns and
-        'RESOMAT' column if resolution matrix is present to extention name
+        'RESOMAT' column if resolution matrix is present to extension name
         ``targetid-arm``. FITS file must be initialized before.
         Each arm has its own `MEANSNR`.
 

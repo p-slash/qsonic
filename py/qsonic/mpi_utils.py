@@ -187,7 +187,7 @@ class MPISaver():
         Arguments
         ---------
         data: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-            Data to write to extention.
+            Data to write to extension.
         names: list(str)or None, default: None
             Column names for data.
         extname: str or None, default: None

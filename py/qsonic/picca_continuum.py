@@ -127,7 +127,7 @@ class PiccaContinuumFitter():
     def _get_fiducial_interp(self, fname, col2read):
         """ Return an interpolator for mean flux or var_lss.
 
-        FITS file must have a 'STATS' extention, which must have 'LAMBDA',
+        FITS file must have a 'STATS' extension, which must have 'LAMBDA',
         'MEANFLUX' and 'VAR' columns. This is the same format as raw_io output
         from picca. 'LAMBDA' must be linearly and equally spaced.
         This function sets up ``col2read`` as FastLinear1DInterp object.
@@ -639,18 +639,14 @@ class PiccaContinuumFitter():
         Spectrum object. Continuum polynomial order is carried by setting
         ``cont_params[x]``. At each iteration:
 
-        1. Global variables (mean continuum, var_lss) are saved to file
-           (attributes.fits) file. This ensures the order of what is used in
+        1. Global variables (mean continuum, var_lss) are saved to
+           ``attributes.fits`` file. This ensures the order of what is used in
            each iteration.
         2. All spectra are fit.
         3. Mean continuum is updated by stacking, smoothing and removing
            degenarate modes. Check for convergence if update is small.
         4. If fitting for var_lss, fit and update by calculating variance
            statistics.
-
-        At the end of requested iterations or convergence, a chi2 catalog is
-        created that includes information regarding chi2, mean_snr, targetid,
-        etc.
 
         Arguments
         ---------
@@ -727,8 +723,9 @@ class PiccaContinuumFitter():
             extname=f'VAR_FUNC{suff}')
 
     def save_contchi2_catalog(self, spectra_list):
-        """Save chi2 catalog if ``self.outdir`` is set. All values are gathered
-        and saved on the master node.
+        """Save the chi2 catalog that includes information regarding chi2,
+        mean_snr, targetid, etc. if ``self.outdir`` is set. All values are
+        gathered to and saved on the master node.
 
         Arguments
         ---------
@@ -1179,7 +1176,7 @@ class VarLSSFitter():
         return fit_results, std_results
 
     def write(self, mpi_saver, min_snr=0, max_snr=100):
-        """ Write variance statistics to FITS file in 'VAR_STATS' extention.
+        """ Write variance statistics to FITS file in 'VAR_STATS' extension.
 
         Arguments
         ---------
