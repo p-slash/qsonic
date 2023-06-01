@@ -86,7 +86,7 @@ Now let us investigate the ``attributes.fits`` file, which contain mean continuu
       13     BINARY_TBL      CONT-7
       14     BINARY_TBL      VAR_FUNC-7
 
-The final iteration extentions can now be found ``attributes.fits`` as of version>=0.6.
+The final iteration extensions can now be found ``attributes.fits`` as of version>=0.6.
 
 .. code:: python3
 
