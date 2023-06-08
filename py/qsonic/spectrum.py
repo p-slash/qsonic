@@ -127,7 +127,7 @@ class Spectrum():
 
     @staticmethod
     def _set_coadd_wave():
-        if Spectrum._coadd_wave is not None:
+        if Spectrum._coadd_wave:
             return
 
         min_wave = np.min([wave[0] for wave in Spectrum._wave.values()])
