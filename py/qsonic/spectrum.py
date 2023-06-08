@@ -349,7 +349,7 @@ class Spectrum():
         npixels = (1 + self.z_qso) * dforest_wave / self.dwave
         return self.get_real_size() > skip_ratio * npixels
 
-    def set_smooth_ivar(self, smoothing_size=16.):
+    def set_smooth_forestivar(self, smoothing_size=16.):
         """ Set :attr:`forestivar_sm` to smoothed inverse variance. Before this
         call :attr:`forestivar_sm` points to :attr:`forestivar`. If
         ``smoothing_size <= 0``, smoothing is undone such that ivar_sm
@@ -382,7 +382,7 @@ class Spectrum():
     ):
         """ Sets :attr:`forestweight` for a given var_lss and eta correction.
         Always uses :attr:`forestivar_sm`, which is not actually smoothed if
-        :meth:`set_smooth_ivar` is not called.
+        :meth:`set_smooth_forestivar` is not called.
 
         .. math::
 
@@ -552,7 +552,7 @@ class Spectrum():
         if self.forestreso:
             self._coadd_arms_reso(nwaves, idxes)
 
-        self.set_smooth_ivar(self._smoothing_scale)
+        self.set_smooth_forestivar(self._smoothing_scale)
         self._forestweight = {}
         self.set_forest_weight(varlss_interp, eta_interp)
 
@@ -705,7 +705,7 @@ class Spectrum():
         smoothed inverse variance field.
 
         Initially equal to :attr:`.forestivar`. Smoothed if
-        :meth:`.set_smooth_ivar` is called."""
+        :meth:`.set_smooth_forestivar` is called."""
         return self._forestivar_sm
 
     @property
