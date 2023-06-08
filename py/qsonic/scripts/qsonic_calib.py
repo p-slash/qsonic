@@ -7,10 +7,11 @@ import warnings
 
 import numpy as np
 
+from qsonic import QsonicException
 import qsonic.catalog
 import qsonic.io
 from qsonic.masks import BALMask
-from qsonic.mpi_utils import logging_mpi, mpi_parse
+from qsonic.mpi_utils import logging_mpi, mpi_parse, mpi_fnc_bcast, MPISaver
 from qsonic.picca_continuum import VarLSSFitter
 from qsonic.spectrum import add_wave_region_parser
 
@@ -60,40 +61,65 @@ def get_parser(add_help=True):
     vargroup = parser.add_argument_group(
         'Variance fitting parameters')
     vargroup.add_argument(
-        "--nvarbins", help="Number of variance bins (logarithmically spaced)",
+        "--nvarbins", help="Number of variance bins (logarithmically spaced).",
         default=100, type=int)
     vargroup.add_argument(
-        "--nwbins", help="Number of wavelength bins.",
-        default=20, type=int)
+        "--var-use-cov", action="store_true",
+        help="Use covariance in varlss-eta fitting.")
     vargroup.add_argument(
-        "--var1", help="Lower variance bin", default=1e-5, type=float)
+        "--nwbins", default=None, type=int,
+        help="Number of wavelength bins. None creates bins with 120 A spacing")
     vargroup.add_argument(
-        "--var2", help="Upper variance bin", default=2., type=float)
+        "--var1", help="Lower variance bin.", default=1e-4, type=float)
     vargroup.add_argument(
-        "--min-snr", help="Minimum SNR of the forest", default=0, type=float)
+        "--var2", help="Upper variance bin.", default=20., type=float)
     vargroup.add_argument(
-        "--max-snr", help="Maximum SNR of the forest", default=100, type=float)
+        "--min-snr", help="Minimum SNR of the forest.",
+        default=0, type=float)
+    vargroup.add_argument(
+        "--max-snr", help="Maximum SNR of the forest.",
+        default=100, type=float)
 
     parser = add_wave_region_parser(parser)
 
     return parser
 
 
-def mpi_set_targetid_list_to_remove(args, comm, mpi_rank):
-    ids_to_remove = np.array([], dtype=int)
-    if mpi_rank == 0 and args.remove_targetid_list:
-        try:
-            ids_to_remove = np.loadtxt(args.remove_targetid_list, dtype=int)
-        except Exception as e:
-            logging_mpi(f"{e}", 0, "error")
-            ids_to_remove = None
+def mpi_set_targetid_list_to_remove(args, comm=None, mpi_rank=0):
+    """ Return a ndarray of TARGETIDs to remove from the sample.
 
-    ids_to_remove = comm.bcast(ids_to_remove)
-    if ids_to_remove is None:
-        raise Exception("Error while reading remove_targetid_list.")
+    Can be used without MPI by passing ``comm=None`` (which is the default.)
+
+    Arguments
+    ---------
+    args: argparse.Namespace
+        Options passed to script.
+    comm: MPI.COMM_WORLD or None, default: None
+        Communication object broadcast data.
+    mpi_rank: int, default: 0
+        Rank of the MPI process.
+
+    Returns
+    -------
+    ids_to_remove: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        TARGETIDs to remove from the sample.
+
+    Raises
+    ------
+    QsonicException
+        If error occurs while reading ``args.remove_targetid_list`` or if
+        ``--remove_bal_qsos`` is passed but the input catalog is missing BAL
+        columns .
+    """
+    ids_to_remove = np.array([], dtype=int)
+    if args.remove_targetid_list:
+        ids_to_remove = mpi_fnc_bcast(
+            np.loadtxt, comm, mpi_rank,
+            "Error while reading remove_targetid_list.",
+            args.remove_targetid_list, dtype=int)
 
     if args.catalog:
-        catalog = qsonic.io.mpi_read_qso_catalog(
+        catalog = qsonic.io.mpi_read_quasar_catalog(
             args.catalog, comm, mpi_rank, args.mock_analysis)
     else:
         catalog = None
@@ -120,18 +146,14 @@ def mpi_set_targetid_list_to_remove(args, comm, mpi_rank):
     return ids_to_remove
 
 
-def mpi_read_all_deltas(args, comm, mpi_rank, mpi_size):
+def mpi_read_all_deltas(args, comm=None, mpi_rank=0, mpi_size=1):
     start_time = time.time()
     logging_mpi("Reading deltas.", mpi_rank)
 
-    all_delta_files = None
-    if mpi_rank == 0:
-        all_delta_files = glob.glob(f"{args.input_dir}/delta-*.fits*")
-
-    all_delta_files = comm.bcast(all_delta_files)
-
-    if not all_delta_files:
-        raise Exception(f"Delta files are not found in {args.input_dir}.")
+    all_delta_files = mpi_fnc_bcast(
+        glob.glob, comm, mpi_rank,
+        f"Delta files are not found in {args.input_dir}.",
+        f"{args.input_dir}/delta-*.fits*")
 
     ndelta_all = len(all_delta_files)
     logging_mpi(f"There are {ndelta_all} delta files.", mpi_rank)
@@ -141,7 +163,7 @@ def mpi_read_all_deltas(args, comm, mpi_rank, mpi_size):
 
     nfiles_per_rank = max(1, ndelta_all // mpi_size)
     i1 = nfiles_per_rank * mpi_rank
-    i2 = min(len(all_delta_files), i1 + nfiles_per_rank)
+    i2 = min(ndelta_all, i1 + nfiles_per_rank)
     files_this_rank = all_delta_files[i1:i2]
 
     deltas_list = [qsonic.io.read_deltas(fname) for fname in files_this_rank]
@@ -160,16 +182,17 @@ def mpi_stack_fluxes(args, comm, deltas_list):
     weights = np.zeros(nwaveobs)
 
     for delta in deltas_list:
-        flux = (1 + delta.delta) * delta.cont
-        idx = ((delta.wave - args.wave1) / dwave + 0.5).astype(int)
-        w = (idx > 0) & (idx < nwaveobs)
+        flux = 1 + delta.delta
+        idx = np.round((delta.wave - args.wave1) / dwave).astype(int)
+        w = (idx >= 0) & (idx < nwaveobs)
         stacked_flux[idx[w]] += flux[w] * delta.weight[w]
-        weights[idx[w]] += delta.ivar[w]
+        weights[idx[w]] += delta.weight[w]
 
     # Save stacked_flux to buffer, then used stacked_flux to store reduced
     # weights. Place them properly in the end.
     buf = np.zeros(nwaveobs)
     comm.Allreduce(stacked_flux, buf)
+    stacked_flux *= 0
     comm.Allreduce(weights, stacked_flux)
     weights = stacked_flux
     stacked_flux = buf
@@ -186,6 +209,11 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     if mpi_rank == 0:
         os_makedirs(args.outdir, exist_ok=True)
 
+    varfitter = VarLSSFitter(
+        args.wave1, args.wave2, args.nwbins,
+        args.var1, args.var2, args.nvarbins,
+        use_cov=args.var_use_cov, comm=comm)
+
     ids_to_remove = mpi_set_targetid_list_to_remove(args, comm, mpi_rank)
 
     def _is_kept(delta):
@@ -199,38 +227,34 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # Flatten this list of lists and remove quasars
     deltas_list = [x for alist in deltas_list for x in alist if _is_kept(x)]
 
-    varfitter = VarLSSFitter(
-        args.wave1, args.wave2, args.nwbins,
-        args.var1, args.var2, args.nvarbins,
-        nsubsamples=100, comm=comm)
-
     for delta in deltas_list:
         varfitter.add(delta.wave, delta.delta, delta.ivar)
 
     logging_mpi("Fitting variance for VarLSS and eta", mpi_rank)
-    fit_results = np.ones((args.nwbins, 2))
+    fit_results = np.ones((varfitter.nwbins, 2))
     fit_results[:, 0] = 0.1
     fit_results, std_results = varfitter.fit(fit_results)
 
     # Save variance stats to file
     logging_mpi("Saving variance stats to files", mpi_rank)
-    suffix = f"_snr{args.min_snr:.1f}-{args.max_snr:.1f}"
+    suffix = f"snr{args.min_snr:.1f}-{args.max_snr:.1f}"
     tmpfilename = f"{args.outdir}/{args.fbase}-{suffix}-variance-stats.fits"
-    mpi_saver = varfitter.save(tmpfilename)
+    mpi_saver = MPISaver(tmpfilename, mpi_rank)
+    varfitter.write(mpi_saver, args.min_snr, args.max_snr)
     logging_mpi(f"Variance stats saved in {tmpfilename}.", mpi_rank)
 
     # Save fits results as well
     mpi_saver.write([
-        varfitter.waveobs, fit_results[:, 0], fit_results[:, 1],
-        std_results[:, 0], std_results[:, 1]],
-        names=["wave", "var_lss", "eta", "e_var_lss", "e_eta"],
+        varfitter.waveobs, fit_results[:, 0], std_results[:, 0],
+        fit_results[:, 1], std_results[:, 1]],
+        names=['lambda', 'var_lss', 'e_var_lss', 'eta', 'e_eta'],
         extname="VAR_FUNC"
     )
 
     waveobs, stacked_flux = mpi_stack_fluxes(args, comm, deltas_list)
     mpi_saver.write(
         [waveobs, stacked_flux],
-        names=["wave", "stacked_flux"],
+        names=["lambda", "stacked_flux"],
         extname="STACKED_FLUX")
 
     mpi_saver.close()
@@ -247,8 +271,9 @@ def main():
 
     try:
         mpi_run_all(comm, mpi_rank, mpi_size)
+    except QsonicException as e:
+        logging_mpi(e, mpi_rank, "exception")
     except Exception as e:
-        logging_mpi(f"{e}", mpi_rank, "error")
-        return 1
-
-    return 0
+        logging.error(f"Unexpected error on Rank{mpi_rank}. Abort.")
+        logging.exception(e)
+        comm.Abort()
