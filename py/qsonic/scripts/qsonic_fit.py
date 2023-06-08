@@ -6,6 +6,8 @@ from os import makedirs as os_makedirs
 
 import numpy as np
 
+from qsonic import QsonicException
+import qsonic.calibration
 import qsonic.catalog
 import qsonic.io
 import qsonic.spectrum
@@ -32,8 +34,12 @@ def get_parser(add_help=True):
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser = qsonic.io.add_io_parser(parser)
+    parser = qsonic.calibration.add_calibration_parser(parser)
 
     analysis_group = parser.add_argument_group('Analysis options')
+    analysis_group.add_argument(
+        "--smoothing-scale", default=16., type=float,
+        help="Smoothing scale for pipeline noise in A.")
     analysis_group.add_argument(
         "--min-rsnr", type=float, default=0.,
         help="Minium SNR <F/sigma> above Lya.")
@@ -58,7 +64,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     Arguments
     ---------
     local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-        Catalog from :func:`qsonic.catalog.mpi_read_local_qso_catalog`. Each
+        Catalog from :func:`qsonic.catalog.mpi_get_local_queue`. Each
         element is a catalog for one healpix.
     args: argparse.Namespace
         Options passed to script.
@@ -75,18 +81,18 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     start_time = time.time()
     logging_mpi("Reading spectra.", mpi_rank)
 
+    # skip_resomat = args.skip_resomat or not args.mock_analysis
+    skip_resomat = args.skip_resomat
+
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
         local_specs = qsonic.io.read_spectra_onehealpix(
-            cat, args.input_dir, args.arms,
-            args.mock_analysis, args.skip_resomat
-        )
+            cat, args.input_dir, args.arms, args.mock_analysis, skip_resomat)
+
         for spec in local_specs:
             spec.set_forest_region(
-                args.wave1, args.wave2,
-                args.forest_w1, args.forest_w2
-            )
+                args.wave1, args.wave2, args.forest_w1, args.forest_w2)
 
             if not args.keep_nonforest_pixels:
                 spec.remove_nonforest_pixels()
@@ -94,12 +100,38 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
         spectra_list.extend(
             [spec for spec in local_specs if spec.rsnr > args.min_rsnr])
 
+        # if args.skip_resomat:
+        #     continue
+
+        # w = np.array(
+        #     [spec.rsnr > args.min_rsnr for spec in local_specs], dtype=bool)
+        # nspec = w.sum()
+
+        # # Read resolution matrix hopefully faster
+        # spectra_list[-nspec:] = \
+        #     qsonic.io.read_resolution_matrices_onehealpix_data(
+        #         cat[w], args.input_dir, spectra_list[-nspec:])
+
     nspec_all = comm.reduce(len(spectra_list))
     etime = (time.time() - start_time) / 60  # min
     logging_mpi(
         f"All {nspec_all} spectra are read in {etime:.1f} mins.", mpi_rank)
 
     return spectra_list
+
+
+def mpi_noise_flux_calibrate(spectra_list, args, comm, mpi_rank):
+    if args.noise_calibration:
+        logging_mpi("Applying noise calibration.", mpi_rank)
+        ncal = qsonic.calibration.NoiseCalibrator(
+            args.noise_calibration, comm, mpi_rank)
+        ncal.apply(spectra_list)
+
+    if args.flux_calibration:
+        logging_mpi("Applying flux calibration.", mpi_rank)
+        fcal = qsonic.calibration.FluxCalibrator(
+            args.flux_calibration, comm, mpi_rank)
+        fcal.apply(spectra_list)
 
 
 def mpi_read_masks(local_queue, args, comm, mpi_rank):
@@ -112,7 +144,7 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
     Arguments
     ---------
     local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-        Catalog from :func:`qsonic.catalog.mpi_read_local_qso_catalog`.
+        Catalog from :func:`qsonic.catalog.mpi_get_local_queue`.
     args: argparse.Namespace
         Options passed to script.
     comm: MPI.COMM_WORLD
@@ -205,22 +237,29 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     if mpi_rank == 0 and args.outdir:
         os_makedirs(args.outdir, exist_ok=True)
 
+    tol = (args.forest_w2 - args.forest_w1) * args.skip
+    zmin_qso = args.wave1 / (args.forest_w2 - tol) - 1
+    zmax_qso = args.wave2 / (args.forest_w1 + tol) - 1
+
     # read catalog
     full_catalog = qsonic.catalog.mpi_read_quasar_catalog(
         args.catalog, comm, mpi_rank, is_mock=args.mock_analysis,
-        keep_surveys=args.keep_surveys)
+        keep_surveys=args.keep_surveys,
+        zmin=zmin_qso, zmax=zmax_qso)
 
     local_queue = qsonic.catalog.mpi_get_local_queue(
         full_catalog, mpi_rank, mpi_size)
 
     # Blinding
-    qsonic.spectrum.Spectrum.set_blinding(local_queue, args)
+    qsonic.spectrum.Spectrum.set_blinding(full_catalog, args)
 
     # Read masks before data
     maskers = mpi_read_masks(local_queue, args, comm, mpi_rank)
 
     spectra_list = mpi_read_spectra_local_queue(
         local_queue, args, comm, mpi_rank)
+
+    mpi_noise_flux_calibrate(spectra_list, args, comm, mpi_rank)
 
     apply_masks(maskers, spectra_list, mpi_rank)
 
@@ -229,9 +268,15 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
         spectra_list, args.forest_w1, args.forest_w2, args.skip, mpi_rank)
 
     # Create smoothed ivar as intermediate variable
+<<<<<<< HEAD
     for spec in spectra_list:
         spec.set_smooth_ivar()
         spec.coadd()
+=======
+    if args.smoothing_scale > 0:
+        for spec in spectra_list:
+            spec.set_smooth_ivar(args.smoothing_scale)
+>>>>>>> main
 
     # Continuum fitting
     # -------------------
@@ -247,12 +292,15 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # Iterate
     qcfit.iterate(spectra_list)
 
-    # Keep only valid spectra
-    spectra_list = list(qsonic.spectrum.valid_spectra(spectra_list))
     if args.coadd_arms:
         logging_mpi("Coadding arms.", mpi_rank)
-        for spec in spectra_list:
-            spec.coadd_arms_forest(qcfit.varlss_interp)
+        for spec in qsonic.spectrum.valid_spectra(spectra_list):
+            spec.coadd_arms_forest(qcfit.varlss_interp, qcfit.eta_interp)
+
+    qcfit.save_contchi2_catalog(spectra_list)
+
+    # Keep only valid spectra
+    spectra_list = list(qsonic.spectrum.valid_spectra(spectra_list))
 
     # Final cleaning. Especially important if not coadding arms.
     for spec in spectra_list:
@@ -265,11 +313,13 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # Save deltas
     logging_mpi("Saving deltas.", mpi_rank)
     qsonic.io.save_deltas(
-        spectra_list, args.outdir, qcfit.varlss_interp,
+        spectra_list, args.outdir,
         save_by_hpx=args.save_by_hpx, mpi_rank=mpi_rank)
 
 
 def main():
+    start_time = time.time()
+
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     mpi_rank = comm.Get_rank()
@@ -280,8 +330,12 @@ def main():
 
     try:
         mpi_run_all(comm, mpi_rank, mpi_size)
+    except QsonicException as e:
+        logging_mpi(e, mpi_rank, "exception")
     except Exception as e:
-        logging_mpi(f"{e}", mpi_rank, "error")
-        return 1
+        logging.error(f"Unexpected error on Rank{mpi_rank}. Abort.")
+        logging.exception(e)
+        comm.Abort()
 
-    return 0
+    etime = (time.time() - start_time) / 60  # min
+    logging_mpi(f"Total time spent is {etime:.1f} mins.", mpi_rank)

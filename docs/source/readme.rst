@@ -2,7 +2,8 @@
 
 Programs
 --------
-+ ``qsonic-fit`` performs picca-like continuum fitting. See :ref:`here <qsonic_fit_arguments_label>` or execute ``srun -n 1 qsonic-fit.py --help`` for help.
++ ``qsonic-fit`` performs picca-like continuum fitting. See :ref:`here <qsonic fit arguments>` or execute ``srun -n 1 qsonic-fit --help`` for help.
++ ``qsonic-calib`` calculates stacked flux and performs variance fitting with noise calibration (eta) enabled.  See :ref:`here <qsonic calib arguments>` ``srun -n 1 qsonic-calib --help`` for help.
 
 Source
 ------

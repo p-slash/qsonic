@@ -4,7 +4,7 @@ Examples
 Running qsonic-fit
 -------------------------
 
-See :ref:`qsonic-fit arguments <qsonic_fit_arguments_label>` for all options.
+See :ref:`qsonic-fit arguments <qsonic fit arguments>` for all options.
 
 .. code-block:: shell
     :caption: For an imaginary Y5 DESI quickquasars mock

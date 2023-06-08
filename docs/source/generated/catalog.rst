@@ -1,4 +1,4 @@
-qsonic.catalog module
+qsonic.catalog
 =======================
 
 .. automodule:: qsonic.catalog

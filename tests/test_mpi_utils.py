@@ -5,6 +5,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.testing as npt
 
+from qsonic import QsonicException
 from qsonic.io import add_io_parser
 import qsonic.mpi_utils
 import qsonic.spectrum
@@ -30,6 +31,25 @@ class TestMPIUtils(TestCase):
         with pytest.raises(SystemExit):
             options = "--catalog incat -o outdir".split(' ')
             qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options)
+
+    def test_mpi_fnc_bcast(self):
+        matrix = np.arange(20).reshape(4, 5)
+        u, s, vh = np.linalg.svd(matrix)
+        result = qsonic.mpi_utils.mpi_fnc_bcast(
+            np.linalg.svd, None, 0, "Error", matrix)
+
+        npt.assert_allclose(result[0], u)
+        npt.assert_allclose(result[1], s)
+        npt.assert_allclose(result[2], vh)
+
+        s = np.linalg.svd(matrix, compute_uv=False)
+        result = qsonic.mpi_utils.mpi_fnc_bcast(
+            np.linalg.svd, None, 0, "Error", matrix, compute_uv=False)
+
+        npt.assert_allclose(result, s)
+
+        with pytest.raises(QsonicException):
+            qsonic.mpi_utils.mpi_fnc_bcast(np.zeros, None, 0, "Error", -5)
 
     def test_logging_mpi(self):
         with self.assertLogs(level='INFO') as cm:

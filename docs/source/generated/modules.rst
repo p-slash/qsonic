@@ -7,6 +7,7 @@ Modules
 .. toctree::
    :maxdepth: 4
 
+   calibration
    catalog
    io
    masks
@@ -22,3 +23,4 @@ Scripts
    :maxdepth: 4
 
    scripts.qsonic_fit
+   scripts.qsonic_calib
