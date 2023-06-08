@@ -1,4 +1,4 @@
-qsonic.scripts.qsonic_fit script module
+qsonic.scripts.qsonic_fit
 =======================================
 
 
@@ -8,7 +8,7 @@ qsonic.scripts.qsonic_fit script module
    :show-inheritance:
    :exclude-members: get_parser
 
-.. _qsonic_fit_arguments_label:
+.. _qsonic fit arguments:
 
 Arguments
 ---------

@@ -32,7 +32,8 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
-    'sphinxarg.ext'
+    'sphinxarg.ext',
+    "sphinxcontrib.jquery"  # based on https://github.com/readthedocs/readthedocs.org/issues/10159#issuecomment-1478717074
     # 'nbsphinx',
     # 'autoapi.extension'
 ]
@@ -56,7 +57,7 @@ intersphinx_mapping = {
     'numpy': ('https://numpy.org/doc/stable', None),
     'scipy': ('https://docs.scipy.org/doc/scipy/', None)
 }
-intersphinx_disabled_domains = ['std']
+# intersphinx_disabled_domains = ['std']
 # intersphinx_disabled_reftypes = ["*"]
 
 templates_path = ['_templates']
@@ -65,7 +66,6 @@ templates_path = ['_templates']
 
 html_theme = 'sphinx_rtd_theme'
 html_logo = "_static/qsonic-logo.png"
-html_show_sourcelink = False
 
 # -- Options for EPUB output
 epub_show_urls = 'footnote'

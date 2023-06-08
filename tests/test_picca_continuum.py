@@ -190,7 +190,6 @@ class TestPiccaContinuum(object):
         npt.assert_almost_equal(qcfit.meancont_interp.fp.mean(), 1)
 
 
-@pytest.mark.mpi
 class TestVarLSSFitter(object):
     def test_add(self, setup_data):
         nwbins = 4
@@ -206,22 +205,45 @@ class TestVarLSSFitter(object):
             data['wave']['B'], data['flux']['B'][0], data['ivar']['B'][0])
 
         empty_bins = np.s_[-5:]
-        assert all(varlss_fitter.num_pixels[:5] == 0)
-        assert all(varlss_fitter.num_pixels[empty_bins] == 0)
+        assert all(varlss_fitter._num_pixels[:5] == 0)
+        assert all(varlss_fitter._num_pixels[empty_bins] == 0)
         expected_numqso = np.zeros((nwbins + 2) * 5, dtype=int)
         expected_numqso[[6, 11, 16]] = 1
-        npt.assert_equal(varlss_fitter.num_qso, expected_numqso)
+        npt.assert_equal(varlss_fitter._num_qso, expected_numqso)
 
         varlss_fitter.add(
             data['wave']['R'], data['flux']['R'][0], data['ivar']['R'][0])
         expected_numqso[[11, 16]] = 2
         expected_numqso[21] = 1
-        npt.assert_equal(varlss_fitter.num_qso, expected_numqso)
+        npt.assert_equal(varlss_fitter._num_qso, expected_numqso)
 
         expected_size = 3 * nwbins
-        varlss_fitter._allreduce()
+        varlss_fitter._calc_subsampler_stats()
         npt.assert_equal(varlss_fitter.wvalid_bins.sum(), expected_size)
         npt.assert_equal(varlss_fitter.mean_delta.size, expected_size)
+
+    def test_fit(self):
+        varlss_fitter = VarLSSFitter(
+            3600, 4800, nwbins=1, var1=1e-5, var2=2.)
+
+        true_var_lss = np.array([0.1])
+        nspec = 1000
+        nwave = int((4800 - 3600) / 0.8) + 1
+        wave = np.linspace(3600, 4800, nwave)
+        RNST = np.random.default_rng()
+        for jj in range(nspec):
+            var_pipe = RNST.uniform(np.log10(1e-5), np.log10(2), size=nwave)
+            var_pipe = 10**var_pipe
+            std_gen = np.sqrt(var_pipe + true_var_lss)
+            delta = RNST.normal(0, std_gen, nwave)
+
+            varlss_fitter.add(wave, delta, 1 / var_pipe)
+
+        fit_results, std_results = varlss_fitter.fit(
+            true_var_lss, smooth=False)
+        atol = 3 * std_results[0]
+        rtol = atol / true_var_lss[0]
+        npt.assert_allclose(fit_results, true_var_lss, rtol=rtol, atol=atol)
 
 
 if __name__ == '__main__':

@@ -6,7 +6,7 @@ import numpy as np
 import numpy.testing as npt
 
 import qsonic.spectrum
-from qsonic.mathtools import Fast1DInterpolator
+from qsonic.mathtools import FastLinear1DInterp
 
 
 class TestSpecParsers(object):
@@ -49,7 +49,7 @@ class TestSpectrum(object):
         spec.set_forest_region(3600., 6000., 1050., 1180.)
 
         npt.assert_almost_equal(spec.rsnr, 2.1)
-        npt.assert_almost_equal(spec.mean_snr(), 2.1)
+        npt.assert_almost_equal(spec.mean_snr['B'], 2.1)
         npt.assert_almost_equal(spec.cont_params['x'], [2.1, 0.])
         npt.assert_allclose(spec.forestflux['B'], 2.1)
         npt.assert_allclose(spec.forestivar['B'], spec.forestivar_sm['B'])
@@ -108,13 +108,14 @@ class TestSpectrum(object):
             cat_by_survey, data)
 
         # var_lss zero
-        varlss_interp = Fast1DInterpolator(0, 1, np.zeros(3))
+        varlss_interp = FastLinear1DInterp(0, 1, np.zeros(3))
         spec = copy.deepcopy(spectra_list[0])
         spec.set_forest_region(3600., 6000., 1050., 1300.)
         spec.cont_params['valid'] = True
         spec.cont_params['cont'] = {
             arm: np.ones_like(farm) for arm, farm in spec.forestflux.items()
         }
+        spec.set_forest_weight(varlss_interp)
         spec.coadd_arms_forest(varlss_interp)
 
         assert ('brz' in spec.forestflux.keys())
@@ -126,13 +127,14 @@ class TestSpectrum(object):
         npt.assert_almost_equal(spec.forestivar['brz'][~w], 2)
 
         # var_lss non-zero
-        varlss_interp = Fast1DInterpolator(0, 1, 0.5 * np.ones(3))
+        varlss_interp = FastLinear1DInterp(0, 1, 0.5 * np.ones(3))
         spec = copy.deepcopy(spectra_list[0])
         spec.set_forest_region(3600., 6000., 1050., 1300.)
         spec.cont_params['valid'] = True
         spec.cont_params['cont'] = {
             arm: np.ones_like(farm) for arm, farm in spec.forestflux.items()
         }
+        spec.set_forest_weight(varlss_interp)
         spec.coadd_arms_forest(varlss_interp)
 
         assert ('brz' in spec.forestflux.keys())
