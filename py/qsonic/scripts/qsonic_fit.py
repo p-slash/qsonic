@@ -268,15 +268,9 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
         spectra_list, args.forest_w1, args.forest_w2, args.skip, mpi_rank)
 
     # Create smoothed ivar as intermediate variable
-<<<<<<< HEAD
-    for spec in spectra_list:
-        spec.set_smooth_ivar()
-        spec.coadd()
-=======
     if args.smoothing_scale > 0:
         for spec in spectra_list:
             spec.set_smooth_ivar(args.smoothing_scale)
->>>>>>> main
 
     # Continuum fitting
     # -------------------
