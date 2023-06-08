@@ -96,6 +96,9 @@ class Spectrum():
     _wave = None
     """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Common
     wavelength grid for **all** Spectra."""
+    _coadd_wave = None
+    """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Common
+    **coadded** wavelength grid for **all** Spectra."""
     _dwave = None
     """float: Wavelength spacing."""
     _blinding = None
@@ -121,6 +124,18 @@ class Spectrum():
             for arm, wave_arm in Spectrum._wave.items():
                 assert (arm in wave.keys())
                 assert (np.allclose(Spectrum._wave[arm], wave_arm))
+
+    @staticmethod
+    def _set_coadd_wave():
+        if Spectrum._coadd_wave is not None:
+            return
+
+        min_wave = np.min([wave[0] for wave in Spectrum._wave.values()])
+        max_wave = np.max([wave[-1] for wave in Spectrum._wave.values()])
+
+        nwaves = int((max_wave - min_wave) / Spectrum._dwave + 0.5) + 1
+        coadd_wave = np.arange(nwaves) * Spectrum._dwave + min_wave
+        Spectrum._coadd_wave = {'brz': coadd_wave}
 
     @staticmethod
     def set_blinding(catalog, args):
@@ -164,6 +179,7 @@ class Spectrum():
         self.catrow = catrow
         Spectrum._set_wave(wave)
 
+        self._current_wave = Spectrum._wave
         self.flux = {}
         self.ivar = {}
         self.reso = {}
@@ -441,11 +457,11 @@ class Spectrum():
     def coadd(self):
         """Coadding without continuum and var_lss terms.
         """
-        min_wave = np.min([wave[0] for wave in self.wave.values()])
-        max_wave = np.max([wave[-1] for wave in self.wave.values()])
+        Spectrum._set_coadd_wave()
 
-        nwaves = int((max_wave - min_wave) / self.dwave + 0.5) + 1
-        coadd_wave = np.arange(nwaves) * self.dwave + min_wave
+        min_wave = Spectrum._coadd_wave['brz'][0]
+        nwaves = Spectrum._coadd_wave['brz'].size
+
         coadd_flux = np.zeros(nwaves)
         coadd_ivar = np.zeros(nwaves)
         coadd_norm = np.zeros(nwaves)
@@ -465,14 +481,11 @@ class Spectrum():
             coadd_ivar[idx] += weight**2 * var
             coadd_norm[idx] += weight
 
-            # continuum needs not weighting
-            # coadd_cont[idx] = self.cont_params['cont'][arm]
-
         w = coadd_norm > 0
         coadd_flux[w] /= coadd_norm[w]
         coadd_ivar[w] = coadd_norm[w]**2 / coadd_ivar[w]
 
-        self.wave = {'brz': coadd_wave}
+        self._current_wave = Spectrum._coadd_wave
         self.flux = {'brz': coadd_flux}
         self.ivar = {'brz': coadd_ivar}
 
@@ -661,7 +674,7 @@ class Spectrum():
     def wave(self):
         """dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`): Original
         wavelength grid in A."""
-        return Spectrum._wave
+        return self._current_wave
 
     @property
     def dwave(self):
