@@ -51,7 +51,7 @@ Look into output files
 
 
 
-.. image:: _static/chi2cat_hist.png
+.. image:: ../_static/chi2cat_hist.png
 
 
 .. code:: python3
@@ -217,10 +217,10 @@ Look into output files
     plt.imshow(cov / np.outer(norm, norm), vmin=-1, vmax=1, cmap=plt.cm.seismic)
 
 
-.. image:: _static/chi2cat_varpipe-obs.png
+.. image:: ../_static/chi2cat_varpipe-obs.png
 
-.. image:: _static/chi2cat_varpipe-mean.png
+.. image:: ../_static/chi2cat_varpipe-mean.png
 
-.. image:: _static/chi2cat_covariance.png
+.. image:: ../_static/chi2cat_covariance.png
 
 
