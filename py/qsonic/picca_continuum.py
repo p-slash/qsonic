@@ -44,7 +44,7 @@ def add_picca_continuum_parser(parser=None):
         "--rfdwave", type=float, default=0.8,
         help="Rest-frame wave steps. Complies with forest limits")
     cont_group.add_argument(
-        "--no-iterations", type=int, default=10,
+        "--num-iterations", type=int, default=10,
         help="Number of iterations for continuum fitting.")
     cont_group.add_argument(
         "--fiducial-meanflux", help="Fiducial mean flux FITS file.")
@@ -115,7 +115,7 @@ class PiccaContinuumFitter():
     eta_interp: FastCubic1DInterp
         Interpolator for eta. Returns one if fiducial var_lss is set.
     niterations: int
-        Number of iterations from `args.no_iterations`.
+        Number of iterations from `args.num_iterations`.
     cont_order: int
         Order of continuum polynomial from `args.cont_order`.
     outdir: str or None
@@ -226,7 +226,7 @@ class PiccaContinuumFitter():
             np.ones_like(self.varlss_interp.fp),
             ep=np.zeros_like(self.varlss_interp.fp))
 
-        self.niterations = args.no_iterations
+        self.niterations = args.num_iterations
         self.cont_order = args.cont_order
         self.outdir = args.outdir
         self.fit_eta = args.var_fit_eta
