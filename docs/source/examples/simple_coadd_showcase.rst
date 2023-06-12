@@ -1,7 +1,7 @@
 Simple coadd showcase
 =====================
 
-.. code:: ipython3
+.. code:: python3
 
     import numpy as np
     import matplotlib.pyplot as plt
@@ -12,7 +12,7 @@ Simple coadd showcase
 For this example, we are using v0 catalog for iron release. We are going
 to read all arms (B, R, Z), but will not read the resolution matrix.
 
-.. code:: ipython3
+.. code:: python3
 
     fname = "/global/cfs/cdirs/desicollab/science/lya/y1-kp6/iron-tests/catalogs/QSO_cat_iron_main_dark_healpix_v0-altbal.fits"
     indir = "/global/cfs/cdirs/desi/spectro/redux/iron/healpix"
@@ -25,7 +25,7 @@ HPXPIXEL, we can find the unique healpix values and split the catalog
 into healpix groups. For example purposes, we are picking a single healpix and
 reading all the quasar spectra in that file.
 
-.. code:: ipython3
+.. code:: python3
 
     catalog = qsonic.catalog.read_quasar_catalog(fname)
     
@@ -53,7 +53,7 @@ Let’s investigate one spectrum. Wavelength, flux and inverse variance
 are stored as dictionaries similar to
 `desispec.spectra.Spectra <https://desispec.readthedocs.io/en/latest/api.html#desispec-spectra>`_.
 
-.. code:: ipython3
+.. code:: python3
 
     spec = spectra_by_hpx[0]
     print(spec.wave)
@@ -69,7 +69,7 @@ are stored as dictionaries similar to
             0.54619426,  0.3381963 ], dtype=float32)}
 
 
-.. code:: ipython3
+.. code:: python3
 
     plt.figure(figsize=(12, 5))
     for arm, wave_arm in spec.wave.items():
@@ -87,7 +87,7 @@ Now, we coadd the arms using inverse variance and replot. The spectrum
 attributes will still be dictionaries with a single key ``brz`` no
 matter which arms are used to coadd.
 
-.. code:: ipython3
+.. code:: python3
 
     spec.simple_coadd()
     print(spec.wave)
@@ -101,7 +101,7 @@ matter which arms are used to coadd.
             0.54619423,  0.3381963 ])}
 
 
-.. code:: ipython3
+.. code:: python3
 
     plt.figure(figsize=(12, 5))
     for arm, wave_arm in spec.wave.items():
