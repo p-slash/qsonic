@@ -693,9 +693,57 @@ class PiccaContinuumFitter():
             warn_mpi("Iteration has NOT converged.", self.mpi_rank)
 
         self.save(fattr)
-        self.varlss_fitter.write(fattr)
+        if self.varlss_fitter:
+            self.varlss_fitter.write(fattr)
         fattr.close()
         logging_mpi("All continua are fit.", self.mpi_rank)
+
+    def true_continuum(self, spectra_list):
+        """True continuum reduction. Uses fiducials for mean flux and varlss
+        interpolation. Continuum is interpolated using a cubic spline.
+
+        .. warning::
+
+            This function would work even if you did not pass any fiducial.
+
+        Arguments
+        ---------
+        spectra_list: list(Spectrum)
+            Spectrum objects.
+        """
+        self.cont_order = 0
+
+        for spec in spectra_list:
+            spec.cont_params['method'] = 'true'
+            spec.cont_params['valid'] = True
+            spec.cont_params['x'] = np.zeros(1)
+            spec.cont_params['xcov'] = np.eye(1)
+            spec.cont_params['dof'] = spec.get_real_size()
+
+            w1 = spec.cont_params['true_data_w1']
+            dwave = spec.cont_params['true_data_dwave']
+            tcont = spec.cont_params['true_data']
+
+            tcont_interp = FastCubic1DInterp(w1, dwave, tcont)
+
+            for arm, wave_arm in spec.forestwave.items():
+                cont_est = tcont_interp(wave_arm)
+                cont_est *= self.meanflux_interp(wave_arm)
+                spec.cont_params['cont'][arm] = cont_est
+
+            spec.set_forest_weight(self.varlss_interp)
+            spec.calc_continuum_chi2()
+
+        self.update_mean_cont(spectra_list, False)
+        self.update_var_lss_eta(spectra_list, False)
+        fname = f"{self.outdir}/attributes.fits" if self.outdir else ""
+        fattr = MPISaver(fname, self.mpi_rank)
+        self.save(fattr)
+        if self.varlss_fitter:
+            self.varlss_fitter.write(fattr)
+        fattr.close()
+
+        logging_mpi("True continuum applied.", self.mpi_rank)
 
     def save(self, fattr, suff=''):
         """Save mean continuum and var_lss (if fitting) to a fits file.
