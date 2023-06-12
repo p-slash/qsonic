@@ -310,7 +310,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # Create smoothed ivar as intermediate variable
     if args.smoothing_scale > 0:
         for spec in spectra_list:
-            spec.set_smooth_ivar(args.smoothing_scale)
+            spec.set_smooth_forestivar(args.smoothing_scale)
 
     # Continuum fitting
     spectra_list = mpi_continuum_fitting(spectra_list, args, comm, mpi_rank)
