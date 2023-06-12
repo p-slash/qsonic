@@ -12,9 +12,10 @@ Welcome to qsonic's documentation!
 
    readme
    installation
-   example
+   quick_start
+   examples/lookChi2Catalog
+   examples/simple_coadd_showcase
    howitworks
-   lookChi2Catalog
    generated/modules
 
 

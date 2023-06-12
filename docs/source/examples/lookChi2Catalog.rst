@@ -51,7 +51,7 @@ Look into output files
 
 
 
-.. image:: _static/chi2cat_hist.png
+.. image:: ../_static/chi2cat_hist.png
 
 
 Now let us investigate the ``attributes.fits`` file, which contain mean continuum, varlss-eta and stacked flux values for all iterations. Note this version lacks the final extensions, but they are the same as shown from another file.
@@ -219,10 +219,10 @@ Note you will have ``cov_var_delta`` only if you ran ``qsonic-fit`` with ``--var
     plt.imshow(cov / np.outer(norm, norm), vmin=-1, vmax=1, cmap=plt.cm.seismic)
 
 
-.. image:: _static/chi2cat_varpipe-obs.png
+.. image:: ../_static/chi2cat_varpipe-obs.png
 
-.. image:: _static/chi2cat_varpipe-mean.png
+.. image:: ../_static/chi2cat_varpipe-mean.png
 
-.. image:: _static/chi2cat_covariance.png
+.. image:: ../_static/chi2cat_covariance.png
 
 
