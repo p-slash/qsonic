@@ -62,7 +62,7 @@ class TestIOReading(object):
         cat_by_survey, input_dir, xarms, data = my_setup_fits
 
         slist = qsonic.io.read_spectra_onehealpix(
-            cat_by_survey, input_dir, xarms, False, True)
+            cat_by_survey, input_dir, xarms, False, True, False)
 
         assert (len(slist) == cat_by_survey.size)
         for jj, spec in enumerate(slist):
@@ -78,7 +78,7 @@ class TestIOReading(object):
         npt.assert_array_equal(cat_by_survey, cat_by_survey2[:-ens_])
         with pytest.warns(RuntimeWarning):
             slist = qsonic.io.read_spectra_onehealpix(
-                cat_by_survey2, input_dir, xarms, False, True)
+                cat_by_survey2, input_dir, xarms, False, True, False)
 
         assert (len(slist) == cat_by_survey.size)
         for jj, spec in enumerate(slist):
