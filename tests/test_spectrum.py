@@ -140,10 +140,49 @@ class TestSpectrum(object):
         assert ('brz' in spec.forestflux.keys())
         npt.assert_almost_equal(spec.forestflux['brz'], 2.1)
         npt.assert_almost_equal(spec.cont_params['cont']['brz'], 1.)
-        w = (spec.forestwave['brz'] < data['wave']['R'][0])\
-            | (spec.forestwave['brz'] > data['wave']['B'][-1])
-        npt.assert_almost_equal(spec.forestivar['brz'][w], 1)
-        npt.assert_almost_equal(spec.forestivar['brz'][~w], 2)
+
+        wbonly = int(
+            (data['wave']['R'][0] - spec.forestwave['brz'][0]) / spec.dwave
+            + 0.1)
+        npt.assert_almost_equal(spec.forestivar['brz'][:wbonly], 1)
+
+        wronly = int(
+            (data['wave']['B'][-1] - spec.forestwave['brz'][0]) / spec.dwave
+            + 0.1) + 1
+        npt.assert_almost_equal(spec.forestivar['brz'][wronly:], 1)
+
+        npt.assert_almost_equal(spec.forestivar['brz'][wbonly:wronly], 2)
+
+    def test_simple_coadd(self, setup_data):
+        cat_by_survey, _, data = setup_data(1)
+        spectra_list = qsonic.spectrum.generate_spectra_list_from_data(
+            cat_by_survey, data)
+
+        spec = spectra_list[0]
+        spec.simple_coadd()
+
+        assert (len(spec.wave.keys()) == 1)
+        assert ('brz' in spec.wave.keys())
+        assert ('brz' in spec.flux.keys())
+        npt.assert_equal(spec.wave['brz'].size, spec.flux['brz'].size)
+        npt.assert_equal(spec.wave['brz'].size, spec.ivar['brz'].size)
+        npt.assert_almost_equal(
+            spec.wave['brz'][[0, -1]],
+            [data['wave']['B'][0], data['wave']['R'][-1]])
+
+        npt.assert_almost_equal(spec.flux['brz'], 2.1)
+
+        wbonly = int(
+            (data['wave']['R'][0] - spec.wave['brz'][0]) / spec.dwave + 0.1
+        )
+        npt.assert_almost_equal(spec.ivar['brz'][:wbonly], 1)
+
+        wronly = int(
+            (data['wave']['B'][-1] - spec.wave['brz'][0]) / spec.dwave + 0.1
+        ) + 1
+        npt.assert_almost_equal(spec.ivar['brz'][wronly:], 1)
+
+        npt.assert_almost_equal(spec.ivar['brz'][wbonly:wronly], 2)
 
 
 if __name__ == '__main__':

@@ -133,7 +133,7 @@ class Spectrum():
         min_wave = np.min([wave[0] for wave in Spectrum._wave.values()])
         max_wave = np.max([wave[-1] for wave in Spectrum._wave.values()])
 
-        nwaves = int((max_wave - min_wave) / Spectrum._dwave + 0.5) + 1
+        nwaves = int((max_wave - min_wave) / Spectrum._dwave + 0.1) + 1
         coadd_wave = np.arange(nwaves) * Spectrum._dwave + min_wave
         Spectrum._coadd_wave = {'brz': coadd_wave}
 
@@ -455,7 +455,7 @@ class Spectrum():
 
         idxes = {}
         for arm, wave_arm in self.wave.items():
-            idx = ((wave_arm - min_wave) / self.dwave + 0.5).astype(int)
+            idx = ((wave_arm - min_wave) / self.dwave + 0.1).astype(int)
             idxes[arm] = idx
 
             weight = self.ivar[arm]
