@@ -1,5 +1,5 @@
-Examples
-========
+Quick Start
+===========
 
 Running qsonic-fit
 -------------------------
@@ -61,5 +61,3 @@ Here's an example code snippet to use IO interface.
 
         # Do stuff with spectra in this healpix
         ...
-
-
