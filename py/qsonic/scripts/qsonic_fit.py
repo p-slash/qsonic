@@ -91,7 +91,8 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     # Each process reads its own list
     for cat in local_queue:
         local_specs = qsonic.io.read_spectra_onehealpix(
-            cat, args.input_dir, args.arms, args.mock_analysis, skip_resomat)
+            cat, args.input_dir, args.arms, args.mock_analysis, skip_resomat,
+            args.true_continuum)
 
         for spec in local_specs:
             spec.set_forest_region(
@@ -236,19 +237,21 @@ def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank=0):
 
 
 def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
-    # Continuum fitting
-    # -------------------
     # Initialize continuum fitter & global functions
     logging_mpi("Initializing continuum fitter.", mpi_rank)
     start_time = time.time()
     qcfit = PiccaContinuumFitter(args)
-    logging_mpi("Fitting continuum.", mpi_rank)
 
-    # Fit continua
-    # Stack all spectra in each process
-    # Broadcast and recalculate global functions
-    # Iterate
-    qcfit.iterate(spectra_list)
+    if not args.true_continuum:
+        # Fit continua
+        # Stack all spectra in each process
+        # Broadcast and recalculate global functions
+        # Iterate
+        logging_mpi("Fitting continuum.", mpi_rank)
+        qcfit.iterate(spectra_list)
+    else:
+        logging_mpi("True continuum.", mpi_rank)
+        qcfit.true_continuum(spectra_list)
 
     if args.coadd_arms:
         logging_mpi("Coadding arms.", mpi_rank)
@@ -274,6 +277,10 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
 
 def mpi_run_all(comm, mpi_rank, mpi_size):
     args = mpi_parse(get_parser(), comm, mpi_rank)
+    if args.true_continuum and not args.mock_analysis:
+        raise QsonicException(
+            "True continuum is only applicable to mock analysis.")
+
     if mpi_rank == 0 and args.outdir:
         os_makedirs(args.outdir, exist_ok=True)
 
