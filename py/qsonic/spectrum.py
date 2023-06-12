@@ -43,12 +43,7 @@ def add_wave_region_parser(parser=None):
 def generate_spectra_list_from_data(cat_by_survey, data):
     spectra_list = []
     for idx, catrow in enumerate(cat_by_survey):
-        spectra_list.append(
-            Spectrum(
-                catrow, data['wave'], data['flux'],
-                data['ivar'], data['mask'], data['reso'], idx
-            )
-        )
+        spectra_list.append(Spectrum.from_dictionary(catrow, data, idx))
 
     return spectra_list
 
@@ -175,6 +170,32 @@ class Spectrum():
         """bool: ``True`` if blinding is not set."""
         return Spectrum._blinding is None
 
+    @classmethod
+    def from_dictionary(cls, catrow, data, idx):
+        """Create a Spectrum from dictionary. See :class:`Spectrum` for
+        argument details.
+
+        If ``cont`` key is present in ``data``, :attr:`cont_params` dictionary
+        gains the following::
+
+            cont_params['true_data_w1'] (float): First wavelength
+            cont_params['true_data_dwave'] (float): Wavelength spacing
+            cont_params['true_data'] (ndarray): True continuum
+
+        Returns
+        -------
+        Spectrum
+        """
+        spec = cls(catrow, data['wave'], data['flux'], data['ivar'],
+                   data['mask'], data['reso'], idx)
+
+        if "cont" in data.keys():
+            spec.cont_params['true_data_w1'] = data['cont']['w1']
+            spec.cont_params['true_data_dwave'] = data['cont']['dwave']
+            spec.cont_params['true_data'] = data['cont']['data'][idx]
+
+        return spec
+
     def __init__(self, catrow, wave, flux, ivar, mask, reso, idx):
         self.catrow = catrow
         Spectrum._set_wave(wave)
@@ -262,25 +283,6 @@ class Spectrum():
             self.mean_snr[arm] = np.dot(np.sqrt(ivar_arm), flux_arm) / armpix
 
         self.cont_params['x'][0] /= cont_params_weight
-
-    def set_true_cont(
-            self, tcont_interp, meanflux_interp, varlss_interp,
-            coadd_arms
-    ):
-        self.cont_params['method'] = 'true'
-        self.cont_params['valid'] = True
-
-        for arm, wave_arm in self.wave.items():
-            cont_est = tcont_interp(wave_arm) * meanflux_interp(wave_arm)
-            self.cont_params['cont'][arm] = cont_est
-
-        self.set_forest_weight(varlss_interp)
-        if coadd_arms:
-            self.coadd_arms_forest(varlss_interp)
-        self.cont_params['dof'] = self.get_real_size()
-
-        self.calc_continuum_chi2()
-        # raise NotImplementedError
 
     def set_forest_region(self, w1, w2, lya1, lya2):
         """ Sets slices for the forest region. Also calculates the mean SNR in
