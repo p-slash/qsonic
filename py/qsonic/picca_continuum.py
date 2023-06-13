@@ -722,6 +722,7 @@ class PiccaContinuumFitter():
             spec.cont_params['x'] = np.zeros(1)
             spec.cont_params['xcov'] = np.eye(1)
             spec.cont_params['dof'] = spec.get_real_size()
+            spec.cont_params['cont'] = {}
 
             w1 = spec.cont_params['true_data_w1']
             dwave = spec.cont_params['true_data_dwave']
