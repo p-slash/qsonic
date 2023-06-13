@@ -38,9 +38,6 @@ def get_parser(add_help=True):
 
     analysis_group = parser.add_argument_group('Analysis options')
     analysis_group.add_argument(
-        "--true-continuum", action="store_true",
-        help="True continuum analysis deltas if mock analysis")
-    analysis_group.add_argument(
         "--smoothing-scale", default=16., type=float,
         help="Smoothing scale for pipeline noise in A.")
     analysis_group.add_argument(
