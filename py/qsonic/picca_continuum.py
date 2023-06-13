@@ -41,11 +41,11 @@ def add_picca_continuum_parser(parser=None):
     cont_group = parser.add_argument_group('Continuum fitting options')
 
     cont_group.add_argument(
-        "--rfdwave", type=float, default=0.8,
-        help="Rest-frame wave steps. Complies with forest limits")
-    cont_group.add_argument(
         "--num-iterations", type=int, default=10,
         help="Number of iterations for continuum fitting.")
+    cont_group.add_argument(
+        "--true-continuum", action="store_true",
+        help="True continuum analysis deltas if mock analysis")
     cont_group.add_argument(
         "--fiducial-meanflux", help="Fiducial mean flux FITS file.")
     cont_group.add_argument(
@@ -62,6 +62,9 @@ def add_picca_continuum_parser(parser=None):
     cont_group.add_argument(
         "--normalize-stacked-flux", action="store_true",
         help="NOT IMPLEMENTED: Force stacked flux to be one at the end.")
+    cont_group.add_argument(
+        "--rfdwave", type=float, default=0.8,
+        help="Rest-frame wave steps. Complies with forest limits")
     cont_group.add_argument(
         "--minimizer", default="iminuit", choices=["iminuit", "l_bfgs_b"],
         help="Minimizer to fit the continuum.")
