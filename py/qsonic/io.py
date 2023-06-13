@@ -335,7 +335,7 @@ def _read_true_continuum(targetids, fspec):
 
     cont_data = {
         'w1': w1, 'w2': w2, 'dwave': dw,
-        'data': true_continua['TRUE_CONT'][idx_fbr, :]
+        'data': true_continua['TRUE_CONT'][idx_fbr, :].astype("f8")
     }
 
     return cont_data
@@ -556,7 +556,7 @@ def read_onehealpix_file_mock(
 
     fspec = f"{input_dir}/{pixnum//100}/{pixnum}/truth-{nside}-{pixnum}.fits"
     if read_true_continuum:
-        data['cont'] = _read_true_continuum(fspec, catalog_hpx['TARGETID'])
+        data['cont'] = _read_true_continuum(catalog_hpx['TARGETID'], fspec)
 
     if skip_resomat:
         return data, idx_cat
