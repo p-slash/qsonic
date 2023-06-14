@@ -312,7 +312,7 @@ def _read_true_continuum(targetids, fspec):
 
     Raises
     ---------
-    RuntimeWarning
+    RuntimeError
         If number of quasars in TRUE_CONT does not match the input.
     """
     with fitsio.FITS(fspec) as fitsfile:
@@ -326,12 +326,13 @@ def _read_true_continuum(targetids, fspec):
         true_continua['TARGETID'], targetids,
         assume_unique=True, return_indices=True
     )
+
     if (common_targetids.size != targetids.size):
-        warnings.warn(
-            f"Error reading {fspec}. "
+        raise RuntimeError(
+            f"Error reading true continua from {fspec}. "
             "Number of quasars in TRUE_CONT does not match the catalog "
             f"catalog:{targetids.size} vs "
-            f"healpix:{common_targetids.size}!", RuntimeWarning)
+            f"healpix:{common_targetids.size}!")
 
     cont_data = {
         'w1': w1, 'w2': w2, 'dwave': dw,
