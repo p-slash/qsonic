@@ -43,12 +43,7 @@ def add_wave_region_parser(parser=None):
 def generate_spectra_list_from_data(cat_by_survey, data):
     spectra_list = []
     for idx, catrow in enumerate(cat_by_survey):
-        spectra_list.append(
-            Spectrum(
-                catrow, data['wave'], data['flux'],
-                data['ivar'], data['mask'], data['reso'], idx
-            )
-        )
+        spectra_list.append(Spectrum.from_dictionary(catrow, data, idx))
 
     return spectra_list
 
@@ -174,6 +169,32 @@ class Spectrum():
     def blinding_not_set():
         """bool: ``True`` if blinding is not set."""
         return Spectrum._blinding is None
+
+    @classmethod
+    def from_dictionary(cls, catrow, data, idx):
+        """Create a Spectrum from dictionary. See :class:`Spectrum` for
+        argument details.
+
+        If ``cont`` key is present in ``data``, :attr:`cont_params` dictionary
+        gains the following::
+
+            cont_params['true_data_w1'] (float): First wavelength
+            cont_params['true_data_dwave'] (float): Wavelength spacing
+            cont_params['true_data'] (ndarray): True continuum
+
+        Returns
+        -------
+        Spectrum
+        """
+        spec = cls(catrow, data['wave'], data['flux'], data['ivar'],
+                   data['mask'], data['reso'], idx)
+
+        if "cont" in data.keys():
+            spec.cont_params['true_data_w1'] = data['cont']['w1']
+            spec.cont_params['true_data_dwave'] = data['cont']['dwave']
+            spec.cont_params['true_data'] = data['cont']['data'][idx]
+
+        return spec
 
     def __init__(self, catrow, wave, flux, ivar, mask, reso, idx):
         self.catrow = catrow
