@@ -44,7 +44,7 @@ def get_parser(add_help=True):
         "--min-rsnr", type=float, default=0.,
         help="Minium SNR <F/sigma> above Lya.")
     analysis_group.add_argument(
-        "--skip", type=qsonic.io._float_range(0, 1), default=0.,
+        "--skip", type=qsonic.io._float_range(0, 1), default=0.2,
         help="Skip short spectra lower than given ratio.")
     analysis_group.add_argument(
         "--keep-nonforest-pixels", action="store_true",
@@ -59,6 +59,8 @@ def get_parser(add_help=True):
 
 def args_logic_fnc_qsonic_fit(args):
     args_pass = True
+
+    args.arms = list(set(args.arms))
 
     if args.true_continuum:
         if not args.mock_analysis:
