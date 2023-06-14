@@ -57,6 +57,35 @@ def get_parser(add_help=True):
     return parser
 
 
+def args_logic_fnc_qsonic_fit(args):
+    args_pass = True
+
+    if args.true_continuum:
+        if not args.mock_analysis:
+            logging.error(
+                "True continuum is only applicable to mock analysis.")
+            args_pass = False
+
+        if not args.fiducial_meanflux:
+            logging.error(
+                "True continuum analysis requires fiducial mean flux.")
+            args_pass = False
+
+        if not args.fiducial_varlss:
+            logging.error("True continuum analysis requires fiducial var_lss.")
+            args_pass = False
+
+    if args.wave2 <= args.wave1:
+        logging.error("wave2 must be greater than wave1.")
+        args_pass = False
+
+    if args.forest_w2 <= args.forest_w1:
+        logging.error("forest_w2 must be greater than forest_w1.")
+        args_pass = False
+
+    return args_pass
+
+
 def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     """ Read local spectra for the MPI rank. Set forest and observed wavelength
     range.
@@ -273,10 +302,8 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
 
 
 def mpi_run_all(comm, mpi_rank, mpi_size):
-    args = mpi_parse(get_parser(), comm, mpi_rank)
-    if args.true_continuum and not args.mock_analysis:
-        raise QsonicException(
-            "True continuum is only applicable to mock analysis.")
+    args = mpi_parse(get_parser(), comm, mpi_rank,
+                     args_logic_fnc=args_logic_fnc_qsonic_fit)
 
     if mpi_rank == 0 and args.outdir:
         os_makedirs(args.outdir, exist_ok=True)
