@@ -31,10 +31,10 @@ def add_wave_region_parser(parser=None):
         "--wave2", type=float, default=6000.,
         help="Last observed wavelength edge.")
     wave_group.add_argument(
-        "--forest-w1", type=float, default=1040.,
+        "--forest-w1", type=float, default=1050.,
         help="First forest wavelength edge.")
     wave_group.add_argument(
-        "--forest-w2", type=float, default=1200.,
+        "--forest-w2", type=float, default=1180.,
         help="Last forest wavelength edge.")
 
     return parser
