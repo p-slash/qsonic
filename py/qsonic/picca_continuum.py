@@ -41,11 +41,11 @@ def add_picca_continuum_parser(parser=None):
     cont_group = parser.add_argument_group('Continuum fitting options')
 
     cont_group.add_argument(
-        "--rfdwave", type=float, default=0.8,
-        help="Rest-frame wave steps. Complies with forest limits")
-    cont_group.add_argument(
-        "--no-iterations", type=int, default=10,
+        "--num-iterations", type=int, default=10,
         help="Number of iterations for continuum fitting.")
+    cont_group.add_argument(
+        "--true-continuum", action="store_true",
+        help="True continuum analysis deltas if mock analysis")
     cont_group.add_argument(
         "--fiducial-meanflux", help="Fiducial mean flux FITS file.")
     cont_group.add_argument(
@@ -62,6 +62,9 @@ def add_picca_continuum_parser(parser=None):
     cont_group.add_argument(
         "--normalize-stacked-flux", action="store_true",
         help="NOT IMPLEMENTED: Force stacked flux to be one at the end.")
+    cont_group.add_argument(
+        "--rfdwave", type=float, default=0.8,
+        help="Rest-frame wave steps. Complies with forest limits")
     cont_group.add_argument(
         "--minimizer", default="iminuit", choices=["iminuit", "l_bfgs_b"],
         help="Minimizer to fit the continuum.")
@@ -115,7 +118,7 @@ class PiccaContinuumFitter():
     eta_interp: FastCubic1DInterp
         Interpolator for eta. Returns one if fiducial var_lss is set.
     niterations: int
-        Number of iterations from `args.no_iterations`.
+        Number of iterations from `args.num_iterations`.
     cont_order: int
         Order of continuum polynomial from `args.cont_order`.
     outdir: str or None
@@ -226,7 +229,7 @@ class PiccaContinuumFitter():
             np.ones_like(self.varlss_interp.fp),
             ep=np.zeros_like(self.varlss_interp.fp))
 
-        self.niterations = args.no_iterations
+        self.niterations = args.num_iterations
         self.cont_order = args.cont_order
         self.outdir = args.outdir
         self.fit_eta = args.var_fit_eta
@@ -417,28 +420,28 @@ class PiccaContinuumFitter():
         RuntimeWarning
             If more than 20% spectra have invalid fits.
         """
-        no_valid_fits = 0
-        no_invalid_fits = 0
+        num_valid_fits = 0
+        num_invalid_fits = 0
 
         # For each forest fit continuum
         for spec in spectra_list:
             self.fit_continuum(spec)
 
             if not spec.cont_params['valid']:
-                no_invalid_fits += 1
+                num_invalid_fits += 1
             else:
-                no_valid_fits += 1
+                num_valid_fits += 1
 
-        no_valid_fits = self.comm.allreduce(no_valid_fits)
-        no_invalid_fits = self.comm.allreduce(no_invalid_fits)
-        logging_mpi(f"Number of valid fits: {no_valid_fits}", self.mpi_rank)
-        logging_mpi(f"Number of invalid fits: {no_invalid_fits}",
+        num_valid_fits = self.comm.allreduce(num_valid_fits)
+        num_invalid_fits = self.comm.allreduce(num_invalid_fits)
+        logging_mpi(f"Number of valid fits: {num_valid_fits}", self.mpi_rank)
+        logging_mpi(f"Number of invalid fits: {num_invalid_fits}",
                     self.mpi_rank)
 
-        if no_valid_fits == 0:
+        if num_valid_fits == 0:
             raise QsonicException("Crucial error: No valid continuum fits!")
 
-        invalid_ratio = no_invalid_fits / (no_valid_fits + no_invalid_fits)
+        invalid_ratio = num_invalid_fits / (num_valid_fits + num_invalid_fits)
         if invalid_ratio > 0.2:
             warn_mpi("More than 20% spectra have invalid fits.", self.mpi_rank)
 
@@ -664,7 +667,8 @@ class PiccaContinuumFitter():
             spec.cont_params['x'] = np.append(
                 spec.cont_params['x'][0], np.zeros(self.cont_order))
             spec.cont_params['xcov'] = np.eye(self.cont_order + 1)
-            spec.cont_params['dof'] = spec.get_real_size()
+            spec.cont_params['dof'] = \
+                spec.get_real_size() - self.cont_order - 1
 
         fname = f"{self.outdir}/attributes.fits" if self.outdir else ""
         fattr = MPISaver(fname, self.mpi_rank)
@@ -692,9 +696,58 @@ class PiccaContinuumFitter():
             warn_mpi("Iteration has NOT converged.", self.mpi_rank)
 
         self.save(fattr)
-        self.varlss_fitter.write(fattr)
+        if self.varlss_fitter:
+            self.varlss_fitter.write(fattr)
         fattr.close()
         logging_mpi("All continua are fit.", self.mpi_rank)
+
+    def true_continuum(self, spectra_list):
+        """True continuum reduction. Uses fiducials for mean flux and varlss
+        interpolation. Continuum is interpolated using a cubic spline.
+
+        .. warning::
+
+            This function would work even if you did not pass any fiducial.
+
+        Arguments
+        ---------
+        spectra_list: list(Spectrum)
+            Spectrum objects.
+        """
+        self.cont_order = 0
+
+        for spec in spectra_list:
+            spec.cont_params['method'] = 'true'
+            spec.cont_params['valid'] = True
+            spec.cont_params['x'] = np.zeros(1)
+            spec.cont_params['xcov'] = np.eye(1)
+            spec.cont_params['dof'] = spec.get_real_size()
+            spec.cont_params['cont'] = {}
+
+            w1 = spec.cont_params['true_data_w1']
+            dwave = spec.cont_params['true_data_dwave']
+            tcont = spec.cont_params['true_data']
+
+            tcont_interp = FastCubic1DInterp(w1, dwave, tcont)
+
+            for arm, wave_arm in spec.forestwave.items():
+                cont_est = tcont_interp(wave_arm)
+                cont_est *= self.meanflux_interp(wave_arm)
+                spec.cont_params['cont'][arm] = cont_est
+
+            spec.set_forest_weight(self.varlss_interp)
+            spec.calc_continuum_chi2()
+
+        self.update_mean_cont(spectra_list, False)
+        self.update_var_lss_eta(spectra_list, False)
+        fname = f"{self.outdir}/attributes.fits" if self.outdir else ""
+        fattr = MPISaver(fname, self.mpi_rank)
+        self.save(fattr)
+        if self.varlss_fitter:
+            self.varlss_fitter.write(fattr)
+        fattr.close()
+
+        logging_mpi("True continuum applied.", self.mpi_rank)
 
     def save(self, fattr, suff=''):
         """Save mean continuum and var_lss (if fitting) to a fits file.
@@ -815,8 +868,8 @@ class VarLSSFitter():
             var1, var2, nvarbins,
             nsubsamples=100, comm=comm)
         # Change static minimum numbers for valid statistics
-        VarLSSFitter.min_no_pix = min_no_pix
-        VarLSSFitter.min_no_qso = min_no_qso
+        VarLSSFitter.min_num_pix = min_num_pix
+        VarLSSFitter.min_num_qso = min_num_qso
 
         for delta in deltas_list:
             varfitter.add(delta.wave, delta.delta, delta.ivar)
@@ -872,9 +925,9 @@ class VarLSSFitter():
     mpi_rank: int
         Rank of the MPI process if ``comm!=None``. Zero otherwise.
     """
-    min_no_pix = 500
+    min_num_pix = 500
     """int: Minimum number of pixels a bin must have to be valid."""
-    min_no_qso = 50
+    min_num_qso = 50
     """int: Minimum number of quasars a bin must have to be valid."""
 
     @staticmethod
@@ -1113,8 +1166,8 @@ class VarLSSFitter():
         fit_results = np.zeros_like(initial_guess)
         std_results = np.zeros_like(initial_guess)
 
-        w_gtr_min = ((self.num_pixels > VarLSSFitter.min_no_pix)
-                     & (self.num_qso > VarLSSFitter.min_no_qso))
+        w_gtr_min = ((self.num_pixels > VarLSSFitter.min_num_pix)
+                     & (self.num_qso > VarLSSFitter.min_num_qso))
 
         if self.use_cov:
             err_base = self.cov_var_delta
@@ -1191,8 +1244,8 @@ class VarLSSFitter():
             Maximum SNR in this sample to be written into header.
         """
         hdr_dict = {
-            'MINNPIX': VarLSSFitter.min_no_pix,
-            'MINNQSO': VarLSSFitter.min_no_qso,
+            'MINNPIX': VarLSSFitter.min_num_pix,
+            'MINNQSO': VarLSSFitter.min_num_qso,
             'MINSNR': min_snr,
             'MAXSNR': max_snr,
             'WAVE1': self.waveobs[0],

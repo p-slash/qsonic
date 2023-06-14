@@ -57,6 +57,35 @@ def get_parser(add_help=True):
     return parser
 
 
+def args_logic_fnc_qsonic_fit(args):
+    args_pass = True
+
+    if args.true_continuum:
+        if not args.mock_analysis:
+            logging.error(
+                "True continuum is only applicable to mock analysis.")
+            args_pass = False
+
+        if not args.fiducial_meanflux:
+            logging.error(
+                "True continuum analysis requires fiducial mean flux.")
+            args_pass = False
+
+        if not args.fiducial_varlss:
+            logging.error("True continuum analysis requires fiducial var_lss.")
+            args_pass = False
+
+    if args.wave2 <= args.wave1:
+        logging.error("wave2 must be greater than wave1.")
+        args_pass = False
+
+    if args.forest_w2 <= args.forest_w1:
+        logging.error("forest_w2 must be greater than forest_w1.")
+        args_pass = False
+
+    return args_pass
+
+
 def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     """ Read local spectra for the MPI rank. Set forest and observed wavelength
     range.
@@ -88,7 +117,8 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     # Each process reads its own list
     for cat in local_queue:
         local_specs = qsonic.io.read_spectra_onehealpix(
-            cat, args.input_dir, args.arms, args.mock_analysis, skip_resomat)
+            cat, args.input_dir, args.arms, args.mock_analysis, skip_resomat,
+            args.true_continuum)
 
         for spec in local_specs:
             spec.set_forest_region(
@@ -232,8 +262,49 @@ def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank=0):
     return spectra_list
 
 
+def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
+    # Initialize continuum fitter & global functions
+    logging_mpi("Initializing continuum fitter.", mpi_rank)
+    start_time = time.time()
+    qcfit = PiccaContinuumFitter(args)
+
+    if not args.true_continuum:
+        # Fit continua
+        # Stack all spectra in each process
+        # Broadcast and recalculate global functions
+        # Iterate
+        logging_mpi("Fitting continuum.", mpi_rank)
+        qcfit.iterate(spectra_list)
+    else:
+        logging_mpi("True continuum.", mpi_rank)
+        qcfit.true_continuum(spectra_list)
+
+    if args.coadd_arms:
+        logging_mpi("Coadding arms.", mpi_rank)
+        for spec in qsonic.spectrum.valid_spectra(spectra_list):
+            spec.coadd_arms_forest(qcfit.varlss_interp, qcfit.eta_interp)
+            spec.calc_continuum_chi2()
+
+    qcfit.save_contchi2_catalog(spectra_list)
+
+    # Keep only valid spectra
+    spectra_list = list(qsonic.spectrum.valid_spectra(spectra_list))
+
+    # Final cleaning. Especially important if not coadding arms.
+    for spec in spectra_list:
+        spec.drop_short_arms(args.forest_w1, args.forest_w2, args.skip)
+
+    etime = (time.time() - start_time) / 60  # min
+    logging_mpi(f"Continuum fitting and tweaking took {etime:.1f} mins.",
+                mpi_rank)
+
+    return spectra_list
+
+
 def mpi_run_all(comm, mpi_rank, mpi_size):
-    args = mpi_parse(get_parser(), comm, mpi_rank)
+    args = mpi_parse(get_parser(), comm, mpi_rank,
+                     args_logic_fnc=args_logic_fnc_qsonic_fit)
+
     if mpi_rank == 0 and args.outdir:
         os_makedirs(args.outdir, exist_ok=True)
 
@@ -273,36 +344,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
             spec.set_smooth_forestivar(args.smoothing_scale)
 
     # Continuum fitting
-    # -------------------
-    # Initialize continuum fitter & global functions
-    logging_mpi("Initializing continuum fitter.", mpi_rank)
-    start_time = time.time()
-    qcfit = PiccaContinuumFitter(args)
-    logging_mpi("Fitting continuum.", mpi_rank)
-
-    # Fit continua
-    # Stack all spectra in each process
-    # Broadcast and recalculate global functions
-    # Iterate
-    qcfit.iterate(spectra_list)
-
-    if args.coadd_arms:
-        logging_mpi("Coadding arms.", mpi_rank)
-        for spec in qsonic.spectrum.valid_spectra(spectra_list):
-            spec.coadd_arms_forest(qcfit.varlss_interp, qcfit.eta_interp)
-
-    qcfit.save_contchi2_catalog(spectra_list)
-
-    # Keep only valid spectra
-    spectra_list = list(qsonic.spectrum.valid_spectra(spectra_list))
-
-    # Final cleaning. Especially important if not coadding arms.
-    for spec in spectra_list:
-        spec.drop_short_arms(args.forest_w1, args.forest_w2, args.skip)
-
-    etime = (time.time() - start_time) / 60  # min
-    logging_mpi(f"Continuum fitting and tweaking took {etime:.1f} mins.",
-                mpi_rank)
+    spectra_list = mpi_continuum_fitting(spectra_list, args, comm, mpi_rank)
 
     # Save deltas
     logging_mpi("Saving deltas.", mpi_rank)
