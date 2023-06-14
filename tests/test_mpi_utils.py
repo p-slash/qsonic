@@ -32,8 +32,8 @@ class TestMPIUtils(TestCase):
             qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options)
 
         # Test logic functions
-        from qsonic.scripts.qsonic_fit import get_parser
-        from qsonic.picca_continuum import args_logic_fnc_true_continuum
+        from qsonic.scripts.qsonic_fit import (
+            get_parser, args_logic_fnc_qsonic_fit)
 
         parser = get_parser()
 
@@ -42,7 +42,7 @@ class TestMPIUtils(TestCase):
                    "--fiducial-meanflux mflux "
                    "--fiducial-varlss varlss").split(' ')
         args = qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options,
-                                          args_logic_fnc_true_continuum)
+                                          args_logic_fnc_qsonic_fit)
         assert args.true_continuum
         assert args.mock_analysis
 
@@ -50,7 +50,7 @@ class TestMPIUtils(TestCase):
             options = ("--input-dir indir --catalog incat -o outdir "
                        "--true-continuum").split(' ')
             qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options,
-                                       args_logic_fnc_true_continuum)
+                                       args_logic_fnc_qsonic_fit)
 
     def test_mpi_fnc_bcast(self):
         matrix = np.arange(20).reshape(4, 5)
