@@ -7,7 +7,13 @@ import numpy as np
 from qsonic import QsonicException
 
 
-def mpi_parse(parser, comm, mpi_rank, options=None):
+def _logic_true(args):
+    return True
+
+
+def mpi_parse(
+        parser, comm, mpi_rank, options=None, args_logic_fnc=_logic_true
+):
     """ Parse arguments on the master node, then broadcast.
 
     Arguments
@@ -20,11 +26,16 @@ def mpi_parse(parser, comm, mpi_rank, options=None):
         Rank of the MPI process.
     options: None or list, default: None
         Options to parse. None parses ``sys.argv``
+    args_logic_fnc: Callable[[args], bool], default: True
+        Logic function to check for args.
     """
     if mpi_rank == 0:
         try:
             args = parser.parse_args(options)
         except SystemExit:
+            args = -1
+
+        if not args_logic_fnc(args):
             args = -1
     else:
         args = -1
