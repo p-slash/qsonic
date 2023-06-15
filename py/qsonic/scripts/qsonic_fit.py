@@ -144,6 +144,11 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
         #     qsonic.io.read_resolution_matrices_onehealpix_data(
         #         cat[w], args.input_dir, spectra_list[-nspec:])
 
+    if args.coadd_arms == "before":
+        logging_mpi("Coadding arms.", mpi_rank)
+        for spec in spectra_list:
+            spec.coadd_arms_forest()
+
     nspec_all = comm.reduce(len(spectra_list))
     etime = (time.time() - start_time) / 60  # min
     logging_mpi(
@@ -281,7 +286,7 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
         logging_mpi("True continuum.", mpi_rank)
         qcfit.true_continuum(spectra_list)
 
-    if args.coadd_arms:
+    if args.coadd_arms == "after":
         logging_mpi("Coadding arms.", mpi_rank)
         for spec in qsonic.spectrum.valid_spectra(spectra_list):
             spec.coadd_arms_forest(qcfit.varlss_interp, qcfit.eta_interp)
