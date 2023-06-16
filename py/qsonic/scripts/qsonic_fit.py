@@ -46,9 +46,6 @@ def get_parser(add_help=True):
     analysis_group.add_argument(
         "--skip", type=qsonic.io._float_range(0, 1), default=0.2,
         help="Skip short spectra lower than given ratio.")
-    analysis_group.add_argument(
-        "--keep-nonforest-pixels", action="store_true",
-        help="Keeps non forest wavelengths. Memory intensive!")
 
     parser = qsonic.spectrum.add_wave_region_parser(parser)
     parser = qsonic.masks.add_mask_parser(parser)
@@ -126,8 +123,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
             spec.set_forest_region(
                 args.wave1, args.wave2, args.forest_w1, args.forest_w2)
 
-            if not args.keep_nonforest_pixels:
-                spec.remove_nonforest_pixels()
+            spec.remove_nonforest_pixels()
 
         spectra_list.extend(
             [spec for spec in local_specs if spec.rsnr > args.min_rsnr])
@@ -143,6 +139,11 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
         # spectra_list[-nspec:] = \
         #     qsonic.io.read_resolution_matrices_onehealpix_data(
         #         cat[w], args.input_dir, spectra_list[-nspec:])
+
+    if args.coadd_arms == "before":
+        logging_mpi("Coadding arms.", mpi_rank)
+        for spec in spectra_list:
+            spec.coadd_arms_forest()
 
     nspec_all = comm.reduce(len(spectra_list))
     etime = (time.time() - start_time) / 60  # min
@@ -281,7 +282,7 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
         logging_mpi("True continuum.", mpi_rank)
         qcfit.true_continuum(spectra_list)
 
-    if args.coadd_arms:
+    if args.coadd_arms == "after":
         logging_mpi("Coadding arms.", mpi_rank)
         for spec in qsonic.spectrum.valid_spectra(spectra_list):
             spec.coadd_arms_forest(qcfit.varlss_interp, qcfit.eta_interp)
