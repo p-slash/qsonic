@@ -129,7 +129,7 @@ class Spectrum():
         max_wave = np.max([wave[-1] for wave in Spectrum._wave.values()])
 
         nwaves = int((max_wave - min_wave) / Spectrum._dwave + 0.1) + 1
-        coadd_wave = np.arange(nwaves) * Spectrum._dwave + min_wave
+        coadd_wave = np.linspace(min_wave, max_wave, nwaves)
         Spectrum._coadd_wave = {'brz': coadd_wave}
 
     @staticmethod
@@ -535,7 +535,7 @@ class Spectrum():
         max_wave = np.max([wave[-1] for wave in self.forestwave.values()])
 
         nwaves = int((max_wave - min_wave) / self.dwave + 0.1) + 1
-        coadd_wave = np.arange(nwaves) * self.dwave + min_wave
+        coadd_wave = np.linspace(min_wave, max_wave, nwaves)
         coadd_flux = np.zeros(nwaves)
         coadd_ivar = np.zeros(nwaves)
         coadd_norm = np.zeros(nwaves)
