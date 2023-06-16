@@ -129,7 +129,7 @@ class Spectrum():
         max_wave = np.max([wave[-1] for wave in Spectrum._wave.values()])
 
         nwaves = int((max_wave - min_wave) / Spectrum._dwave + 0.1) + 1
-        coadd_wave = np.arange(nwaves) * Spectrum._dwave + min_wave
+        coadd_wave = np.linspace(min_wave, max_wave, nwaves)
         Spectrum._coadd_wave = {'brz': coadd_wave}
 
     @staticmethod
@@ -219,7 +219,6 @@ class Spectrum():
         self._smoothing_scale = 0
 
         for arm, wave_arm in self.wave.items():
-            self._f1[arm], self._f2[arm] = 0, wave_arm.size
             self.flux[arm] = flux[arm][idx]
             self.ivar[arm] = ivar[arm][idx]
             w = (mask[arm][idx] != 0) | np.isnan(self.flux[arm])\
@@ -228,7 +227,7 @@ class Spectrum():
             self.ivar[arm][w] = 0
 
             if not reso:
-                pass
+                continue
             elif reso[arm].ndim == 2:
                 self.reso[arm] = reso[arm].copy()
             else:
@@ -345,18 +344,15 @@ class Spectrum():
     def remove_nonforest_pixels(self):
         """ Remove non-forest pixels from storage.
 
-        This equates `flux` to `forestflux` etc, but `wave` is not modified,
+        This sets :attr:`flux`, :attr:`ivar` and :attr:`reso` to empty
+        dictionary, but :attr:`wave` is not modified,
         since it is a static variable. Good practive is to loop using, e.g.,
-        `for arm, wave_arm in self.forestwave.items():`.
+        ``for arm, wave_arm in self.forestwave.items():``.
         """
-        self.flux = self.forestflux
-        self.ivar = self.forestivar
-        self.reso = self.forestreso
-
-        # Is this needed?
-        self._forestflux = self.flux
-        self._forestivar = self.ivar
-        self._forestreso = self.reso
+        self._current_wave = {}
+        self.flux = {}
+        self.ivar = {}
+        self.reso = {}
 
     def get_real_size(self):
         """int: Sum of number of pixels with `forestivar > 0` for all arms."""
@@ -384,16 +380,16 @@ class Spectrum():
         smoothing_size: float, default: 16
             Gaussian smoothing spread in A.
         """
-        self._forestivar_sm = {}
         if smoothing_size <= 0:
             self._smoothing_scale = 0
             self._forestivar_sm = self._forestivar
-            return
-
-        self._smoothing_scale = smoothing_size
-        sigma_pix = smoothing_size / self.dwave
-        for arm, ivar_arm in self.forestivar.items():
-            self._forestivar_sm[arm] = get_smooth_ivar(ivar_arm, sigma_pix)
+        else:
+            self._smoothing_scale = smoothing_size
+            sigma_pix = smoothing_size / self.dwave
+            self._forestivar_sm = {
+                arm: get_smooth_ivar(ivar_arm, sigma_pix)
+                for arm, ivar_arm in self.forestivar.items()
+            }
 
         self._forestweight = self._forestivar_sm
 
@@ -417,10 +413,11 @@ class Spectrum():
         eta_interp: Callable[[ndarray], ndarray], default: 1
             eta interpolator.
         """
-        self._forestweight = {}
         if not self.cont_params['valid'] or not self.cont_params['cont']:
+            self._forestweight = self._forestivar_sm
             return
 
+        self._forestweight = {}
         for arm, wave_arm in self.forestwave.items():
             cont_est = self.cont_params['cont'][arm]
             var_lss = varlss_interp(wave_arm) * cont_est**2
@@ -496,7 +493,7 @@ class Spectrum():
         if self.reso:
             max_ndia = np.max([reso.shape[0] for reso in self.reso.values()])
             coadd_reso = np.zeros((max_ndia, nwaves))
-            creso_norm = np.zeros(nwaves)
+            coadd_norm *= 0
 
             for arm, reso_arm in self.reso.items():
                 weight = self.ivar[arm].copy()
@@ -509,9 +506,9 @@ class Spectrum():
                     reso_arm = np.pad(reso_arm, ((ddia, ddia), (0, 0)))
 
                 coadd_reso[:, idxes[arm]] += weight * reso_arm
-                creso_norm[idxes[arm]] += weight
+                coadd_norm[idxes[arm]] += weight
 
-            coadd_reso /= creso_norm
+            coadd_reso /= coadd_norm
             self.reso = {'brz': coadd_reso}
 
         self._current_wave = Spectrum._coadd_wave
@@ -534,17 +531,13 @@ class Spectrum():
         eta_interp: Callable[[ndarray], ndarray], default: 1
             eta interpolator or function.
         """
-        if not self.cont_params['valid'] or not self.cont_params['cont']:
-            raise QsonicException("Continuum needed for coadding.")
-
         min_wave = np.min([wave[0] for wave in self.forestwave.values()])
         max_wave = np.max([wave[-1] for wave in self.forestwave.values()])
 
         nwaves = int((max_wave - min_wave) / self.dwave + 0.1) + 1
-        coadd_wave = np.arange(nwaves) * self.dwave + min_wave
+        coadd_wave = np.linspace(min_wave, max_wave, nwaves)
         coadd_flux = np.zeros(nwaves)
         coadd_ivar = np.zeros(nwaves)
-        coadd_cont = np.empty(nwaves)
         coadd_norm = np.zeros(nwaves)
 
         idxes = {}
@@ -562,9 +555,6 @@ class Spectrum():
             coadd_ivar[idx] += weight**2 * var
             coadd_norm[idx] += weight
 
-            # continuum needs not weighting
-            coadd_cont[idx] = self.cont_params['cont'][arm]
-
         w = coadd_norm > 0
         coadd_flux[w] /= coadd_norm[w]
         coadd_ivar[w] = coadd_norm[w]**2 / coadd_ivar[w]
@@ -572,13 +562,21 @@ class Spectrum():
         self._forestwave = {'brz': coadd_wave}
         self._forestflux = {'brz': coadd_flux}
         self._forestivar = {'brz': coadd_ivar}
-        self.cont_params['cont'] = {'brz': coadd_cont}
+
+        if self.cont_params['cont']:
+            coadd_cont = np.empty(nwaves)
+
+            for arm, idx in idxes.items():
+                # continuum needs not weighting
+                coadd_cont[idx] = self.cont_params['cont'][arm]
+
+            self.cont_params['cont'] = {'brz': coadd_cont}
 
         if self.forestreso:
             max_ndia = np.max(
                 [reso.shape[0] for reso in self.forestreso.values()])
             coadd_reso = np.zeros((max_ndia, nwaves))
-            creso_norm = np.zeros(nwaves)
+            coadd_norm *= 0
 
             for arm, reso_arm in self.forestreso.items():
                 weight = self.forestweight[arm].copy()
@@ -591,13 +589,12 @@ class Spectrum():
                     reso_arm = np.pad(reso_arm, ((ddia, ddia), (0, 0)))
 
                 coadd_reso[:, idxes[arm]] += weight * reso_arm
-                creso_norm[idxes[arm]] += weight
+                coadd_norm[idxes[arm]] += weight
 
-            coadd_reso /= creso_norm
+            coadd_reso /= coadd_norm
             self._forestreso = {'brz': coadd_reso}
 
         self.set_smooth_forestivar(self._smoothing_scale)
-        self._forestweight = {}
         self.set_forest_weight(varlss_interp, eta_interp)
 
         mean_snr = np.dot(
