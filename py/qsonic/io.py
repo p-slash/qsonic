@@ -53,8 +53,9 @@ def add_io_parser(parser=None):
         "--outdir", '-o',
         help="Output directory to save deltas.")
     outgroup.add_argument(
-        "--coadd-arms", action="store_true",
-        help="Coadds arms when saving.")
+        "--coadd-arms", default="before",
+        choices=["before", "after", "disable"],
+        help="Coadds arms before or after continuum fitting or not at all.")
     outgroup.add_argument(
         "--save-by-hpx", action="store_true",
         help="Save by healpix. If not, saves by MPI rank.")
