@@ -6,15 +6,14 @@ import numpy as np
 import numpy.testing as npt
 
 from qsonic import QsonicException
-from qsonic.io import add_io_parser
 import qsonic.mpi_utils
-import qsonic.spectrum
 
 
 class TestMPIUtils(TestCase):
     @pytest.mark.mpi(min_size=2)
     def test_mpi_parse(self):
         from mpi4py import MPI
+        from qsonic.io import add_io_parser
         comm = MPI.COMM_WORLD
         assert comm.size > 0
 
@@ -31,6 +30,27 @@ class TestMPIUtils(TestCase):
         with pytest.raises(SystemExit):
             options = "--catalog incat -o outdir".split(' ')
             qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options)
+
+        # Test logic functions
+        from qsonic.scripts.qsonic_fit import (
+            get_parser, args_logic_fnc_qsonic_fit)
+
+        parser = get_parser()
+
+        options = ("--input-dir indir --catalog incat -o outdir "
+                   "--mock-analysis --true-continuum "
+                   "--fiducial-meanflux mflux "
+                   "--fiducial-varlss varlss").split(' ')
+        args = qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options,
+                                          args_logic_fnc_qsonic_fit)
+        assert args.true_continuum
+        assert args.mock_analysis
+
+        with pytest.raises(SystemExit):
+            options = ("--input-dir indir --catalog incat -o outdir "
+                       "--true-continuum").split(' ')
+            qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options,
+                                       args_logic_fnc_qsonic_fit)
 
     def test_mpi_fnc_bcast(self):
         matrix = np.arange(20).reshape(4, 5)

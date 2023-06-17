@@ -53,8 +53,9 @@ def add_io_parser(parser=None):
         "--outdir", '-o',
         help="Output directory to save deltas.")
     outgroup.add_argument(
-        "--coadd-arms", action="store_true",
-        help="Coadds arms when saving.")
+        "--coadd-arms", default="before",
+        choices=["before", "after", "disable"],
+        help="Coadds arms before or after continuum fitting or not at all.")
     outgroup.add_argument(
         "--save-by-hpx", action="store_true",
         help="Save by healpix. If not, saves by MPI rank.")
@@ -63,7 +64,7 @@ def add_io_parser(parser=None):
 
 def read_spectra_onehealpix(
         catalog_hpx, input_dir, arms_to_keep, mock_analysis, skip_resomat,
-        program="dark"
+        read_true_continuum, program="dark"
 ):
     """ Returns a list of Spectrum objects for a given catalog of a single
     healpix.
@@ -81,6 +82,8 @@ def read_spectra_onehealpix(
         Reads for mock data if true.
     skip_resomat: bool
         If true, do not read resomat.
+    read_true_continuum: bool
+        If true, reads the true continuum for mock analysis.
     program: str, default: "dark"
         Always use dark program.
 
@@ -97,7 +100,8 @@ def read_spectra_onehealpix(
 
     if mock_analysis:
         data, idx_cat = read_onehealpix_file_mock(
-            catalog_hpx, input_dir, arms_to_keep, skip_resomat
+            catalog_hpx, input_dir, arms_to_keep, skip_resomat,
+            read_true_continuum
         )
 
         if idx_cat.size != catalog_hpx.size:
@@ -291,6 +295,54 @@ def _read_imagehdu(imhdu, quasar_indices, nwave):
 #     return np.vstack([imhdu[int(idx), :, :] for idx in quasar_indices])
 
 
+def _read_true_continuum(targetids, fspec):
+    """Read true continuum as dictionary from file.
+
+    Arguments
+    ---------
+    targetids: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Target IDs.
+    fspec: str
+        Filename to open.
+
+    Returns
+    ---------
+    cont_data: dict( :external+numpy:py:class:`ndarray <numpy.ndarray>` )
+        This has keys for w1, w2, dwave and data, where data is ndarray and
+        others are floats.
+
+    Raises
+    ---------
+    RuntimeError
+        If number of quasars in TRUE_CONT does not match the input.
+    """
+    with fitsio.FITS(fspec) as fitsfile:
+        hdr = fitsfile['TRUE_CONT'].read_header()
+        true_continua = fitsfile['TRUE_CONT'].read()
+    w1 = hdr['WMIN']
+    w2 = hdr['WMAX']
+    dw = hdr['DWAVE']
+
+    common_targetids, idx_fbr, _ = np.intersect1d(
+        true_continua['TARGETID'], targetids,
+        assume_unique=True, return_indices=True
+    )
+
+    if (common_targetids.size != targetids.size):
+        raise RuntimeError(
+            f"Error reading true continua from {fspec}. "
+            "Number of quasars in TRUE_CONT does not match the catalog "
+            f"catalog:{targetids.size} vs "
+            f"healpix:{common_targetids.size}!")
+
+    cont_data = {
+        'w1': w1, 'w2': w2, 'dwave': dw,
+        'data': true_continua['TRUE_CONT'][idx_fbr, :].astype("f8")
+    }
+
+    return cont_data
+
+
 def _read_onehealpix_file(
         targetids_by_survey, fspec, arms_to_keep, skip_resomat
 ):
@@ -466,7 +518,8 @@ def read_onehealpix_file_data(
 
 
 def read_onehealpix_file_mock(
-        catalog_hpx, input_dir, arms_to_keep, skip_resomat, nside=16
+        catalog_hpx, input_dir, arms_to_keep, skip_resomat,
+        read_true_continuum, nside=16
 ):
     """ Read a single FITS file for mocks.
 
@@ -480,6 +533,10 @@ def read_onehealpix_file_mock(
         Must only contain B, R and Z.
     skip_resomat: bool
         If true, do not read resomat.
+    read_true_continuum: bool
+        If true, reads the true continuum for mock analysis.
+    nside: int, default: 16
+        NSIDE for healpix.
 
     Returns
     ---------
@@ -499,14 +556,16 @@ def read_onehealpix_file_mock(
     data, idx_cat = _read_onehealpix_file(
         catalog_hpx['TARGETID'], fspec, arms_to_keep, skip_resomat)
 
+    fspec = f"{input_dir}/{pixnum//100}/{pixnum}/truth-{nside}-{pixnum}.fits"
+    if read_true_continuum:
+        data['cont'] = _read_true_continuum(catalog_hpx['TARGETID'], fspec)
+
     if skip_resomat:
         return data, idx_cat
 
-    fspec = f"{input_dir}/{pixnum//100}/{pixnum}/truth-{nside}-{pixnum}.fits"
-    fitsfile = fitsio.FITS(fspec)
-    for arm in arms_to_keep:
-        data['reso'][arm] = np.array(fitsfile[f'{arm}_RESOLUTION'].read())
-    fitsfile.close()
+    with fitsio.FITS(fspec) as fitsfile:
+        for arm in arms_to_keep:
+            data['reso'][arm] = np.array(fitsfile[f'{arm}_RESOLUTION'].read())
 
     return data, idx_cat
 

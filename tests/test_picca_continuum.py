@@ -31,11 +31,11 @@ def get_fiducials(tmp_path):
     nsize = 100
     data = np.empty(
         nsize,
-        dtype=[('LAMBDA', 'f8'), ('MEANFLUX', 'f8'), ('VAR', 'f8')]
+        dtype=[('LAMBDA', 'f8'), ('MEANFLUX', 'f8'), ('VAR_LSS', 'f8')]
     )
     data['LAMBDA'] = np.linspace(3600, 6000, nsize)
     data['MEANFLUX'] = 2 * np.ones(nsize)
-    data['VAR'] = 3 * np.ones(nsize)
+    data['VAR_LSS'] = 3 * np.ones(nsize)
 
     with fitsio.FITS(fname, 'rw', clobber=True) as fts:
         fts.write(data, extname='STATS')

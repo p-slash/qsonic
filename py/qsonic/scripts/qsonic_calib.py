@@ -177,7 +177,7 @@ def mpi_read_all_deltas(args, comm=None, mpi_rank=0, mpi_size=1):
 def mpi_stack_fluxes(args, comm, deltas_list):
     dwave = deltas_list[0].header['DELTA_LAMBDA']
     nwaveobs = int((args.wave2 - args.wave1) / dwave) + 1
-    waveobs = np.arange(nwaveobs) * dwave + args.wave1
+    waveobs = np.linspace(args.wave1, args.wave2, nwaveobs)
     stacked_flux = np.zeros(nwaveobs)
     weights = np.zeros(nwaveobs)
 
