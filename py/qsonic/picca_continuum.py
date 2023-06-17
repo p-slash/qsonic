@@ -118,9 +118,9 @@ class PiccaContinuumFitter():
     eta_interp: FastCubic1DInterp
         Interpolator for eta. Returns one if fiducial var_lss is set.
     niterations: int
-        Number of iterations from `args.num_iterations`.
+        Number of iterations from ``args.num_iterations``.
     cont_order: int
-        Order of continuum polynomial from `args.cont_order`.
+        Order of continuum polynomial from ``args.cont_order``.
     outdir: str or None
         Directory to save catalogs. If None or empty, does not save.
     fit_eta: bool
@@ -130,17 +130,20 @@ class PiccaContinuumFitter():
     def _get_fiducial_interp(self, fname, col2read):
         """ Return an interpolator for mean flux or var_lss.
 
-        FITS file must have a 'STATS' extention, which must have 'LAMBDA',
-        'MEANFLUX' and 'VAR' columns. This is the same format as raw_io output
-        from picca. 'LAMBDA' must be linearly and equally spaced.
-        This function sets up ``col2read`` as FastLinear1DInterp object.
+        FITS file must have a **STATS** extention, which must have **LAMBDA**,
+        **MEANFLUX** and **VAR_LSS** columns. This is the same format as rawio
+        output from picca, except **VAR** column in picca is the variance of
+        flux not deltas. We break away from that convention by explicitly
+        requiring variance on deltas in a new column. **LAMBDA** must be
+        linearly and equally spaced. This function sets up ``col2read`` as
+        FastLinear1DInterp object.
 
         Arguments
         ---------
         fname: str
             Filename of the FITS file.
         col2read: str
-            Should be 'MEANFLUX' or 'VAR'.
+            Should be **MEANFLUX** or **VAR_LSS**.
 
         Returns
         -------
@@ -149,7 +152,7 @@ class PiccaContinuumFitter():
         Raises
         ------
         QsonicException
-            If 'LAMBDA' is not equally spaced or ``col2read`` is not in the
+            If **LAMBDA** is not equally spaced or ``col2read`` is not in the
             file.
         """
         def _read(fname, col2read):
@@ -214,7 +217,7 @@ class PiccaContinuumFitter():
         if args.fiducial_varlss:
             self.varlss_fitter = None
             self.varlss_interp = self._get_fiducial_interp(
-                args.fiducial_varlss, 'VAR')
+                args.fiducial_varlss, 'VAR_LSS')
         else:
             self.varlss_fitter = VarLSSFitter(
                 args.wave1, args.wave2, use_cov=args.var_use_cov,
