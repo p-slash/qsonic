@@ -15,6 +15,7 @@ Welcome to qsonic's documentation!
    quick_start
    examples/lookChi2Catalog
    examples/simple_coadd_showcase
+   howitworks
    generated/modules
 
 

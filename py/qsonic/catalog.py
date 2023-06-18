@@ -11,7 +11,7 @@ from numpy.lib.recfunctions import rename_fields, append_fields
 from qsonic.mpi_utils import logging_mpi, balance_load, mpi_fnc_bcast
 
 _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
-"""set: Accepted extentions for quasar catalog."""
+"""set: Accepted extensions for quasar catalog."""
 _required_columns = [
     set(['TARGETID']), set(['Z']), set(['TARGET_RA', 'RA']),
     set(['TARGET_DEC', 'DEC'])

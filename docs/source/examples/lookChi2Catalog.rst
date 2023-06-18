@@ -54,6 +54,8 @@ Look into output files
 .. image:: ../_static/chi2cat_hist.png
 
 
+Now let us investigate the ``attributes.fits`` file, which contain mean continuum, varlss-eta and stacked flux values for all iterations. Note this version lacks the final extensions, but they are the same as shown from another file.
+
 .. code:: python3
 
     fattr = fitsio.FITS("Delta-co1/attributes.fits")
@@ -84,7 +86,7 @@ Look into output files
       13     BINARY_TBL      CONT-7
       14     BINARY_TBL      VAR_FUNC-7
 
-
+The final iteration extensions can now be found ``attributes.fits`` as of version>=0.6.
 
 .. code:: python3
 
@@ -132,7 +134,7 @@ Look into output files
         num_qso             i8  
         cov_var_delta       f8  array[100]
 
-
+Note you will have ``cov_var_delta`` only if you ran ``qsonic-fit`` with ``--var-use-cov`` option.
 
 .. code:: python3
 
