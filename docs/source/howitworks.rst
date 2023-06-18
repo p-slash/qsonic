@@ -39,10 +39,11 @@ This stage includes reading the quasar catalog, files needed for masking and the
 
 We read the quasar catalog, apply a quasar redshift cut. The minimum and maximum quasar redshifts are calculated as follows:
 
-.. literalinclude:: ../../py/qsonic/scripts/qsonic_fit.py
-   :language: python3
-   :linenos:
-   :lines: 240-242
+.. code::python3
+
+    tol = (args.forest_w2 - args.forest_w1) * args.skip
+    zmin_qso = args.wave1 / (args.forest_w2 - tol) - 1
+    zmax_qso = args.wave2 / (args.forest_w1 + tol) - 1
 
 The catalog is then grouped into healpixels. We balance the load of each MPI process by roughly having equal number of spectra per process.
 
@@ -56,11 +57,11 @@ Priming
 -------
 This stage includes eliminating quasars based on remaining pixels and SNR, reading files that are needed for calibration and then calibrating, masking pixels for sky, BAL and DLA features, and finally smoothing the pipeline variance (which only affects the weights and not the output IVAR column in delta files).
 
-As noted above, a right-side SNR (RSNR) cut is applied to remove quasars (if such an option is passed) while reading the spectra. The spectra are further recalibrated, masked, corrected and eliminated if short.
+As noted above, a right-side SNR (RSNR) cut is applied to remove quasars (if such an option is passed) while reading the spectra. If ``--coadd_arms before``, the spectrograph arms are coadded using a simple inverse variance weighting (note RSNR is calculated when arms were separate). The spectra are further recalibrated, masked, corrected and eliminated if short.
 
 We read and apply noise and flux calibrations in :func:`qsonic.scripts.qsonic_fit.mpi_noise_flux_calibrate`. See :mod:`qsonic.calibration` for :class:`NoiseCalibrator <qsonic.calibration.NoiseCalibrator>` and :class:`FluxCalibrator <qsonic.calibration.FluxCalibrator>`.
 
-We apply masks in :func:`qsonic.scripts.qsonic_fit.apply_masks`. See :mod:`qsonic.masks` for :class:`SkyMask <qsonic.masks.SkyMask>`, :class:`BALMask <qsonic.masks.BALMask>` and :class:`DLAMask <qsonic.masks.DLAMask>`. Masking is set by setting ``forestivar=0``. :class:`DLAMask <qsonic.masks.DLAMask>` further corrects for Lya and Lyb damping wings. Empty arms are removed after masking. Short spectra are also removed from the list.
+We apply masks in :func:`qsonic.scripts.qsonic_fit.apply_masks`. See :mod:`qsonic.masks` for :class:`SkyMask <qsonic.masks.SkyMask>`, :class:`BALMask <qsonic.masks.BALMask>` and :class:`DLAMask <qsonic.masks.DLAMask>`. Masking is set by setting ``forestivar=0``. :class:`DLAMask <qsonic.masks.DLAMask>` further corrects for Lya and Lyb damping wings. Empty arms are removed after masking. Short spectra are also removed from the list. The shortness is based on ratio ``--skip`` and number of pixels where ``ivar > 0`` (see :meth:`qsonic.spectrum.Spectrum.is_long`).
 
 Inverse variance is smoothed by ``--smoothing-scale``, which will be the ingredient of ``forestweights``. 'IVAR' column of the delta files are not smoothed, but 'WEIGHT' column will be.
 
@@ -71,17 +72,27 @@ This stage starts with the construction of a :class:`PiccaContinuumFitter <qsoni
 - Number of bins for the mean continuum is calculated. This number aims to achieve rest-frame wavelength step size that is close to ``--rfdwave``, but not exactly. Rest-frame forest wavelengths are strictly enforced, where ``--forest_w1`` and ``--forest_w2`` are the edges (not the centers).
 - A fast cubic spline with initial value of one is contructed for the mean continuum interpolation.
 - Minimizer is chosen for the given option (iminuit by default).
-- Fiducial mean flux and varlss values are read from file if passed. This file must be a FITS file with a 'STATS' extension. This extension must have an **equally and linearly spaced** 'LAMBDA' column for the wavelength in Angstrom. Fiducial flux is read from the 'MEANFLUX' column, whereas varlss is read from the 'VAR' column. Note you can use the same file for both options. These fiducial values are **linearly** interpolated.
+- Fiducial mean flux and varlss values are read from file if passed. This file must be a FITS file with a 'STATS' extension. This extension must have an **equally and linearly spaced** 'LAMBDA' column for the wavelength in Angstrom. Fiducial flux is read from the 'MEANFLUX' column, whereas varlss is read from the 'VAR_LSS' column. Note you can use the same file for both options. These fiducial values are **linearly** interpolated.
 - If no fiducial varlss is provided, a :class:`VarLSSFitter <qsonic.picca_continuum.VarLSSFitter>` class and a fast cubic spline with initial value of 0.1 are constructed. The fitter class uses bin size of approximately 120 A in the observed frame, where ``--wave1`` and ``--wave2`` are the edges. It applies the delete-one block Jackknife method to calculate the errors (and the covariance if requested) over 10,000 subsamples.
 - A fast cubic spline with initial value of zero is constructed for the noise calibration parameter :math:`\eta`. Fitting for this parameter is enabled only if ``--var-fit-eta`` option is passed.
 
 
 We then start iterating, which itself consists of three major steps: initialization, fitting, updating the global variables. The initialization sets ``cont_params`` variable of every Spectrum object. Continuum polynomial order is carried by setting ``cont_params[x]``. At each iteration:
 
-#. Global variables (mean continuum, var_lss) are saved to ``attributes.fits`` file. This ensures the order of what is used in each iteration.
-#. All spectra are fit.
-#. Mean continuum is updated by stacking, smoothing and removing degenarate modes. We check for convergence (update is small).
+#. Global variables (mean continuum, var_lss) are saved to ``attributes.fits`` file (see :doc:`/examples/lookChi2Catalog`). This ensures the order of what is used in each iteration. 
+#. All spectra are fit (see :meth:`fit_continuum <qsonic.picca_continuum.PiccaContinuumFitter.fit_continuum>`).
+#. Mean continuum is updated by stacking, smoothing and removing degenarate modes. We check for convergence (update is small). See :meth:`update_mean_cont <qsonic.picca_continuum.PiccaContinuumFitter.update_mean_cont>` and :meth:`_project_normalize_meancont <qsonic.picca_continuum.PiccaContinuumFitter._project_normalize_meancont>`.
 #. If we are fitting for var_lss, we fit and update by calculating variance statistics.
+
+You can read :class:`VarLSSFitter <qsonic.picca_continuum.VarLSSFitter>` to understand how variance fitting is performed. Some highlights are the error on observed variance is calculated using block delete-one Jackknife method, which further allows us to calculate the entire covariance matrix. We find varlss and eta solution using ``curve_fit``.
+
+Cleaning & Saving
+-----------------
+The last two steps are straightforward. We coadd arms after continuum fitting and recalculate chi2 values if ``--coadd_arms after``. We save a catalog continuum parameters and chi2 (see :doc:`/examples/lookChi2Catalog`).
+
+We check for short spectra once more, which is important if ``--coadd_arms disable``.
+
+We finally save delta files in BinaryTable format. Delta files are organized in MPI ranks. It is also possible to save by the original healpix numbers in the catalog, but this creates a lot of files.
 
 .. [Bautista2017] Bautista J. E., et al., 2017, `A&A, 603, A12 <https://ui.adsabs.harvard.edu/abs/2017A%26A...603A..12B/abstract>`_
 .. [duMasdesBourboux2019] du Mas des Bourboux H., et al., 2019, `ApJ, 878, 47 <https://ui.adsabs.harvard.edu/abs/2019ApJ...878...47D>`_
