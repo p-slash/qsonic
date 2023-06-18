@@ -355,7 +355,11 @@ class Spectrum():
         self.reso = {}
 
     def get_real_size(self):
-        """int: Sum of number of pixels with `forestivar > 0` for all arms."""
+        """
+        Returns
+        -------
+        int: Sum of number of pixels with ``forestivar > 0`` for all arms.
+        """
         size = 0
         for ivar_arm in self.forestivar.values():
             size += np.sum(ivar_arm > 0)
@@ -363,6 +367,25 @@ class Spectrum():
         return size
 
     def is_long(self, dforest_wave, skip_ratio):
+        """Determine if spectrum is long enough to be accepted.
+
+        The condition is :meth:`get_real_size` > ``skip_ratio * npixels``,
+        where ``npixels`` :math:`=(1 + z_\\mathrm{qso}) \\times` ``dforest_wave``
+        :math:`/ \\mathrm{d}\\lambda` and :math:`\\mathrm{d}\\lambda` is
+        wavelength spacing in the observed frame in A. 
+
+        Arguments
+        ---------
+        dforest_wave: float
+            Length of the forest in the rest-frame in A.
+        skip_ratio: float
+            Minimum ratio that needs to be present and unmasked to keep the
+            spectrum.
+
+        Returns
+        -------
+        bool
+        """
         npixels = (1 + self.z_qso) * dforest_wave / self.dwave
         return self.get_real_size() > skip_ratio * npixels
 
