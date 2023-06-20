@@ -487,7 +487,7 @@ class PiccaContinuumFitter():
 
         return new_meancont, mean
 
-    def update_mean_cont(self, spectra_list, noupdate):
+    def update_mean_cont(self, spectra_list):
         """ Update the global mean continuum and stacked flux.
 
         Uses :attr:`forestivar_sm <qsonic.spectrum.Spectrum.forestivar_sm>`
@@ -496,15 +496,12 @@ class PiccaContinuumFitter():
         :external+scipy:py:class:`scipy.interpolate.UnivariateSpline`. The mean
         continuum is removed from higher Legendre polynomials and normalized by
         the mean. This function updates
-        :attr:`meancont_interp.fp <.meancont_interp>` if noupdate is False.
+        :attr:`meancont_interp.fp <.meancont_interp>`.
 
         Arguments
         ---------
         spectra_list: list(Spectrum)
             Spectrum objects to fit.
-        noupdate: bool
-            Does not update :attr:`meancont_interp.fp <.meancont_interp>` if
-            True (last iteration).
 
         Returns
         ---------
@@ -562,8 +559,7 @@ class PiccaContinuumFitter():
         norm_flux = new_meancont / self.meancont_interp.fp - 1
         std_flux /= mean_
 
-        if not noupdate:
-            self.meancont_interp.reset(new_meancont, ep=std_flux)
+        self.meancont_interp.reset(new_meancont, ep=std_flux)
 
         all_pt_test = np.all(np.abs(norm_flux) < 0.33 * std_flux)
         chi2_change = np.sum((norm_flux / std_flux)**2) / self.nbins
@@ -583,7 +579,7 @@ class PiccaContinuumFitter():
 
         return has_converged
 
-    def update_var_lss_eta(self, spectra_list, noupdate):
+    def update_var_lss_eta(self, spectra_list):
         """ Fit and update var_lss and eta if enabled. See
         :class:`VarLSSFitter` for fitting details.
 
@@ -591,8 +587,6 @@ class PiccaContinuumFitter():
         ---------
         spectra_list: list(Spectrum)
             Spectrum objects to fit.
-        noupdate: bool
-            Does not update `self.varlss_interp.fp` if True (last iteration).
         """
         if self.varlss_fitter is None:
             return
@@ -619,9 +613,9 @@ class PiccaContinuumFitter():
         logging_mpi(text, self.mpi_rank)
         y, ep = self.varlss_fitter.fit(initial_guess)
 
-        if not noupdate and not self.fit_eta:
+        if not self.fit_eta:
             self.varlss_interp.reset(y, ep=ep)
-        if not noupdate and self.fit_eta:
+        else:
             self.varlss_interp.reset(y[:, 0], ep=ep[:, 0])
             self.eta_interp.reset(y[:, 1], ep=ep[:, 1])
 
@@ -698,7 +692,6 @@ class PiccaContinuumFitter():
         fattr = MPISaver(fname, self.mpi_rank)
 
         for it in range(self.niterations):
-            is_last_it = it == self.niterations - 1
             logging_mpi(
                 f"Fitting iteration {it+1}/{self.niterations}", self.mpi_rank)
 
@@ -708,9 +701,9 @@ class PiccaContinuumFitter():
             self.fit_continua(spectra_list)
             # Stack all spectra in each process
             # Broadcast and recalculate global functions
-            has_converged = self.update_mean_cont(spectra_list, is_last_it)
+            has_converged = self.update_mean_cont(spectra_list)
 
-            self.update_var_lss_eta(spectra_list, is_last_it)
+            self.update_var_lss_eta(spectra_list)
 
             if has_converged:
                 logging_mpi("Iteration has converged.", self.mpi_rank)
