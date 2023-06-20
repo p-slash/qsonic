@@ -61,7 +61,10 @@ def add_picca_continuum_parser(parser=None):
         help="Use covariance in varlss-eta fitting.")
     cont_group.add_argument(
         "--normalize-stacked-flux", action="store_true",
-        help="NOT IMPLEMENTED: Force stacked flux to be one at the end.")
+        help=("Force stacked flux to be one at the end."
+              "Note this does not change STACKED_FLUX in attributes. "
+              "It only updates CONT of each delta.")
+    )
     cont_group.add_argument(
         "--rfdwave", type=float, default=0.8,
         help="Rest-frame wave steps. Complies with forest limits")
@@ -125,6 +128,8 @@ class PiccaContinuumFitter():
         Directory to save catalogs. If None or empty, does not save.
     fit_eta: bool
         True if fitting eta and fiducial var_lss is not set.
+    normalize_stacked_flux: bool
+        Normalizes observed flux to be 1 if True.
     """
 
     def _get_fiducial_interp(self, fname, col2read):
@@ -236,6 +241,7 @@ class PiccaContinuumFitter():
         self.cont_order = args.cont_order
         self.outdir = args.outdir
         self.fit_eta = args.var_fit_eta
+        self.normalize_stacked_flux = args.normalize_stacked_flux
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
         """ Cost function to minimize for each quasar.
@@ -637,6 +643,25 @@ class PiccaContinuumFitter():
         text += "------------------------------"
         logging_mpi(text, 0)
 
+    def _normalize_flux(self, spectra_list):
+        """Multiplies continuum estimates with stacked values in order to
+        normalize flux in the observed grid to be 1 if
+        ``--normalize-stacked-flux`` is passed.
+
+        Arguments
+        ---------
+        spectra_list: list(Spectrum)
+            Spectrum objects.
+        """
+        if not self.normalize_stacked_flux:
+            return
+
+        logging_mpi("Forcing stacked flux to be one.", self.mpi_rank)
+
+        for spec in valid_spectra(spectra_list):
+            for arm, wave_arm in spec.forestwave.items():
+                spec.cont_params['cont'][arm] *= self.flux_stacker(wave_arm)
+
     def iterate(self, spectra_list):
         """Main function to fit continua and iterate.
 
@@ -694,6 +719,8 @@ class PiccaContinuumFitter():
         if not has_converged:
             warn_mpi("Iteration has NOT converged.", self.mpi_rank)
 
+        self._normalize_flux(spectra_list)
+
         self.save(fattr)
         if self.varlss_fitter:
             self.varlss_fitter.write(fattr)
@@ -739,6 +766,8 @@ class PiccaContinuumFitter():
 
         self.update_mean_cont(spectra_list, False)
         self.update_var_lss_eta(spectra_list, False)
+        self._normalize_flux(spectra_list)
+
         fname = f"{self.outdir}/attributes.fits" if self.outdir else ""
         fattr = MPISaver(fname, self.mpi_rank)
         self.save(fattr)
