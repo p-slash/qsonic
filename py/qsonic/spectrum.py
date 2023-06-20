@@ -2,7 +2,6 @@ import argparse
 
 import numpy as np
 
-from qsonic import QsonicException
 from qsonic.mathtools import _zero_function, _one_function, get_smooth_ivar
 
 
@@ -370,9 +369,10 @@ class Spectrum():
         """Determine if spectrum is long enough to be accepted.
 
         The condition is :meth:`get_real_size` > ``skip_ratio * npixels``,
-        where ``npixels`` :math:`=(1 + z_\\mathrm{qso}) \\times` ``dforest_wave``
-        :math:`/ \\mathrm{d}\\lambda` and :math:`\\mathrm{d}\\lambda` is
-        wavelength spacing in the observed frame in A. 
+        where ``npixels`` :math:`=(1 + z_\\mathrm{qso}) \\times`
+        ``dforest_wave`` :math:`/ \\mathrm{d}\\lambda` and
+        :math:`\\mathrm{d}\\lambda` is wavelength spacing in the observed frame
+        in A.
 
         Arguments
         ---------
