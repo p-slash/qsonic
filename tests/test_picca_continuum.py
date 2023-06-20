@@ -185,7 +185,7 @@ class TestPiccaContinuum(object):
             for arm, wave_arm in spec.forestwave.items():
                 spec.cont_params['cont'][arm] = np.ones_like(wave_arm)
 
-        qcfit.update_mean_cont(spectra_list, False)
+        qcfit.update_mean_cont(spectra_list)
         npt.assert_allclose(qcfit.meancont_interp.fp, 1, rtol=1e-3)
         npt.assert_almost_equal(qcfit.meancont_interp.fp.mean(), 1)
 

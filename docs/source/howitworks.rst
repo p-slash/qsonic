@@ -86,6 +86,10 @@ We then start iterating, which itself consists of three major steps: initializat
 
 You can read :class:`VarLSSFitter <qsonic.picca_continuum.VarLSSFitter>` to understand how variance fitting is performed. Some highlights are the error on observed variance is calculated using block delete-one Jackknife method, which further allows us to calculate the entire covariance matrix. We find varlss and eta solution using ``curve_fit``.
 
+.. note::
+
+    The **CONT** and **VAR_FUNC** extentions in ``attributes.fits`` file in the last iterations are the new values after continuum fitting and are **not** used in the continuum itself. To investigate what went into the fitting, you should refer to the second to last extentions. In case of **STACKED_FLUX**, the last iteration values **should** be used to calibrate and normalize.
+
 Cleaning & Saving
 -----------------
 The last two steps are straightforward. We coadd arms after continuum fitting and recalculate chi2 values if ``--coadd_arms after``. We save a catalog continuum parameters and chi2 (see :doc:`/examples/lookChi2Catalog`).
