@@ -757,8 +757,8 @@ class PiccaContinuumFitter():
             spec.set_forest_weight(self.varlss_interp)
             spec.calc_continuum_chi2()
 
-        self.update_mean_cont(spectra_list, False)
-        self.update_var_lss_eta(spectra_list, False)
+        self.update_mean_cont(spectra_list)
+        self.update_var_lss_eta(spectra_list)
         self._normalize_flux(spectra_list)
 
         fname = f"{self.outdir}/attributes.fits" if self.outdir else ""
