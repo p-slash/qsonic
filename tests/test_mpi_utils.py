@@ -52,6 +52,10 @@ class TestMPIUtils(TestCase):
             qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options,
                                        args_logic_fnc_qsonic_fit)
 
+        with pytest.raises(SystemExit):
+            qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, ['-h'],
+                                       args_logic_fnc_qsonic_fit)
+
     def test_mpi_fnc_bcast(self):
         matrix = np.arange(20).reshape(4, 5)
         u, s, vh = np.linalg.svd(matrix)
