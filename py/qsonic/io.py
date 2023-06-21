@@ -558,7 +558,8 @@ def read_onehealpix_file_mock(
 
     fspec = f"{input_dir}/{pixnum//100}/{pixnum}/truth-{nside}-{pixnum}.fits"
     if read_true_continuum:
-        data['cont'] = _read_true_continuum(catalog_hpx['TARGETID'], fspec)
+        data['cont'] = _read_true_continuum(
+            catalog_hpx['TARGETID'][idx_cat], fspec)
 
     if skip_resomat:
         return data, idx_cat
