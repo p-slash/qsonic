@@ -7,6 +7,9 @@ QSOnic
 .. image:: https://img.shields.io/pypi/v/qsonic?color=blue
     :target: https://pypi.org/project/qsonic
 
+.. image:: https://img.shields.io/badge/Source-qsonic-red
+    :target: https://github.com/p-slash/qsonic
+
 .. image:: https://github.com/p-slash/qsonic/actions/workflows/testing.yml/badge.svg
     :target: https://github.com/p-slash/qsonic/actions/workflows/testing.yml
     :alt: Tests Status
