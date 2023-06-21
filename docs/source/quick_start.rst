@@ -1,5 +1,6 @@
 Quick Start
 ===========
+On NERSC, run: ``source /global/cfs/projectdirs/desi/science/lya/scripts/activate_qsonic.sh``
 
 Running qsonic-fit
 -------------------------
