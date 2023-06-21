@@ -32,10 +32,9 @@ def mpi_parse(
     if mpi_rank == 0:
         try:
             args = parser.parse_args(options)
+            if not args_logic_fnc(args):
+                args = -1
         except SystemExit:
-            args = -1
-
-        if not args_logic_fnc(args):
             args = -1
     else:
         args = -1
