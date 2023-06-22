@@ -821,8 +821,7 @@ class PiccaContinuumFitter():
             ('ARMS', 'U5'), ('MEANSNR', 'f4', 3), ('RSNR', 'f4'),
             ('MPI_RANK', 'i4'),
             ('CONT_valid', bool), ('CONT_chi2', 'f4'), ('CONT_dof', 'i4'),
-            ('CONT_x', 'f4', corder),
-            ('CONT_xcov', 'f4', corder**2)
+            ('CONT_x', 'f4', (corder, )), ('CONT_xcov', 'f4', (corder**2, ))
         ])
         local_catalog = np.empty(len(spectra_list), dtype=dtype)
 
