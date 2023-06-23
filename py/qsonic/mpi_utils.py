@@ -1,5 +1,4 @@
 import logging
-import warnings
 
 import fitsio
 import numpy as np
@@ -60,21 +59,6 @@ def logging_mpi(msg, mpi_rank, fnc="info"):
     """
     if mpi_rank == 0:
         getattr(logging, fnc)(msg)
-
-
-def warn_mpi(msg, mpi_rank):
-    """ Warns of RuntimeWarning only on ``mpi_rank=0``.
-
-    Arguments
-    ---------
-    msg: str
-        Message to log.
-    mpi_rank: int
-        Rank of the MPI process.
-    """
-
-    if mpi_rank == 0:
-        warnings.warn(msg, RuntimeWarning)
 
 
 class _INVALID_VALUE(object):
