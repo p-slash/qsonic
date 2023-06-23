@@ -119,14 +119,22 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
             cat, args.input_dir, args.arms, args.mock_analysis, skip_resomat,
             args.true_continuum)
 
+        specs_to_keep = []
+
         for spec in local_specs:
             spec.set_forest_region(
                 args.wave1, args.wave2, args.forest_w1, args.forest_w2)
-
             spec.remove_nonforest_pixels()
 
-        spectra_list.extend(
-            [spec for spec in local_specs if spec.rsnr > args.min_rsnr])
+            if not spec.forestwave:
+                continue
+
+            if spec.rsnr < args.min_rsnr:
+                continue
+
+            specs_to_keep.append(spec)
+
+        spectra_list.extend(specs_to_keep)
 
         # if args.skip_resomat:
         #     continue
