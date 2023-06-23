@@ -872,7 +872,7 @@ class VarLSSFitter():
     """ Variance fitter for the large-scale fluctuations.
 
     Input wavelengths and variances are the bin edges, so centers will be
-    shifted. Valid bins require at least 500 pixels from 50 quasars. Assumes no
+    shifted. Valid bins require at least 100 pixels from 10 quasars. Assumes no
     spectra has `wave < w1obs` or `wave > w2obs`.
 
     .. note::
@@ -947,9 +947,9 @@ class VarLSSFitter():
     mpi_rank: int
         Rank of the MPI process if ``comm!=None``. Zero otherwise.
     """
-    min_num_pix = 500
+    min_num_pix = 100
     """int: Minimum number of pixels a bin must have to be valid."""
-    min_num_qso = 50
+    min_num_qso = 10
     """int: Minimum number of quasars a bin must have to be valid."""
 
     @staticmethod
@@ -1188,8 +1188,8 @@ class VarLSSFitter():
         fit_results = np.zeros_like(initial_guess)
         std_results = np.zeros_like(initial_guess)
 
-        w_gtr_min = ((self.num_pixels > VarLSSFitter.min_num_pix)
-                     & (self.num_qso > VarLSSFitter.min_num_qso))
+        w_gtr_min = ((self.num_pixels >= VarLSSFitter.min_num_pix)
+                     & (self.num_qso >= VarLSSFitter.min_num_qso))
 
         if self.use_cov:
             err_base = self.cov_var_delta
