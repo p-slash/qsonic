@@ -351,6 +351,11 @@ class Spectrum():
         since it is a static variable. Good practive is to loop using, e.g.,
         ``for arm, wave_arm in self.forestwave.items():``.
         """
+        for arm in self.flux.keys():
+            del self.flux[arm]
+            del self.ivar[arm]
+            del self.reso[arm]
+
         self._current_wave = {}
         self.flux = {}
         self.ivar = {}
