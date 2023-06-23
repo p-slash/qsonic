@@ -13,7 +13,7 @@ from mpi4py import MPI
 
 from qsonic import QsonicException
 from qsonic.spectrum import valid_spectra
-from qsonic.mpi_utils import logging_mpi, warn_mpi, mpi_fnc_bcast, MPISaver
+from qsonic.mpi_utils import logging_mpi, mpi_fnc_bcast, MPISaver
 from qsonic.mathtools import (
     mypoly1d, block_covariance_of_square,
     FastLinear1DInterp, FastCubic1DInterp,
@@ -426,8 +426,6 @@ class PiccaContinuumFitter():
         ------
         QsonicException
             If there are no valid fits.
-        RuntimeWarning
-            If more than 20% spectra have invalid fits.
         """
         num_valid_fits = 0
         num_invalid_fits = 0
@@ -452,7 +450,9 @@ class PiccaContinuumFitter():
 
         invalid_ratio = num_invalid_fits / (num_valid_fits + num_invalid_fits)
         if invalid_ratio > 0.2:
-            warn_mpi("More than 20% spectra have invalid fits.", self.mpi_rank)
+            logging_mpi(
+                "More than 20% spectra have invalid fits.", self.mpi_rank,
+                "warning")
 
     def _project_normalize_meancont(self, new_meancont):
         """ Project out higher order Legendre polynomials from the new mean
@@ -539,9 +539,9 @@ class PiccaContinuumFitter():
         w = counts > 0
 
         if w.sum() != self.nbins:
-            warn_mpi(
+            logging_mpi(
                 "Extrapolating empty bins in the mean continuum.",
-                self.mpi_rank)
+                self.mpi_rank, "warning")
 
         norm_flux[w] /= counts[w]
         norm_flux[~w] = np.mean(norm_flux[w])
@@ -568,7 +568,7 @@ class PiccaContinuumFitter():
         if self.mpi_rank != 0:
             return has_converged
 
-        text = ("Continuum updates\n" "rfwave\t| update\t| error\n")
+        text = ("Continuum updates:\n" "rfwave\t| update\t| error\n")
 
         sl = np.s_[::max(1, self.nbins // 10)]
         for w, n, e in zip(self.rfwave[sl], norm_flux[sl], std_flux[sl]):
@@ -623,7 +623,7 @@ class PiccaContinuumFitter():
             return
 
         step = max(1, self.varlss_fitter.nwbins // 10)
-        text = ("------------------------------\n"
+        text = ("Variance fitting results:\n"
                 "wave\t| var_lss +-  error \t|   eta   +-  error \n")
 
         for i in range(0, self.varlss_fitter.nwbins, step):
@@ -634,7 +634,7 @@ class PiccaContinuumFitter():
             ne = self.eta_interp.ep[i]
             text += \
                 f"{w:7.2f}\t| {v:7.2e} +- {ve:7.2e}\t| {n:7.2e} +- {ne:7.2e}\n"
-        text += "------------------------------"
+
         logging_mpi(text, 0)
 
     def _normalize_flux(self, spectra_list):
@@ -710,7 +710,8 @@ class PiccaContinuumFitter():
                 break
 
         if not has_converged:
-            warn_mpi("Iteration has NOT converged.", self.mpi_rank)
+            logging_mpi("Iteration has NOT converged.", self.mpi_rank,
+                        "warning")
 
         self._normalize_flux(spectra_list)
 
@@ -1203,10 +1204,10 @@ class VarLSSFitter():
 
             if w.sum() == 0:
                 nfails += 1
-                warn_mpi(
+                logging_mpi(
                     "Not enough statistics for VarLSSFitter at"
                     f" wave_obs: {self.waveobs[iwave]:.2f}.",
-                    self.mpi_rank)
+                    self.mpi_rank, "warning")
                 continue
 
             if self.use_cov:
@@ -1227,11 +1228,11 @@ class VarLSSFitter():
                 )
             except Exception as e:
                 nfails += 1
-                warn_mpi(
+                logging_mpi(
                     "VarLSSFitter failed at wave_obs: "
                     f"{self.waveobs[iwave]:.2f}. "
                     f"Reason: {e}. Extrapolating.",
-                    self.mpi_rank)
+                    self.mpi_rank, "warning")
             else:
                 fit_results[iwave] = pfit
                 std_results[iwave] = np.sqrt(np.diag(pcov))
@@ -1242,9 +1243,9 @@ class VarLSSFitter():
                 "VarLSSFitter failed at more than 40% points.")
 
         if nfails > 0:
-            warn_mpi(
+            logging_mpi(
                 f"VarLSSFitter failed and extrapolated at {nfails} points.",
-                self.mpi_rank)
+                self.mpi_rank, "warning")
 
         # Smooth new estimates
         if smooth:
