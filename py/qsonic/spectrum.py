@@ -218,8 +218,8 @@ class Spectrum():
         self._smoothing_scale = 0
 
         for arm, wave_arm in self.wave.items():
-            self.flux[arm] = flux[arm][idx]
-            self.ivar[arm] = ivar[arm][idx]
+            self.flux[arm] = flux[arm][idx].copy()
+            self.ivar[arm] = ivar[arm][idx].copy()
             w = (mask[arm][idx] != 0) | np.isnan(self.flux[arm])\
                 | np.isnan(self.ivar[arm])
             self.flux[arm][w] = 0
@@ -230,7 +230,7 @@ class Spectrum():
             elif reso[arm].ndim == 2:
                 self.reso[arm] = reso[arm].copy()
             else:
-                self.reso[arm] = reso[arm][idx]
+                self.reso[arm] = reso[arm][idx].copy()
 
         self.cont_params = {}
         self.cont_params['method'] = ''
@@ -306,11 +306,14 @@ class Spectrum():
             self._f1[arm], self._f2[arm] = ii1, ii2
 
             # Does this create a view or copy array?
-            self._forestwave[arm] = wave_arm[ii1:ii2]
-            self._forestflux[arm] = self.flux[arm][ii1:ii2]
-            self._forestivar[arm] = self.ivar[arm][ii1:ii2]
+            # See https://numpy.org/doc/stable/user/basics.copies.html
+            # Slicing creates views, not copies. Bases of views are not removed
+            # from memory!
+            self._forestwave[arm] = wave_arm[ii1:ii2].copy()
+            self._forestflux[arm] = self.flux[arm][ii1:ii2].copy()
+            self._forestivar[arm] = self.ivar[arm][ii1:ii2].copy()
             if self.reso:
-                self._forestreso[arm] = self.reso[arm][:, ii1:ii2]
+                self._forestreso[arm] = self.reso[arm][:, ii1:ii2].copy()
 
         self._forestivar_sm = self._forestivar
         self._forestweight = self._forestivar
