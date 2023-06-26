@@ -624,7 +624,7 @@ class PiccaContinuumFitter():
 
         step = max(1, self.varlss_fitter.nwbins // 10)
         text = ("Variance fitting results:\n"
-                "wave\t| var_lss +-  error \t|   eta   +-  error \n")
+                "wave\t| var_lss +-  error \t|   eta   +-  error")
 
         for i in range(0, self.varlss_fitter.nwbins, step):
             w = self.varlss_fitter.waveobs[i]
@@ -633,7 +633,7 @@ class PiccaContinuumFitter():
             n = self.eta_interp.fp[i]
             ne = self.eta_interp.ep[i]
             text += \
-                f"{w:7.2f}\t| {v:7.2e} +- {ve:7.2e}\t| {n:7.2e} +- {ne:7.2e}\n"
+                f"\n{w:7.2f}\t| {v:7.2e} +- {ve:7.2e}\t| {n:7.2e} +- {ne:7.2e}"
 
         logging_mpi(text, 0)
 
@@ -1146,6 +1146,45 @@ class VarLSSFitter():
         if arr.ndim == 2:
             assert (arr.shape[1] == 2)
 
+    def _get_wave_bin_slice_params(self, iwave):
+        i1 = iwave * self.nvarbins
+        i2 = i1 + self.nvarbins
+        wave_slice = np.s_[i1:i2]
+        w = ((self.num_pixels[wave_slice] >= VarLSSFitter.min_num_pix)
+             & (self.num_qso[wave_slice] >= VarLSSFitter.min_num_qso))
+
+        if w.sum() < 5:
+            logging_mpi(
+                "Not enough statistics for VarLSSFitter at "
+                f"{self.waveobs[iwave]:.2f} A. Increasing validity range...",
+                self.mpi_rank, "warning")
+            w = ((self.num_pixels[wave_slice] >= VarLSSFitter.min_num_pix // 2)
+                 & (self.num_qso[wave_slice] >= VarLSSFitter.min_num_qso // 2))
+
+        if w.sum() < 5:
+            logging_mpi(
+                "Still not enough statistics for VarLSSFitter at "
+                f"{self.waveobs[iwave]:.2f} A.",
+                self.mpi_rank, "warning")
+            return None, None, None
+
+        if self.use_cov:
+            err2use = self.cov_var_delta[iwave][:, w][w, :]
+
+            try:
+                _ = np.linalg.cholesky(err2use)
+            except np.linalg.LinAlgError:
+                logging_mpi(
+                    "Covariance matrix is not positive-definite "
+                    f"{self.waveobs[iwave]:.2f} A. Fallback to diagonals.",
+                    self.mpi_rank, "warning")
+
+                err2use = self.e_var_delta[wave_slice][w]
+        else:
+            err2use = self.e_var_delta[wave_slice][w]
+
+        return wave_slice, w, err2use
+
     def fit(self, initial_guess, smooth=True):
         """ Syncronize all MPI processes and fit for ``var_lss`` and ``eta``.
 
@@ -1188,32 +1227,12 @@ class VarLSSFitter():
         fit_results = np.zeros_like(initial_guess)
         std_results = np.zeros_like(initial_guess)
 
-        w_gtr_min = ((self.num_pixels > VarLSSFitter.min_num_pix)
-                     & (self.num_qso > VarLSSFitter.min_num_qso))
-
-        if self.use_cov:
-            err_base = self.cov_var_delta
-        else:
-            err_base = self.e_var_delta
-
         for iwave in range(self.nwbins):
-            i1 = iwave * self.nvarbins
-            i2 = i1 + self.nvarbins
-            wave_slice = np.s_[i1:i2]
-            w = w_gtr_min[wave_slice]
+            wave_slice, w, err2use = self._get_wave_bin_slice_params(iwave)
 
-            if w.sum() == 0:
+            if w is None:
                 nfails += 1
-                logging_mpi(
-                    "Not enough statistics for VarLSSFitter at"
-                    f" wave_obs: {self.waveobs[iwave]:.2f}.",
-                    self.mpi_rank, "warning")
                 continue
-
-            if self.use_cov:
-                err2use = err_base[iwave][:, w][w, :]
-            else:
-                err2use = err_base[wave_slice][w]
 
             try:
                 pfit, pcov = curve_fit(
