@@ -273,6 +273,7 @@ def main():
         mpi_run_all(comm, mpi_rank, mpi_size)
     except QsonicException as e:
         logging_mpi(e, mpi_rank, "exception")
+        exit(1)
     except Exception as e:
         logging.error(f"Unexpected error on Rank{mpi_rank}. Abort.")
         logging.exception(e)
