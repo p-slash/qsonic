@@ -624,7 +624,7 @@ class PiccaContinuumFitter():
 
         step = max(1, self.varlss_fitter.nwbins // 10)
         text = ("Variance fitting results:\n"
-                "wave\t| var_lss +-  error \t|   eta   +-  error \n")
+                "wave\t| var_lss +-  error \t|   eta   +-  error")
 
         for i in range(0, self.varlss_fitter.nwbins, step):
             w = self.varlss_fitter.waveobs[i]
@@ -633,7 +633,7 @@ class PiccaContinuumFitter():
             n = self.eta_interp.fp[i]
             ne = self.eta_interp.ep[i]
             text += \
-                f"{w:7.2f}\t| {v:7.2e} +- {ve:7.2e}\t| {n:7.2e} +- {ne:7.2e}\n"
+                f"\n{w:7.2f}\t| {v:7.2e} +- {ve:7.2e}\t| {n:7.2e} +- {ne:7.2e}"
 
         logging_mpi(text, 0)
 
@@ -1150,16 +1150,16 @@ class VarLSSFitter():
         i1 = iwave * self.nvarbins
         i2 = i1 + self.nvarbins
         wave_slice = np.s_[i1:i2]
-        w = ((self.num_pixels[wave_slice] > VarLSSFitter.min_num_pix)
-             & (self.num_qso[wave_slice] > VarLSSFitter.min_num_qso))
+        w = ((self.num_pixels[wave_slice] >= VarLSSFitter.min_num_pix)
+             & (self.num_qso[wave_slice] >= VarLSSFitter.min_num_qso))
 
         if w.sum() < 5:
             logging_mpi(
                 "Not enough statistics for VarLSSFitter at "
                 f"{self.waveobs[iwave]:.2f} A. Increasing validity range...",
                 self.mpi_rank, "warning")
-            w = ((self.num_pixels[wave_slice] > VarLSSFitter.min_num_pix / 2)
-                 & (self.num_qso[wave_slice] > VarLSSFitter.min_num_qso / 2))
+            w = ((self.num_pixels[wave_slice] >= VarLSSFitter.min_num_pix // 2)
+                 & (self.num_qso[wave_slice] >= VarLSSFitter.min_num_qso // 2))
 
         if w.sum() < 5:
             logging_mpi(
