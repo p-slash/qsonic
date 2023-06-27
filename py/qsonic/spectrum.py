@@ -368,6 +368,27 @@ class Spectrum():
 
         return size
 
+    def get_effective_meansnr(self):
+        """ Calculate a weighted average of :attr:`mean_snr` over arms. Only
+        call if :meth:`set_forest_region` has been called.
+
+        .. math::
+            \\langle\\mathrm{SNR}\\rangle = \\sum_{i} \\mathrm{SNR}_i^3 \\bigg/
+            {\\sum_{i} \\mathrm{SNR}_i^2}
+
+        Returns
+        -------
+        float: Effective mean SNR.
+        """
+        msnr_eff = 0
+        norm = 1e-8
+
+        for val in self.mean_snr.values():
+            msnr_eff += val**3
+            norm += val**2
+
+        return msnr_eff / norm
+
     def is_long(self, dforest_wave, skip_ratio):
         """Determine if spectrum is long enough to be accepted.
 
