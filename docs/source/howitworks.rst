@@ -63,6 +63,8 @@ We read and apply noise and flux calibrations in :func:`qsonic.scripts.qsonic_fi
 
 We apply masks in :func:`qsonic.scripts.qsonic_fit.apply_masks`. See :mod:`qsonic.masks` for :class:`SkyMask <qsonic.masks.SkyMask>`, :class:`BALMask <qsonic.masks.BALMask>` and :class:`DLAMask <qsonic.masks.DLAMask>`. Masking is set by setting ``forestivar=0``. :class:`DLAMask <qsonic.masks.DLAMask>` further corrects for Lya and Lyb damping wings. Empty arms are removed after masking. Short spectra are also removed from the list. The shortness is based on ratio ``--skip`` and number of pixels where ``ivar > 0`` (see :meth:`qsonic.spectrum.Spectrum.is_long`).
 
+After the masking we remove objects with low SNR in the forest region based on ``--min-forestsnr`` input and :meth:`effective SNR <qsonic.spectrum.Spectrum.get_effective_meansnr>`. Note at this stage there is no smoothing or varlss, so this SNR is based only on pipeline IVAR.
+
 Inverse variance is smoothed by ``--smoothing-scale``, which will be the ingredient of ``forestweights``. 'IVAR' column of the delta files are not smoothed, but 'WEIGHT' column will be.
 
 Continuum fitting
