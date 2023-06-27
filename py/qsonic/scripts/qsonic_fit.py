@@ -41,8 +41,11 @@ def get_parser(add_help=True):
         "--smoothing-scale", default=16., type=float,
         help="Smoothing scale for pipeline noise in A.")
     analysis_group.add_argument(
-        "--min-rsnr", type=float, default=0.,
+        "--min-rsnr", type=float, default=0,
         help="Minium SNR <F/sigma> above Lya.")
+    analysis_group.add_argument(
+        "--min-forestsnr", type=float, default=0,
+        help="Minium SNR <F/sigma> within the forest.")
     analysis_group.add_argument(
         "--skip", type=qsonic.io._float_range(0, 1), default=0.2,
         help="Skip short spectra lower than given ratio.")
@@ -348,6 +351,10 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # remove from sample if no pixels is small
     spectra_list = remove_short_spectra(
         spectra_list, args.forest_w1, args.forest_w2, args.skip, mpi_rank)
+
+    # Remove spectra with respect to forest snr
+    spectra_list = [spec for spec in spectra_list
+                    if spec.get_effective_meansnr() >= args.min_forestsnr]
 
     # Create smoothed ivar as intermediate variable
     if args.smoothing_scale > 0:
