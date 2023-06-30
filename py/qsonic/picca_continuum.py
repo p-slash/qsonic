@@ -873,7 +873,7 @@ class VarLSSFitter():
     """ Variance fitter for the large-scale fluctuations.
 
     Input wavelengths and variances are the bin edges, so centers will be
-    shifted. Valid bins require at least 100 pixels from 10 quasars. Assumes no
+    shifted. Valid bins require at least 500 pixels from 50 quasars. Assumes no
     spectra has `wave < w1obs` or `wave > w2obs`.
 
     .. note::
@@ -964,8 +964,6 @@ class VarLSSFitter():
     """int: Minimum number of pixels a bin must have to be valid."""
     min_num_qso = 50
     """int: Minimum number of quasars a bin must have to be valid."""
-    accepted_vardelta_error_methods = ["gauss", "regJack"]
-    """list(str): Accepted error estimation methods for var_delta."""
     _name_index_map = {
         "mean_delta": 0, "var_delta": 1, "var2_delta": 2, "var_centers": 3,
         "snr_centers": 4
