@@ -1,5 +1,4 @@
 import logging
-import warnings
 
 import fitsio
 import numpy as np
@@ -7,7 +6,13 @@ import numpy as np
 from qsonic import QsonicException
 
 
-def mpi_parse(parser, comm, mpi_rank, options=None):
+def _logic_true(args):
+    return True
+
+
+def mpi_parse(
+        parser, comm, mpi_rank, options=None, args_logic_fnc=_logic_true
+):
     """ Parse arguments on the master node, then broadcast.
 
     Arguments
@@ -20,10 +25,14 @@ def mpi_parse(parser, comm, mpi_rank, options=None):
         Rank of the MPI process.
     options: None or list, default: None
         Options to parse. None parses ``sys.argv``
+    args_logic_fnc: Callable[[args], bool], default: True
+        Logic function to check for args.
     """
     if mpi_rank == 0:
         try:
             args = parser.parse_args(options)
+            if not args_logic_fnc(args):
+                args = -1
         except SystemExit:
             args = -1
     else:
@@ -50,21 +59,6 @@ def logging_mpi(msg, mpi_rank, fnc="info"):
     """
     if mpi_rank == 0:
         getattr(logging, fnc)(msg)
-
-
-def warn_mpi(msg, mpi_rank):
-    """ Warns of RuntimeWarning only on ``mpi_rank=0``.
-
-    Arguments
-    ---------
-    msg: str
-        Message to log.
-    mpi_rank: int
-        Rank of the MPI process.
-    """
-
-    if mpi_rank == 0:
-        warnings.warn(msg, RuntimeWarning)
 
 
 class _INVALID_VALUE(object):
@@ -116,7 +110,8 @@ def mpi_fnc_bcast(fnc, comm=None, mpi_rank=0, err_msg="", *args, **kwargs):
         try:
             result = fnc(*args, **kwargs)
         except Exception as e:
-            logging_mpi(f"{fnc.__module__}.{fnc.__name__}: {e}", 0, "error")
+            logging.exception(e)
+            logging.error(f"Error in {fnc.__module__}.{fnc.__name__}.")
             result = _INVALID_VALUE
 
     if comm is not None:
@@ -186,7 +181,7 @@ class MPISaver():
         Arguments
         ---------
         data: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-            Data to write to extention.
+            Data to write to extension.
         names: list(str)or None, default: None
             Column names for data.
         extname: str or None, default: None

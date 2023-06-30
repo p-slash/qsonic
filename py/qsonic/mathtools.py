@@ -5,8 +5,17 @@ from numba import njit
 from qsonic import QsonicException
 
 
+def _zero_function(x):
+    return 0
+
+
+def _one_function(x):
+    return 1
+
+
 @njit("f8[:](f8[:], f8, f8, f8[:])")
-def _fast_eval_interp1d(x, xp0, dxp, fp):
+def _fast_eval_interp1d_lin(x, xp0, dxp, fp):
+    """JIT fast linear interpolation."""
     xx = (x - xp0) / dxp
     idx = np.clip(xx, 0, fp.size - 1 - 1e-8).astype(np.int_)
 
@@ -14,6 +23,61 @@ def _fast_eval_interp1d(x, xp0, dxp, fp):
     y1, y2 = fp[idx], fp[idx + 1]
 
     return y1 * (1 - d_idx) + y2 * d_idx
+
+
+@njit("f8[:](f8[:], f8, f8, f8[:], f8[:])")
+def _fast_eval_interp1d_cubic(x, xp0, dxp, fp, y2p):
+    """JIT fast cubic spline."""
+    xx = (x - xp0) / dxp
+    idx = np.clip(xx, 0, fp.size - 1 - 1e-8).astype(np.int_)
+
+    d_idx = xx - idx
+    a, b = 1 - d_idx, d_idx
+    y1, y2 = fp[idx], fp[idx + 1]
+    ypp1, ypp2 = y2p[idx], y2p[idx + 1]
+
+    r1 = a * y1 + b * y2
+    r2 = ((a + 1) * ypp1 + (b + 1) * ypp2) * (-a * b * dxp**2 / 6.)
+
+    return r1 + r2
+
+
+@njit("f8[:](f8[:], f8)")
+def _spline_cubic(fp, dxp):
+    """ Constructs the second derivative array.
+
+    As coded in Numerical Recipes in C Chaper 3.3, but specialized for equally
+    spaced input data.
+
+    Arguments
+    ---------
+    fp: ndarray
+        1D data points array to interpolate.
+    dxp: float
+        Spacing of x points.
+
+    Returns
+    -------
+    y2p: ndarray
+        Second derivative array. Same size as ``fp``.
+    """
+    y2p = np.empty(fp.size)
+    u = np.empty(fp.size - 1)
+    u[0] = 0
+    y2p[0] = y2p[-1] = 0
+
+    sig = 0.5
+
+    for ii in range(1, fp.size - 1):
+        p = sig * y2p[ii - 1] + 2.
+        y2p[ii] = (sig - 1) / p
+        u[ii] = (fp[ii + 1] + fp[ii - 1] - 2 * fp[ii]) / dxp
+        u[ii] = (3 * u[ii] / dxp - sig * u[ii - 1]) / p
+
+    for ii in range(fp.size - 2, 0, -1):
+        y2p[ii] = y2p[ii] * y2p[ii + 1] + u[ii]
+
+    return y2p
 
 
 @njit("f8[:](f8[:], f8[:])")
@@ -36,6 +100,52 @@ def mypoly1d(coef, x):
     for i, a in enumerate(coef):
         results += a * x**i
     return results
+
+
+@njit("f8[:, :, :](f8[:], f8[:], f8[:, :, :])")
+def block_covariance_of_square(mean, var, cov):
+    """ Return the block covariance of x^2, i.e.
+    :math:`<x_i^2 x_j^2> - <x_i^2><x_j^2>`. Compatible with ``blockdim``
+    argument of :meth:`SubsampleCov.get_mean_n_cov`.
+
+    .. math::
+
+        Cov[x_i^2, x_j^2] &= Var[x_i] Var[x_j] + Cov(x_i, x_j)^2 \\\\
+        &+ 2 Cov(x_i, x_j) E[x_i] E[x_j] \\\\
+        &+  Var[x_i] E[x_j]^2 + Var[x_j] E[x_i]^2
+
+    Arguments
+    ---------
+    mean: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        1D array mean values.
+    var: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        1D array variance values.
+    cov: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        3D array covariance. Shape is ``(nblock, ndata, ndata)``.
+
+    Returns
+    -------
+    new_cov: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        3D array propagated covariance.
+    """
+    nblock = cov.shape[0]
+    ndata = cov.shape[1]
+    new_cov = np.empty_like(cov)
+
+    for jj in range(nblock):
+        i1 = jj * ndata
+        i2 = i1 + ndata
+        v = var[i1:i2]
+        m = mean[i1:i2]
+
+        np.outer(v, v, out=new_cov[jj])
+        new_cov[jj] += cov[jj]**2
+        new_cov[jj] += 2 * cov[jj] * np.outer(m, m)
+
+        C1 = np.outer(v, m**2)
+        new_cov[jj] += C1 + C1.T
+
+    return new_cov
 
 
 def fft_gaussian_smooth(x, sigma_pix=20, mode='edge'):
@@ -114,27 +224,29 @@ def get_smooth_ivar(ivar, sigma_pix=20, esigma=3.5):
     return ivar2
 
 
-class Fast1DInterpolator():
+class FastLinear1DInterp():
     """Fast interpolator class for equally spaced data. Out of domain points
     are linearly extrapolated without producing any warnings or errors.
 
+    Uses :func:`_fast_eval_interp1d_lin`.
+
     Example::
 
-        one_interp = Fast1DInterpolator(0., 1., np.ones(3))
+        one_interp = FastLinear1DInterp(0., 1., np.ones(3))
         one_interp(5) # = 1
 
     Parameters
     ----------
     xp0: float
         Initial x point for interpolation data.
-    dxp0: float
+    dxp: float
         Spacing of x points.
     fp: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Function calculated at interpolation points.
-    ep: :external+numpy:py:class:`ndarray <numpy.ndarray>`, optional
-        Error on fp points. Not used! Bookkeeping purposes only.
     copy: bool, default: False
         Copy input data, specifically fp.
+    ep: :external+numpy:py:class:`ndarray <numpy.ndarray>`, optional
+        Error on fp points. Not used! Bookkeeping purposes only.
     """
 
     def __init__(self, xp0, dxp, fp, copy=False, ep=None):
@@ -147,7 +259,60 @@ class Fast1DInterpolator():
         self.ep = ep
 
     def __call__(self, x):
-        return _fast_eval_interp1d(x, self.xp0, self.dxp, self.fp)
+        return _fast_eval_interp1d_lin(x, self.xp0, self.dxp, self.fp)
+
+    def reset(self, fp, copy=False, ep=None):
+        if copy:
+            self.fp = fp.copy()
+        else:
+            self.fp = fp
+
+        self.ep = ep
+
+
+class FastCubic1DInterp():
+    """ Fast cubic spline for equally spaced data. Out of domain points
+    are linearly extrapolated without producing any warnings or errors.
+
+    Uses :func:`_spline_cubic` and :func:`_fast_eval_interp1d_cubic`.
+
+    Parameters
+    ----------
+    xp0: float
+        Initial x point for interpolation data.
+    dxp: float
+        Spacing of x points.
+    fp: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Function calculated at interpolation points.
+    copy: bool, default: False
+        Copy input data, specifically fp.
+    ep: :external+numpy:py:class:`ndarray <numpy.ndarray>`, optional
+        Error on fp points. Not used! Bookkeeping purposes only.
+    """
+
+    def __init__(self, xp0, dxp, fp, copy=False, ep=None):
+        self.xp0 = float(xp0)
+        self.dxp = float(dxp)
+        if copy:
+            self.fp = fp.copy()
+        else:
+            self.fp = fp
+        self._y2p = _spline_cubic(fp, dxp)
+        self.ep = ep
+
+    def __call__(self, x):
+        return _fast_eval_interp1d_cubic(
+            x, self.xp0, self.dxp, self.fp, self._y2p)
+
+    def reset(self, fp, copy=False, ep=None):
+        if copy:
+            self.fp = fp.copy()
+        else:
+            self.fp = fp
+
+        self.ep = ep
+
+        self._y2p = _spline_cubic(fp, self.dxp)
 
 
 class SubsampleCov():
@@ -172,40 +337,41 @@ class SubsampleCov():
 
     Parameters
     ----------
-    ndata: int
-        Size of the data vector.
+    ndata: int or tuple(int)
+        Size or shape of the data vector. If tuple, it should be
+        ``(nset, size1d)``. For example, 3 quantities share the same
+        weights, data vector shape should pass ``ndata=(3, size1d)``.
     nsamples: int
-        Number of samples.
+        Number of samples. You can add more measurements then this.
     istart: int, default: 0
         Start index for the subsampling array
 
     Attributes
     ----------
-    ndata: int or tuple(int)
-        Size or shape of the data vector. If 3 quantities share the same
-        weights, data vector shape should be (3, size1d).
-    nsamples: int
-        Number of samples. You can more measurements then this.
+    _istart: int
+        Sampler initial index.
     _isample: int
         Sample counter. Wraps around nsamples
     _is_normalized: bool
         If the weights are normalized. Keeps track if :func:`_normalize` is
         called.
     all_measurements: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        2D array of zeros of shape ``(nsamples, ndata)``.
+        3D array of shape ``(nsamples, nset, ndata)``.
     all_weights: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        2D array of zeros of shape ``(nsamples, ndata)``.
+        3D array of shape ``(nsamples, nset, ndata)``.
     mean: :class:`ndarray <numpy.ndarray>` or None
-        Mean. 1D array of size ``ndata``
-    covariance: :class:`ndarray <numpy.ndarray>` or None
-        Covariance. 2D array of shape ``(ndata, ndata)``
+        Mean. 2D array of shape ``(nset, ndata)``
     variance: :class:`ndarray <numpy.ndarray>` or None
-        Variance. 1D array of size ``ndata``
+        Variance. 2D array of shape ``(nset, ndata)``
+    covariance: list(:class:`ndarray <numpy.ndarray>`) or None
+        Covariance. 2D arrays of shape ``(ndata, ndata)`` or 3D arrays of
+        shape ``(nblock, blockdim, blockdim)``.
     """
 
     def __init__(self, ndata, nsamples, istart=0):
         self.nsamples = nsamples
-        self._isample = istart % nsamples
+        self._istart = istart % nsamples
+        self._isample = self._istart
 
         if isinstance(ndata, int):
             newshape = (nsamples, 1, ndata)
@@ -315,7 +481,16 @@ class SubsampleCov():
 
         return mean_xvec, xdiff
 
-    def get_mean_n_cov(self, bias_correct=False):
+    def _get_block_covariance(self, x, blockdim):
+        nblock = self.ndata // blockdim
+        cov = np.empty((nblock, blockdim, blockdim), dtype=np.float_)
+        for kk in range(nblock):
+            y = x[:, kk * blockdim:(kk + 1) * blockdim]
+            cov[kk] = (y.T @ y) * (self.nsamples - 1) / self.nsamples
+
+        return cov
+
+    def get_mean_n_cov(self, indices=None, blockdim=None, bias_correct=False):
         """ Get the mean and covariance of the mean using delete-one Jackknife.
 
         Also sets :attr:`mean` and :attr:`covariance`.
@@ -327,6 +502,10 @@ class SubsampleCov():
 
         Arguments
         ---------
+        indices: list(int), default: None
+            Data set indices to estimate the covariance.
+        blockdim: int, default: None
+            Calculate covariance by this block size instead of the full space.
         bias_correct: bool, default: False
             Jackknife bias correction term for the mean.
 
@@ -334,19 +513,27 @@ class SubsampleCov():
         -------
         mean: :class:`ndarray <numpy.ndarray>`
             Mean.
-        cov: :class:`ndarray <numpy.ndarray>`
-            Covariance of the mean. 2D array
+        cov: list(:class:`ndarray <numpy.ndarray>`)
+            Covariances of the mean.
         """
         mean_xvec = self.get_mean()
         self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
 
-        covshape = (self.all_measurements.shape[1], self.ndata, self.ndata)
-        self.covariance = np.empty(covshape)
-        for jj in range(self.all_measurements.shape[1]):
+        if indices is None:
+            indices = range(self.all_measurements.shape[1])
+
+        if blockdim is not None:
+            assert (self.ndata % blockdim == 0)
+
+        self.covariance = [None] * self.all_measurements.shape[1]
+        for jj in indices:
             x = xdiff[:, jj, :]
-            self.covariance[jj] = (
-                np.dot(x.T, x) * (self.nsamples - 1) / self.nsamples
-            )
+
+            if blockdim is None:
+                cov = (x.T @ x) * (self.nsamples - 1) / self.nsamples
+            else:
+                cov = self._get_block_covariance(x, blockdim)
+            self.covariance[jj] = cov
 
         return self.mean, self.covariance
 
@@ -380,8 +567,8 @@ class SubsampleCov():
 
         return self.mean, self.variance
 
-    def reset(self, istart=0):
-        self._isample = istart % self.nsamples
+    def reset(self):
+        self._isample = self._istart
 
         self.all_measurements *= 0
         self.all_weights *= 0

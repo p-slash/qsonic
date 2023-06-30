@@ -31,11 +31,11 @@ def get_fiducials(tmp_path):
     nsize = 100
     data = np.empty(
         nsize,
-        dtype=[('LAMBDA', 'f8'), ('MEANFLUX', 'f8'), ('VAR', 'f8')]
+        dtype=[('LAMBDA', 'f8'), ('MEANFLUX', 'f8'), ('VAR_LSS', 'f8')]
     )
     data['LAMBDA'] = np.linspace(3600, 6000, nsize)
     data['MEANFLUX'] = 2 * np.ones(nsize)
-    data['VAR'] = 3 * np.ones(nsize)
+    data['VAR_LSS'] = 3 * np.ones(nsize)
 
     with fitsio.FITS(fname, 'rw', clobber=True) as fts:
         fts.write(data, extname='STATS')
@@ -185,7 +185,7 @@ class TestPiccaContinuum(object):
             for arm, wave_arm in spec.forestwave.items():
                 spec.cont_params['cont'][arm] = np.ones_like(wave_arm)
 
-        qcfit.update_mean_cont(spectra_list, False)
+        qcfit.update_mean_cont(spectra_list)
         npt.assert_allclose(qcfit.meancont_interp.fp, 1, rtol=1e-3)
         npt.assert_almost_equal(qcfit.meancont_interp.fp.mean(), 1)
 
@@ -242,7 +242,8 @@ class TestVarLSSFitter(object):
         npt.assert_equal(varlss_fitter._num_qso, expected_numqso)
 
         expected_size = nwbins * nsnrbins * nvarbins
-        varlss_fitter._allreduce()
+        varlss_fitter._calc_subsampler_stats()
+
         npt.assert_equal(varlss_fitter.wvalid_bins.sum(), expected_size)
         npt.assert_equal(varlss_fitter.mean_delta.size, expected_size)
 

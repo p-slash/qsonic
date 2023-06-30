@@ -1,6 +1,27 @@
 Installation
 ============
 
+If you are on NERSC, I recommend using the pre-installed environment. This is installed on /global/common/software and has better performance at start up.
+
+.. code:: shell
+    
+    source /global/cfs/projectdirs/desi/science/lya/scripts/activate_qsonic.sh
+
+Explicit NERSC instructions for the lazy:
+
+.. code-block:: shell
+
+    module load cpu
+    module load python
+
+    conda create -n qsonic python numpy scipy numba iminuit fitsio healpy
+    conda activate qsonic
+    MPICC="cc -shared" pip install --force-reinstall --no-cache-dir --no-binary=mpi4py mpi4py
+    pip install qsonic
+
+General
+-------
+
 It is recommended that you create a separate conda environment and run
 
 .. code-block:: shell
@@ -30,3 +51,4 @@ NERSC
 -----
 
 ``mpi4py`` needs special attention. Follow these `instructions <https://docs.nersc.gov/development/languages/python/parallel-python/#mpi4py-in-your-custom-conda-environment>`_ to clone a mpi4py installed conda environment on NERSC.
+

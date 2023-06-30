@@ -11,7 +11,7 @@ from qsonic import QsonicException
 import qsonic.catalog
 import qsonic.io
 from qsonic.masks import BALMask
-from qsonic.mpi_utils import logging_mpi, mpi_parse, mpi_fnc_bcast
+from qsonic.mpi_utils import logging_mpi, mpi_parse, mpi_fnc_bcast, MPISaver
 from qsonic.picca_continuum import VarLSSFitter
 from qsonic.spectrum import add_wave_region_parser
 
@@ -61,19 +61,24 @@ def get_parser(add_help=True):
     vargroup = parser.add_argument_group(
         'Variance fitting parameters')
     vargroup.add_argument(
-        "--nvarbins", help="Number of variance bins (logarithmically spaced)",
+        "--nvarbins", help="Number of variance bins (logarithmically spaced).",
         default=100, type=int)
+    vargroup.add_argument(
+        "--var-use-cov", action="store_true",
+        help="Use covariance in varlss-eta fitting.")
     vargroup.add_argument(
         "--nwbins", default=None, type=int,
         help="Number of wavelength bins. None creates bins with 120 A spacing")
     vargroup.add_argument(
-        "--var1", help="Lower variance bin", default=1e-5, type=float)
+        "--var1", help="Lower variance bin.", default=1e-4, type=float)
     vargroup.add_argument(
-        "--var2", help="Upper variance bin", default=2., type=float)
+        "--var2", help="Upper variance bin.", default=20., type=float)
     vargroup.add_argument(
-        "--min-snr", help="Minimum SNR of the forest", default=0, type=float)
+        "--min-snr", help="Minimum SNR of the forest.",
+        default=0, type=float)
     vargroup.add_argument(
-        "--max-snr", help="Maximum SNR of the forest", default=100, type=float)
+        "--max-snr", help="Maximum SNR of the forest.",
+        default=100, type=float)
 
     parser = add_wave_region_parser(parser)
 
@@ -172,7 +177,7 @@ def mpi_read_all_deltas(args, comm=None, mpi_rank=0, mpi_size=1):
 def mpi_stack_fluxes(args, comm, deltas_list):
     dwave = deltas_list[0].header['DELTA_LAMBDA']
     nwaveobs = int((args.wave2 - args.wave1) / dwave) + 1
-    waveobs = np.arange(nwaveobs) * dwave + args.wave1
+    waveobs = np.linspace(args.wave1, args.wave2, nwaveobs)
     stacked_flux = np.zeros(nwaveobs)
     weights = np.zeros(nwaveobs)
 
@@ -207,7 +212,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     varfitter = VarLSSFitter(
         args.wave1, args.wave2, args.nwbins,
         args.var1, args.var2, args.nvarbins,
-        nsubsamples=100, comm=comm)
+        use_cov=args.var_use_cov, comm=comm)
 
     ids_to_remove = mpi_set_targetid_list_to_remove(args, comm, mpi_rank)
 
@@ -234,23 +239,24 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     logging_mpi("Saving variance stats to files", mpi_rank)
     suffix = f"snr{args.min_snr:.1f}-{args.max_snr:.1f}"
     tmpfilename = f"{args.outdir}/{args.fbase}-{suffix}-variance-stats.fits"
-    mpi_saver = varfitter.save(tmpfilename)
+    mpi_saver = MPISaver(tmpfilename, mpi_rank)
+    varfitter.write(mpi_saver, args.min_snr, args.max_snr)
     logging_mpi(f"Variance stats saved in {tmpfilename}.", mpi_rank)
 
     # Save fits results as well
     mpi_saver.write([
-        varfitter.waveobs,
-        fit_results[:, 0], fit_results[:, 1], fit_results[:, 2],
-        std_results[:, 0], std_results[:, 1], std_results[:, 2]],
-        names=["wave", "var_lss", "eta", "beta",
-               "e_var_lss", "e_eta", "e_beta"],
+        varfitter.waveobs, fit_results[:, 0], std_results[:, 0],
+        fit_results[:, 1], std_results[:, 1],
+        fit_results[:, 2], std_results[:, 2]],
+        names=['lambda', 'var_lss', 'e_var_lss', 'eta', 'e_eta',
+               'beta', 'e_beta'],
         extname="VAR_FUNC"
     )
 
     waveobs, stacked_flux = mpi_stack_fluxes(args, comm, deltas_list)
     mpi_saver.write(
         [waveobs, stacked_flux],
-        names=["wave", "stacked_flux"],
+        names=["lambda", "stacked_flux"],
         extname="STACKED_FLUX")
 
     mpi_saver.close()
@@ -269,6 +275,7 @@ def main():
         mpi_run_all(comm, mpi_rank, mpi_size)
     except QsonicException as e:
         logging_mpi(e, mpi_rank, "exception")
+        exit(1)
     except Exception as e:
         logging.error(f"Unexpected error on Rank{mpi_rank}. Abort.")
         logging.exception(e)

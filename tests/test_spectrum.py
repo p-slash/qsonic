@@ -6,7 +6,7 @@ import numpy as np
 import numpy.testing as npt
 
 import qsonic.spectrum
-from qsonic.mathtools import Fast1DInterpolator
+from qsonic.mathtools import FastLinear1DInterp
 
 
 class TestSpecParsers(object):
@@ -108,13 +108,14 @@ class TestSpectrum(object):
             cat_by_survey, data)
 
         # var_lss zero
-        varlss_interp = Fast1DInterpolator(0, 1, np.zeros(3))
+        varlss_interp = FastLinear1DInterp(0, 1, np.zeros(3))
         spec = copy.deepcopy(spectra_list[0])
         spec.set_forest_region(3600., 6000., 1050., 1300.)
         spec.cont_params['valid'] = True
         spec.cont_params['cont'] = {
             arm: np.ones_like(farm) for arm, farm in spec.forestflux.items()
         }
+        spec.set_forest_weight(varlss_interp)
         spec.coadd_arms_forest(varlss_interp)
 
         assert ('brz' in spec.forestflux.keys())
@@ -126,22 +127,62 @@ class TestSpectrum(object):
         npt.assert_almost_equal(spec.forestivar['brz'][~w], 2)
 
         # var_lss non-zero
-        varlss_interp = Fast1DInterpolator(0, 1, 0.5 * np.ones(3))
+        varlss_interp = FastLinear1DInterp(0, 1, 0.5 * np.ones(3))
         spec = copy.deepcopy(spectra_list[0])
         spec.set_forest_region(3600., 6000., 1050., 1300.)
         spec.cont_params['valid'] = True
         spec.cont_params['cont'] = {
             arm: np.ones_like(farm) for arm, farm in spec.forestflux.items()
         }
+        spec.set_forest_weight(varlss_interp)
         spec.coadd_arms_forest(varlss_interp)
 
         assert ('brz' in spec.forestflux.keys())
         npt.assert_almost_equal(spec.forestflux['brz'], 2.1)
         npt.assert_almost_equal(spec.cont_params['cont']['brz'], 1.)
-        w = (spec.forestwave['brz'] < data['wave']['R'][0])\
-            | (spec.forestwave['brz'] > data['wave']['B'][-1])
-        npt.assert_almost_equal(spec.forestivar['brz'][w], 1)
-        npt.assert_almost_equal(spec.forestivar['brz'][~w], 2)
+
+        wbonly = int(
+            (data['wave']['R'][0] - spec.forestwave['brz'][0]) / spec.dwave
+            + 0.1)
+        npt.assert_almost_equal(spec.forestivar['brz'][:wbonly], 1)
+
+        wronly = int(
+            (data['wave']['B'][-1] - spec.forestwave['brz'][0]) / spec.dwave
+            + 0.1) + 1
+        npt.assert_almost_equal(spec.forestivar['brz'][wronly:], 1)
+
+        npt.assert_almost_equal(spec.forestivar['brz'][wbonly:wronly], 2)
+
+    def test_simple_coadd(self, setup_data):
+        cat_by_survey, _, data = setup_data(1)
+        spectra_list = qsonic.spectrum.generate_spectra_list_from_data(
+            cat_by_survey, data)
+
+        spec = spectra_list[0]
+        spec.simple_coadd()
+
+        assert (len(spec.wave.keys()) == 1)
+        assert ('brz' in spec.wave.keys())
+        assert ('brz' in spec.flux.keys())
+        npt.assert_equal(spec.wave['brz'].size, spec.flux['brz'].size)
+        npt.assert_equal(spec.wave['brz'].size, spec.ivar['brz'].size)
+        npt.assert_almost_equal(
+            spec.wave['brz'][[0, -1]],
+            [data['wave']['B'][0], data['wave']['R'][-1]])
+
+        npt.assert_almost_equal(spec.flux['brz'], 2.1)
+
+        wbonly = int(
+            (data['wave']['R'][0] - spec.wave['brz'][0]) / spec.dwave + 0.1
+        )
+        npt.assert_almost_equal(spec.ivar['brz'][:wbonly], 1)
+
+        wronly = int(
+            (data['wave']['B'][-1] - spec.wave['brz'][0]) / spec.dwave + 0.1
+        ) + 1
+        npt.assert_almost_equal(spec.ivar['brz'][wronly:], 1)
+
+        npt.assert_almost_equal(spec.ivar['brz'][wbonly:wronly], 2)
 
 
 if __name__ == '__main__':

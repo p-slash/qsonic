@@ -1,5 +1,6 @@
-Examples
-========
+Quick Start
+===========
+On NERSC, run: ``source /global/cfs/projectdirs/desi/science/lya/scripts/activate_qsonic.sh``
 
 Running qsonic-fit
 -------------------------
@@ -61,5 +62,3 @@ Here's an example code snippet to use IO interface.
 
         # Do stuff with spectra in this healpix
         ...
-
-
