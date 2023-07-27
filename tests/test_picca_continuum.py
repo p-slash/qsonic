@@ -209,14 +209,15 @@ class TestVarLSSFitter(object):
 
         varlss_fitter = VarLSSFitter(
             3600, 4800, nwbins=nwbins, var1=1e-5, var2=2., nvarbins=nvarbins,
-            nsnrbins=nsnrbins)
+            icont2bins=nsnrbins)
         npt.assert_almost_equal(varlss_fitter.dwobs, dwbins)
         npt.assert_allclose(varlss_fitter.waveobs, wbins_truth)
 
         cat_by_survey, npix, data = setup_data(1)
+        cont = np.ones_like(data['wave']['B'])
         varlss_fitter.add(
             data['wave']['B'], data['flux']['B'][0], data['ivar']['B'][0],
-            0.0001)
+            cont)
 
         # Blue arm only fills up to nwbins - 1 wavelength bin
         true_wave_bins = np.arange(1, nwbins)
@@ -229,9 +230,10 @@ class TestVarLSSFitter(object):
         expected_numqso[full_bins] = 1
         npt.assert_equal(varlss_fitter._num_qso, expected_numqso)
 
+        cont = np.ones_like(data['wave']['R'])
         varlss_fitter.add(
             data['wave']['R'], data['flux']['R'][0], data['ivar']['R'][0],
-            0.0001)
+            cont)
 
         # Red arm fills the last 3 wavelength bins. First two overlap with
         # previous wavelength bins.
@@ -261,8 +263,9 @@ class TestVarLSSFitter(object):
             var_pipe = 10**var_pipe
             std_gen = np.sqrt(var_pipe + true_var_lss)
             delta = RNST.normal(0, std_gen, nwave)
+            cont = np.ones_like(delta)
 
-            varlss_fitter.add(wave, delta, 1 / var_pipe)
+            varlss_fitter.add(wave, delta, 1 / var_pipe, cont)
 
         fit_results, std_results = varlss_fitter.fit(
             true_var_lss, smooth=False)
