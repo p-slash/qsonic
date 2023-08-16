@@ -145,7 +145,7 @@ class FluxCalibrator():
         return FastLinear1DInterp(waves_0, dwave, stacked_flux)
 
     def __init__(self, fname, comm=None, mpi_rank=0):
-        self.flux_interp = mpi_fnc_bcast(
+        self.stacked_flux_interp = mpi_fnc_bcast(
             self._read, comm, mpi_rank,
             f"Error loading FluxCalibrator from file {fname}.",
             fname)
