@@ -119,7 +119,7 @@ def mpi_set_targetid_list_to_remove(args, comm=None, mpi_rank=0):
             args.remove_targetid_list, dtype=int)
 
     if args.catalog:
-        catalog = qsonic.io.mpi_read_quasar_catalog(
+        catalog = qsonic.catalog.mpi_read_quasar_catalog(
             args.catalog, comm, mpi_rank, args.mock_analysis)
     else:
         catalog = None
