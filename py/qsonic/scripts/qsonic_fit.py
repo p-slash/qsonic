@@ -85,6 +85,11 @@ def args_logic_fnc_qsonic_fit(args):
         logging.error("forest_w2 must be greater than forest_w1.")
         args_pass = False
 
+    if args.mock_analysis and args.tile_format:
+        logging.error(
+            "Mock analysis in tile format is not supported.")
+        args_pass = False
+
     return args_pass
 
 
