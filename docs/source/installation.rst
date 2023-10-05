@@ -7,6 +7,16 @@ If you are on NERSC, I recommend using the pre-installed environment. This is in
     
     source /global/cfs/projectdirs/desi/science/lya/scripts/activate_qsonic.sh
 
+To have a Jupyter kernel, run the following command after activation:
+
+.. code:: shell
+
+    python -m ipykernel install --user --name qsonic --display-name qsonic
+
+
+Install from PyPi
+-----------------
+
 Explicit NERSC instructions for the lazy:
 
 .. code-block:: shell
@@ -14,10 +24,13 @@ Explicit NERSC instructions for the lazy:
     module load cpu
     module load python
 
-    conda create -n qsonic python numpy scipy numba iminuit fitsio healpy
+    conda create -n qsonic python=3.10
     conda activate qsonic
     MPICC="cc -shared" pip install --force-reinstall --no-cache-dir --no-binary=mpi4py mpi4py
     pip install qsonic
+
+If you want Jupyter kernel, you need to additionally install ``ipykernel`` into your environment and run the same command. See this `NERSC guide <https://docs.nersc.gov/services/jupyter/how-to-guides/>`_ on Jupyter.
+
 
 General
 -------
@@ -37,7 +50,7 @@ If you want to get the latest (possibly unstable) version:
 
 .. code-block:: shell
 
-    pip install "git+https://github.com/p-slash/qsonic.git"
+    pip install git+ssh://git@github.com/p-slash/qsonic.git
 
 For developers:
 
