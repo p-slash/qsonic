@@ -1,4 +1,5 @@
 import argparse
+import functools
 import logging
 import time
 
@@ -118,43 +119,25 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
     logging_mpi("Reading spectra.", mpi_rank)
 
     # skip_resomat = args.skip_resomat or not args.mock_analysis
-    skip_resomat = args.skip_resomat
+
+    reader_function = qsonic.io.get_spectra_reader_function(
+        args.input_dir, args.arms, args.mock_analysis, args.skip_resomat,
+        args.true_continuum, args.tile_format)
 
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
-        local_specs = qsonic.io.read_spectra_onehealpix(
-            cat, args.input_dir, args.arms, args.mock_analysis, skip_resomat,
-            args.true_continuum)
-
-        specs_to_keep = []
+        local_specs = reader_function(cat)
 
         for spec in local_specs:
             spec.set_forest_region(
                 args.wave1, args.wave2, args.forest_w1, args.forest_w2)
             spec.remove_nonforest_pixels()
 
-            if not spec.forestwave:
+            if not spec.forestwave or spec.rsnr < args.min_rsnr:
                 continue
 
-            if spec.rsnr < args.min_rsnr:
-                continue
-
-            specs_to_keep.append(spec)
-
-        spectra_list.extend(specs_to_keep)
-
-        # if args.skip_resomat:
-        #     continue
-
-        # w = np.array(
-        #     [spec.rsnr > args.min_rsnr for spec in local_specs], dtype=bool)
-        # nspec = w.sum()
-
-        # # Read resolution matrix hopefully faster
-        # spectra_list[-nspec:] = \
-        #     qsonic.io.read_resolution_matrices_onehealpix_data(
-        #         cat[w], args.input_dir, spectra_list[-nspec:])
+            spectra_list.append(spec)
 
     if args.coadd_arms == "before":
         logging_mpi("Coadding arms.", mpi_rank)

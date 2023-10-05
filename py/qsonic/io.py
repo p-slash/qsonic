@@ -2,6 +2,7 @@
 imported without a need for MPI."""
 
 import argparse
+import functools
 import warnings
 
 import fitsio
@@ -64,18 +65,18 @@ def add_io_parser(parser=None):
     return parser
 
 
-def read_spectra_onehealpix(
-        catalog_hpx, input_dir, arms_to_keep, mock_analysis, skip_resomat,
-        read_true_continuum, program="dark"
+def get_spectra_reader_function(
+    input_dir, arms_to_keep, mock_analysis, skip_resomat,
+    read_true_continuum, is_tile, program="dark"
 ):
-    """ Returns a list of Spectrum objects for a given catalog of a single
-    healpix.
+    """ Returns a callable object (function) that returns a list of Spectrum
+    objects for a given catalog of a single healpix. Essentially, a wrapper
+    for :meth:`read_onehealpix_file_mock` or :meth:`read_onehealpix_file_data`
+    functions. If for data 'SURVEY' column must be present and sorted when
+    calling the function this returns.
 
     Arguments
     ---------
-    catalog_hpx: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Catalog of quasars in a single healpix. If for data 'SURVEY' column
-        must be present and sorted.
     input_dir: str
         Input directory
     arms_to_keep: list(str)
@@ -91,51 +92,34 @@ def read_spectra_onehealpix(
 
     Returns
     ---------
-    spectra_list: list(Spectrum)
+    reader_function: Callable
+        Call this function with a catalog of quasars in a single healpix.
 
     Raises
     ---------
     RuntimeWarning
         If number of quasars in the healpix file does not match the catalog.
     """
-    spectra_list = []
-
     if mock_analysis:
-        data, idx_cat = read_onehealpix_file_mock(
-            catalog_hpx, input_dir, arms_to_keep, skip_resomat,
-            read_true_continuum
+        return functools.partial(
+            read_onehealpix_file_mock,
+            input_dir=input_dir, arms_to_keep=arms_to_keep,
+            skip_resomat=skip_resomat, read_true_continuum=read_true_continuum
         )
 
-        if idx_cat.size != catalog_hpx.size:
-            catalog_hpx = catalog_hpx[idx_cat]
-
-        spectra_list.extend(
-            qsonic.spectrum.generate_spectra_list_from_data(
-                catalog_hpx, data)
+    elif is_tile:
+        return functools.partial(
+            read_onetile_file_data,
+            input_dir=input_dir, arms_to_keep=arms_to_keep,
+            skip_resomat=skip_resomat
         )
+
     else:
-        # Assume sorted by survey
-        # cat.sort(order='SURVEY')
-        unique_surveys, s2 = np.unique(
-            catalog_hpx['SURVEY'], return_index=True)
-        survey_split_cat = np.split(catalog_hpx, s2[1:])
-
-        for cat_by_survey in survey_split_cat:
-            data, idx_cat = read_onehealpix_file_data(
-                cat_by_survey, input_dir, arms_to_keep,
-                skip_resomat, program
-            )
-
-            if idx_cat.size != cat_by_survey.size:
-                cat_by_survey = cat_by_survey[idx_cat]
-
-            spectra_list.extend(
-                qsonic.spectrum.generate_spectra_list_from_data(
-                    cat_by_survey, data
-                )
-            )
-
-    return spectra_list
+        return functools.partial(
+            read_onehealpix_file_data,
+            input_dir=input_dir, arms_to_keep=arms_to_keep,
+            skip_resomat=skip_resomat, program=program
+        )
 
 
 def read_resolution_matrices_onehealpix_data(
@@ -480,14 +464,14 @@ def _read_onehealpix_file_onlyreso(
 
 
 def read_onehealpix_file_data(
-        cat_by_survey, input_dir, arms_to_keep, skip_resomat, program="dark"
+        catalog_hpx, input_dir, arms_to_keep, skip_resomat, program="dark"
 ):
-    """ Read a single fits file for data.
+    """Read FITS files for all surveys needed for data.
 
     Arguments
     ---------
-    cat_by_survey: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Catalog for a single survey and healpix. Ordered by TARGETID.
+    catalog_hpx: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Catalog for a healpix. Ordered by SURVEY and TARGETID.
     input_dir: str
         Input directory.
     arms_to_keep: list(str)
@@ -497,26 +481,43 @@ def read_onehealpix_file_data(
 
     Returns
     ---------
-    data: dict
-        Only quasar spectra are read into keywords wave, flux etc. Resolution
-        is read if present.
-    idx_cat: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Indices in `cat_by_survey` there were succesfully read.
+    spectra_list: list(Spectrum)
 
     Raises
     ---------
     RuntimeWarning
         If number of quasars in the healpix file does not match the catalog.
     """
-    survey = cat_by_survey['SURVEY'][0]
-    pixnum = cat_by_survey['HPXPIXEL'][0]
+    spectra_list = []
 
-    fspec = (f"{input_dir}/{survey}/{program}/{pixnum//100}/"
-             f"{pixnum}/coadd-{survey}-{program}-{pixnum}.fits")
-    data, idx_cat = _read_onehealpix_file(
-        cat_by_survey['TARGETID'], fspec, arms_to_keep, skip_resomat)
+    survey_split_cat = np.split(
+        catalog_hpx, np.unique(catalog_hpx['SURVEY'], return_index=True)[1][1:]
+    )
+    pixnum = catalog_hpx['HPXPIXEL'][0]
 
-    return data, idx_cat
+    for cat_by_survey in survey_split_cat:
+        survey = cat_by_survey['SURVEY'][0]
+
+        fspec = (f"{input_dir}/{survey}/{program}/{pixnum//100}/"
+                 f"{pixnum}/coadd-{survey}-{program}-{pixnum}.fits")
+        data, idx_cat = _read_onehealpix_file(
+            cat_by_survey['TARGETID'], fspec, arms_to_keep, skip_resomat)
+
+        if idx_cat.size != cat_by_survey.size:
+            cat_by_survey = cat_by_survey[idx_cat]
+
+        spectra_list.extend(
+            qsonic.spectrum.generate_spectra_list_from_data(
+                cat_by_survey, data)
+        )
+
+    return spectra_list
+
+
+def read_onetile_file_data(
+        catalog_tile, input_dir, arms_to_keep, skip_resomat
+):
+    raise NotImplementedError
 
 
 def read_onehealpix_file_mock(
@@ -542,11 +543,7 @@ def read_onehealpix_file_mock(
 
     Returns
     ---------
-    data: dict
-        Only quasar spectra are read into keywords wave, flux etc. Resolution
-        is read if present.
-    idx_cat: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Indices in `catalog_hpx` there were succesfully read.
+    spectra_list: list(Spectrum)
 
     Raises
     ---------
@@ -570,7 +567,10 @@ def read_onehealpix_file_mock(
         for arm in arms_to_keep:
             data['reso'][arm] = np.array(fitsfile[f'{arm}_RESOLUTION'].read())
 
-    return data, idx_cat
+    if idx_cat.size != catalog_hpx.size:
+        catalog_hpx = catalog_hpx[idx_cat]
+
+    return qsonic.spectrum.generate_spectra_list_from_data(catalog_hpx, data)
 
 
 def _float_range(f1, f2):
