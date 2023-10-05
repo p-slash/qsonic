@@ -329,11 +329,11 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # read catalog
     full_catalog = qsonic.catalog.mpi_read_quasar_catalog(
         args.catalog, comm, mpi_rank, is_mock=args.mock_analysis,
-        keep_surveys=args.keep_surveys,
+        is_tile=args.tile_format, keep_surveys=args.keep_surveys,
         zmin=zmin_qso, zmax=zmax_qso)
 
     local_queue = qsonic.catalog.mpi_get_local_queue(
-        full_catalog, mpi_rank, mpi_size)
+        full_catalog, mpi_rank, mpi_size, args.tile_format)
 
     # Blinding
     qsonic.spectrum.Spectrum.set_blinding(full_catalog, args)
