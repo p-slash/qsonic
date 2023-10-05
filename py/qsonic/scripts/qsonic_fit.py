@@ -120,14 +120,14 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
 
     # skip_resomat = args.skip_resomat or not args.mock_analysis
 
-    reader_function = qsonic.io.get_spectra_reader_function(
+    readerFunction = qsonic.io.get_spectra_reader_function(
         args.input_dir, args.arms, args.mock_analysis, args.skip_resomat,
         args.true_continuum, args.tile_format)
 
     spectra_list = []
     # Each process reads its own list
     for cat in local_queue:
-        local_specs = reader_function(cat)
+        local_specs = readerFunction(cat)
 
         for spec in local_specs:
             spec.set_forest_region(
