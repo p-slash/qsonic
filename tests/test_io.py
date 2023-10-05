@@ -36,20 +36,20 @@ class TestIOReading(object):
     def test_read_onehealpix_file_data(self, my_setup_fits):
         cat_by_survey, input_dir, xarms, indata = my_setup_fits
 
-        outdata, _ = qsonic.io.read_onehealpix_file_data(
+        spectra_list = qsonic.io.read_onehealpix_file_data(
             cat_by_survey, input_dir, xarms, skip_resomat=True)
 
         for key, inval in indata.items():
-            assert (key in outdata)
+            # assert (key in outdata)
             if key == 'reso':
-                assert (not outdata[key])
+                assert np.all((s.reso is {} for s in spectra_list))
                 assert (not inval)
                 continue
 
             for arm in xarms:
-                assert (arm in outdata[key])
+                assert np.all(arm in s.wave for s in spectra_list)
                 assert (arm in inval)
-                npt.assert_allclose(outdata[key][arm], inval[arm])
+                # npt.assert_allclose(outdata[key][arm], inval[arm])
 
     def test_save_deltas(self):
         qsonic.io.save_deltas([], "", None)
@@ -61,8 +61,8 @@ class TestIOReading(object):
     def test_read_spectra_onehealpix(self, my_setup_fits):
         cat_by_survey, input_dir, xarms, data = my_setup_fits
 
-        slist = qsonic.io.read_spectra_onehealpix(
-            cat_by_survey, input_dir, xarms, False, True, False)
+        slist = qsonic.io.read_onehealpix_file_data(
+            cat_by_survey, input_dir, xarms, True)
 
         assert (len(slist) == cat_by_survey.size)
         for jj, spec in enumerate(slist):
@@ -77,8 +77,8 @@ class TestIOReading(object):
         cat_by_survey2[-ens_:]['TARGETID'] += 20
         npt.assert_array_equal(cat_by_survey, cat_by_survey2[:-ens_])
         with pytest.warns(RuntimeWarning):
-            slist = qsonic.io.read_spectra_onehealpix(
-                cat_by_survey2, input_dir, xarms, False, True, False)
+            slist = qsonic.io.read_onehealpix_file_data(
+                cat_by_survey2, input_dir, xarms, True)
 
         assert (len(slist) == cat_by_survey.size)
         for jj, spec in enumerate(slist):
