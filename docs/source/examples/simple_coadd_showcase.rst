@@ -20,6 +20,11 @@ to read all arms (B, R, Z), but will not read the resolution matrix.
     is_mock = False
     skip_resomat = True
 
+    # Setup reader function
+    readerFunction = qsonic.io.get_spectra_reader_function(
+        indir, arms, is_mock, skip_resomat,
+        read_true_continuum=False, is_tile=False)
+
 First, we read the catalog. Since ``qsonic`` sorts this the catalog by
 HPXPIXEL, we can find the unique healpix values and split the catalog
 into healpix groups. For example purposes, we are picking a single healpix and
@@ -28,19 +33,17 @@ reading all the quasar spectra in that file.
 .. code:: python3
 
     catalog = qsonic.catalog.read_quasar_catalog(fname)
-    
+
     # Group into unique pixels
     unique_pix, s = np.unique(catalog['HPXPIXEL'], return_index=True)
     split_catalog = np.split(catalog, s[1:])
-    
+
     # Pick one healpix to illustrate
     hpx_cat = split_catalog[0]
     healpix = hpx_cat['HPXPIXEL'][0]
-    
-    spectra_by_hpx = qsonic.io.read_spectra_onehealpix(
-        hpx_cat, indir, arms, is_mock, skip_resomat
-    )
-    
+
+    spectra_by_hpx = readerFunction(hpx_cat)
+
     print(f"There are {len(spectra_by_hpx)} spectra in healpix {healpix}.")
 
 
