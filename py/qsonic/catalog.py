@@ -1,6 +1,7 @@
 """ This module contains functions to read, validate and make necessary changes
 to DESI quasar catalogs. Can be imported without a need for MPI. """
 
+import logging
 import warnings
 
 import fitsio
@@ -8,7 +9,7 @@ from healpy import ang2pix
 import numpy as np
 from numpy.lib.recfunctions import rename_fields, append_fields
 
-from qsonic.mpi_utils import logging_mpi, balance_load, mpi_fnc_bcast
+from qsonic.mpi_utils import balance_load, mpi_fnc_bcast
 
 _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
 """set: Accepted extensions for quasar catalog."""
@@ -151,12 +152,12 @@ def mpi_get_local_queue(catalog, mpi_rank, mpi_size, is_tile=False):
     split_key = "TILEID" if is_tile else "HPXPIXEL"
     unique_pix, s = np.unique(catalog[split_key], return_index=True)
     split_catalog = np.split(catalog, s[1:])
-    logging_mpi(
+    logging.info(
         f"There are {unique_pix.size} keys ({split_key})."
-        " Don't use more MPI processes.", mpi_rank)
+        " Don't use more MPI processes.")
 
     # Roughly equal number of spectra
-    logging_mpi("Load balancing.", mpi_rank)
+    logging.info("Load balancing.")
     # Returns a list of catalog (ndarray)
     return balance_load(split_catalog, mpi_size, mpi_rank)
 
@@ -211,7 +212,7 @@ def _validate_adjust_column_names(catalog, is_mock, is_tile):
     if is_tile:
         _check_required_columns(_required_tile_columns, colnames)
 
-    logging_mpi(f"There are {catalog.size} quasars in the catalog.", 0)
+    logging.info(f"There are {catalog.size} quasars in the catalog.")
 
     if not is_tile and catalog.size != np.unique(catalog['TARGETID']).size:
         raise Exception("There are duplicate TARGETIDs in catalog!")
@@ -245,7 +246,7 @@ def _read(filename):
     catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog. No checks are performed.
     """
-    logging_mpi(f'Reading catalogue from {filename}', 0)
+    logging.info(f'Reading catalogue from {filename}')
     fitsfile = fitsio.FITS(filename)
     extnames = [hdu.get_extname() for hdu in fitsfile]
     cat_hdu = _accepted_extnames.intersection(extnames)
@@ -320,7 +321,7 @@ def _prime_catalog(
 
     # Redshift cuts
     w = (catalog['Z'] >= zmin) & (catalog['Z'] <= zmax)
-    logging_mpi(f"There are {w.sum()} quasars in the redshift range.", 0)
+    logging.info(f"There are {w.sum()} quasars in the redshift range.")
     catalog = catalog[w]
 
     if is_tile:
@@ -335,8 +336,8 @@ def _prime_catalog(
         catalog = catalog[w]
         if len(keep_surveys) > 1:
             sort_order.insert(1, 'SURVEY')
-        logging_mpi(
-            f"There are {w.sum()} quasars in given surveys {keep_surveys}.", 0)
+        logging.info(
+            f"There are {w.sum()} quasars in given surveys {keep_surveys}.")
 
     if catalog.size == 0:
         raise Exception("Empty quasar catalogue.")
