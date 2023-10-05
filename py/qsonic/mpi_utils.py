@@ -45,22 +45,6 @@ def mpi_parse(
     return args
 
 
-def logging_mpi(msg, mpi_rank, fnc="info"):
-    """ Logs only on ``mpi_rank=0``.
-
-    Arguments
-    ---------
-    msg: str
-        Message to log.
-    mpi_rank: int
-        Rank of the MPI process.
-    fnc: logging method
-        Channel to log, usually info or error.
-    """
-    if mpi_rank == 0:
-        getattr(logging, fnc)(msg)
-
-
 class _INVALID_VALUE(object):
     """ Sentinel for invalid values. """
 

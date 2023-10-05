@@ -1,5 +1,4 @@
 import argparse
-import functools
 import logging
 import time
 
@@ -13,7 +12,7 @@ import qsonic.catalog
 import qsonic.io
 import qsonic.spectrum
 import qsonic.masks
-from qsonic.mpi_utils import logging_mpi, mpi_parse
+from qsonic.mpi_utils import mpi_parse
 from qsonic.picca_continuum import (
     PiccaContinuumFitter, add_picca_continuum_parser)
 
@@ -116,7 +115,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
         Spectrum objects for the local MPI rank.
     """
     start_time = time.time()
-    logging_mpi("Reading spectra.", mpi_rank)
+    logging.info("Reading spectra.")
 
     # skip_resomat = args.skip_resomat or not args.mock_analysis
 
@@ -140,27 +139,26 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
             spectra_list.append(spec)
 
     if args.coadd_arms == "before":
-        logging_mpi("Coadding arms.", mpi_rank)
+        logging.info("Coadding arms.")
         for spec in spectra_list:
             spec.coadd_arms_forest()
 
     nspec_all = comm.reduce(len(spectra_list))
     etime = (time.time() - start_time) / 60  # min
-    logging_mpi(
-        f"All {nspec_all} spectra are read in {etime:.1f} mins.", mpi_rank)
+    logging.info(f"All {nspec_all} spectra are read in {etime:.1f} mins.")
 
     return spectra_list
 
 
 def mpi_noise_flux_calibrate(spectra_list, args, comm, mpi_rank):
     if args.noise_calibration:
-        logging_mpi("Applying noise calibration.", mpi_rank)
+        logging.info("Applying noise calibration.")
         ncal = qsonic.calibration.NoiseCalibrator(
             args.noise_calibration, comm, mpi_rank)
         ncal.apply(spectra_list)
 
     if args.flux_calibration:
-        logging_mpi("Applying flux calibration.", mpi_rank)
+        logging.info("Applying flux calibration.")
         fcal = qsonic.calibration.FluxCalibrator(
             args.flux_calibration, comm, mpi_rank)
         fcal.apply(spectra_list)
@@ -192,21 +190,21 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
     maskers = []
 
     if args.sky_mask:
-        logging_mpi("Reading sky mask.", mpi_rank)
+        logging.info("Reading sky mask.")
         skymasker = qsonic.masks.SkyMask(args.sky_mask)
 
         maskers.append(skymasker)
 
     # BAL mask
     if args.bal_mask:
-        logging_mpi("Checking BAL mask.", mpi_rank)
+        logging.info("Checking BAL mask.")
         qsonic.masks.BALMask.check_catalog(local_queue[0])
 
         maskers.append(qsonic.masks.BALMask)
 
     # DLA mask
     if args.dla_mask:
-        logging_mpi("Reading DLA mask.", mpi_rank)
+        logging.info("Reading DLA mask.")
         local_targetids = np.concatenate(
             [cat['TARGETID'] for cat in local_queue])
 
@@ -243,20 +241,20 @@ def apply_masks(maskers, spectra_list, mpi_rank=0):
         return
 
     start_time = time.time()
-    logging_mpi("Applying masks.", mpi_rank)
+    logging.info("Applying masks.")
     for spec in spectra_list:
         for masker in maskers:
             masker.apply(spec)
         spec.drop_short_arms()
     etime = (time.time() - start_time) / 60   # min
-    logging_mpi(f"Masks are applied in {etime:.1f} mins.", mpi_rank)
+    logging.info(f"Masks are applied in {etime:.1f} mins.")
 
 
 def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank=0):
     if not skip_ratio:
         return spectra_list
 
-    logging_mpi("Removing short spectra.", mpi_rank)
+    logging.info("Removing short spectra.")
     dforest_wave = lya2 - lya1
     spectra_list = [spec for spec in spectra_list
                     if spec.is_long(dforest_wave, skip_ratio)]
@@ -266,7 +264,7 @@ def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank=0):
 
 def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
     # Initialize continuum fitter & global functions
-    logging_mpi("Initializing continuum fitter.", mpi_rank)
+    logging.info("Initializing continuum fitter.")
     start_time = time.time()
     qcfit = PiccaContinuumFitter(args)
 
@@ -275,14 +273,14 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
         # Stack all spectra in each process
         # Broadcast and recalculate global functions
         # Iterate
-        logging_mpi("Fitting continuum.", mpi_rank)
+        logging.info("Fitting continuum.")
         qcfit.iterate(spectra_list)
     else:
-        logging_mpi("True continuum.", mpi_rank)
+        logging.info("True continuum.")
         qcfit.true_continuum(spectra_list)
 
     if args.coadd_arms == "after":
-        logging_mpi("Coadding arms.", mpi_rank)
+        logging.info("Coadding arms.")
         for spec in qsonic.spectrum.valid_spectra(spectra_list):
             spec.coadd_arms_forest(qcfit.varlss_interp, qcfit.eta_interp)
             spec.calc_continuum_chi2()
@@ -297,8 +295,7 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
         spec.drop_short_arms(args.forest_w1, args.forest_w2, args.skip)
 
     etime = (time.time() - start_time) / 60  # min
-    logging_mpi(f"Continuum fitting and tweaking took {etime:.1f} mins.",
-                mpi_rank)
+    logging.info(f"Continuum fitting and tweaking took {etime:.1f} mins.")
 
     return spectra_list
 
@@ -353,7 +350,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     spectra_list = mpi_continuum_fitting(spectra_list, args, comm, mpi_rank)
 
     # Save deltas
-    logging_mpi("Saving deltas.", mpi_rank)
+    logging.info("Saving deltas.")
     qsonic.io.save_deltas(
         spectra_list, args.outdir,
         save_by_hpx=args.save_by_hpx, mpi_rank=mpi_rank)
@@ -370,18 +367,17 @@ def main():
     logging.basicConfig(
         format='%(asctime)s - %(levelname)s: %(message)s',
         datefmt='%Y/%m/%d %I:%M:%S %p',
-        level=logging.DEBUG)
-    logging.captureWarnings(True)
+        level=logging.DEBUG if mpi_rank == 0 else logging.CRITICAL)
 
     try:
         mpi_run_all(comm, mpi_rank, mpi_size)
     except QsonicException as e:
-        logging_mpi(e, mpi_rank, "exception")
+        logging.exception(e)
         exit(1)
     except Exception as e:
-        logging.error(f"Unexpected error on Rank{mpi_rank}. Abort.")
+        logging.critical(f"Unexpected error on Rank{mpi_rank}. Abort.")
         logging.exception(e)
         comm.Abort()
 
     etime = (time.time() - start_time) / 60  # min
-    logging_mpi(f"Total time spent is {etime:.1f} mins.", mpi_rank)
+    logging.info(f"Total time spent is {etime:.1f} mins.")
