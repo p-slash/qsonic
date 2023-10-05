@@ -36,6 +36,8 @@ def add_io_parser(parser=None):
         "--catalog", required=True,
         help="Catalog filename")
     ingroup.add_argument(
+        "--tile-format", action="store_true", help="Read tiles.")
+    ingroup.add_argument(
         "--mock-analysis", action="store_true",
         help="Input folder is mock. Uses nside=16")
     ingroup.add_argument(

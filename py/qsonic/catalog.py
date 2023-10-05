@@ -22,6 +22,8 @@ _required_data_columns = [
     set(['COADD_LASTNIGHT', 'LAST_NIGHT', 'LASTNIGHT'])
 ]
 """list(set): Required columns for real data analysis."""
+_required_tile_columns = [set(['TILEID']), set(['PETAL_LOC'])]
+"""list(set): Required columns for tile data analysis."""
 _optional_columns = [
     'HPXPIXEL', 'VMIN_CIV_450', 'VMAX_CIV_450', 'VMIN_CIV_2000',
     'VMAX_CIV_2000'
@@ -29,18 +31,22 @@ _optional_columns = [
 """list(str): Optional columns."""
 _all_columns = [
     col for reqset in (
-        _required_columns + _required_data_columns
+        _required_columns + _required_data_columns + _required_tile_columns
     ) for col in reqset
 ] + _optional_columns
 
 
 def read_quasar_catalog(
-        filename, is_mock=False, keep_surveys=None,
-        zmin=0, zmax=100.0):
+        filename, is_mock=False, is_tile=False, keep_surveys=None,
+        zmin=0, zmax=100.0
+):
     """ Returns a quasar catalog object (ndarray).
 
-    It is sorted in the following order: HPXPIXEL, SURVEY (if applicable),
-    TARGETID. BAL info included if available. It is required for BAL masking.
+    It is sorted in the following order:
+    1. HPXPIXEL or TILEID
+    2. SURVEY (if applicable),
+    3. TARGETID.
+    BAL info included if available. It is required for BAL masking.
     If 'HPXPIXEL' column is not present, n_side is assumed 16 for mocks, 64 for
     data.
 
@@ -50,6 +56,8 @@ def read_quasar_catalog(
         Filename to catalog.
     is_mock: bool, default: False
         If the catalog is for mocks.
+    is_tile: bool, default: False
+        If the catalog is for tiles. Duplicate TARGETIDs are allowed.
     keep_surveys: None or list(str), default: None
         List of surveys to subselect. None keeps all.
     zmin: float, default: 0
@@ -64,14 +72,14 @@ def read_quasar_catalog(
     """
     n_side = 16 if is_mock else 64
     catalog = _read(filename)
-    catalog = _validate_adjust_column_names(catalog, is_mock)
-    catalog = _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax)
+    catalog = _validate_adjust_column_names(catalog, is_mock, is_tile)
+    catalog = _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax, is_tile)
 
     return catalog
 
 
 def mpi_read_quasar_catalog(
-        filename, comm=None, mpi_rank=0, is_mock=False,
+        filename, comm=None, mpi_rank=0, is_mock=False, is_tile=False,
         keep_surveys=None, zmin=0, zmax=100
 ):
     """ Returns the same quasar catalog object on all MPI ranks.
@@ -91,6 +99,8 @@ def mpi_read_quasar_catalog(
         Rank of the MPI process
     is_mock: bool, default: False
         If the catalog is for mocks.
+    is_tile: bool, default: False
+        If the catalog is for tiles. Duplicate TARGETIDs are allowed.
     keep_surveys: None or list(str), default: None
         List of surveys to subselect. None keeps all.
     zmin: float, default: 0
@@ -111,14 +121,14 @@ def mpi_read_quasar_catalog(
     catalog = mpi_fnc_bcast(
         read_quasar_catalog,
         comm, mpi_rank, "Error while reading catalog.",
-        filename, is_mock, keep_surveys, zmin, zmax)
+        filename, is_mock, is_tile, keep_surveys, zmin, zmax)
 
     return catalog
 
 
-def mpi_get_local_queue(catalog, mpi_rank, mpi_size):
+def mpi_get_local_queue(catalog, mpi_rank, mpi_size, is_tile=False):
     """ Take a 'HPXPIXEL' sorted `catalog` and assign a list of catalogs to
-    mpi_rank
+    mpi_rank. If in tile format, sort key is 'TILEID'.
 
     Arguments
     ----------
@@ -128,6 +138,8 @@ def mpi_get_local_queue(catalog, mpi_rank, mpi_size):
         Rank of the MPI process
     mpi_size: int
         Size of MPI processes
+    is_tile: bool, default: False
+        If the catalog is for tiles. Split key will be 'TILEID'.
 
     Returns
     ----------
@@ -136,10 +148,11 @@ def mpi_get_local_queue(catalog, mpi_rank, mpi_size):
     """
     # We decide forest filename list
     # Group into unique pixels
-    unique_pix, s = np.unique(catalog['HPXPIXEL'], return_index=True)
+    split_key = "TILEID" if is_tile else "HPXPIXEL"
+    unique_pix, s = np.unique(catalog[split_key], return_index=True)
     split_catalog = np.split(catalog, s[1:])
     logging_mpi(
-        f"There are {unique_pix.size} healpixels."
+        f"There are {unique_pix.size} keys ({split_key})."
         " Don't use more MPI processes.", mpi_rank)
 
     # Roughly equal number of spectra
@@ -171,7 +184,7 @@ def _check_required_columns(required_cols, colnames):
             f"{', '.join(reqset)}!")
 
 
-def _validate_adjust_column_names(catalog, is_mock):
+def _validate_adjust_column_names(catalog, is_mock, is_tile):
     """ Validate `catalog` for required columns in `_required_columns`.
     'SURVEY' is also required for data. 'TARGET_{RA, DEC}' is transformed to
     'RA' and 'DEC' in return.
@@ -182,6 +195,8 @@ def _validate_adjust_column_names(catalog, is_mock):
         Catalog.
     is_mock: bool
         If the catalog is for mocks, does not perform 'SURVEY' check.
+    is_tile: bool
+        If the catalog is for tiles, duplicate TARGETIDs are allowed.
 
     Returns
     ----------
@@ -193,10 +208,12 @@ def _validate_adjust_column_names(catalog, is_mock):
     _check_required_columns(_required_columns, colnames)
     if not is_mock:
         _check_required_columns(_required_data_columns, colnames)
+    if is_tile:
+        _check_required_columns(_required_tile_columns, colnames)
 
     logging_mpi(f"There are {catalog.size} quasars in the catalog.", 0)
 
-    if catalog.size != np.unique(catalog['TARGETID']).size:
+    if not is_tile and catalog.size != np.unique(catalog['TARGETID']).size:
         raise Exception("There are duplicate TARGETIDs in catalog!")
 
     # Adjust column names
@@ -273,9 +290,11 @@ def _add_healpix(catalog, n_side, keep_columns):
     return catalog
 
 
-def _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax):
+def _prime_catalog(
+        catalog, n_side, keep_surveys, zmin, zmax, is_tile
+):
     """ Returns quasar catalog object. It is sorted in the following order:
-    HPXPIXEL, SURVEY (if applicable), TARGETID
+    sort_key (HPXPIXEL), SURVEY (if applicable), TARGETID
 
     Arguments
     ----------
@@ -289,6 +308,8 @@ def _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax):
         Minimum quasar redshift
     zmax: float
         Maximum quasar redshift
+    is_tile: bool
+        If the catalog is for tiles. Sort key will start with 'TILEID'.
 
     Returns
     ----------
@@ -302,7 +323,11 @@ def _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax):
     logging_mpi(f"There are {w.sum()} quasars in the redshift range.", 0)
     catalog = catalog[w]
 
-    sort_order = ['HPXPIXEL', 'TARGETID']
+    if is_tile:
+        sort_order = ['TILEID', 'TARGETID']
+    else:
+        sort_order = ["HPXPIXEL", 'TARGETID']
+
     # Filter all the objects in the catalogue not belonging to the specified
     # surveys.
     if 'SURVEY' in colnames and keep_surveys is not None:
