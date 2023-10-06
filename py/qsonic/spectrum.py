@@ -40,11 +40,10 @@ def add_wave_region_parser(parser=None):
 
 
 def generate_spectra_list_from_data(cat_by_survey, data):
-    spectra_list = []
-    for idx, catrow in enumerate(cat_by_survey):
-        spectra_list.append(Spectrum.from_dictionary(catrow, data, idx))
-
-    return spectra_list
+    return [
+        Spectrum.from_dictionary(catrow, data, idx)
+        for idx, catrow in enumerate(cat_by_survey)
+    ]
 
 
 def valid_spectra(spectra_list):
