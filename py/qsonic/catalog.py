@@ -45,7 +45,7 @@ def read_quasar_catalog(
 
     It is sorted in the following order:
     1. HPXPIXEL or TILEID
-    2. SURVEY (if applicable),
+    2. SURVEY or PETAL_LOC (if applicable),
     3. TARGETID.
     BAL info included if available. It is required for BAL masking.
     If 'HPXPIXEL' column is not present, n_side is assumed 16 for mocks, 64 for
@@ -58,7 +58,8 @@ def read_quasar_catalog(
     is_mock: bool, default: False
         If the catalog is for mocks.
     is_tile: bool, default: False
-        If the catalog is for tiles. Duplicate TARGETIDs are allowed.
+        If the catalog is for tiles. Duplicate TARGETIDs are allowed as long as
+        they are in different TILEIDs.
     keep_surveys: None or list(str), default: None
         List of surveys to subselect. None keeps all.
     zmin: float, default: 0
@@ -198,7 +199,8 @@ def _validate_adjust_column_names(catalog, is_mock, is_tile):
     is_mock: bool
         If the catalog is for mocks, does not perform 'SURVEY' check.
     is_tile: bool
-        If the catalog is for tiles, duplicate TARGETIDs are allowed.
+        If the catalog is for tiles, duplicate TARGETIDs are allowed as long as
+        they are in different TILEIDs.
 
     Returns
     ----------
@@ -213,10 +215,15 @@ def _validate_adjust_column_names(catalog, is_mock, is_tile):
     if is_tile:
         _check_required_columns(_required_tile_columns, colnames)
 
-    logging.info(f"There are {catalog.size} quasars in the catalog.")
+    nqso = catalog.size
+    logging.info(f"There are {nqso} quasars in the catalog.")
 
-    if not is_tile and catalog.size != np.unique(catalog['TARGETID']).size:
+    if not is_tile and nqso != np.unique(catalog['TARGETID']).size:
         raise Exception("There are duplicate TARGETIDs in catalog!")
+
+    if is_tile and nqso != np.unique(catalog[['TARGETID', 'TILEID']]).size:
+        raise Exception(
+            "There are duplicate TARGETID - TILEID combinations in catalog!")
 
     # Adjust column names
     colname_map = {}
@@ -311,7 +318,7 @@ def _prime_catalog(
     zmax: float
         Maximum quasar redshift
     is_tile: bool
-        If the catalog is for tiles. Sort key will start with 'TILEID'.
+        If the catalog is for tiles. Sort oder will be TILEID, PETAL_LOC.
 
     Returns
     ----------
@@ -326,7 +333,7 @@ def _prime_catalog(
     catalog = catalog[w]
 
     if is_tile:
-        sort_order = ['TILEID', 'TARGETID']
+        sort_order = ['TILEID', 'PETAL_LOC', 'TARGETID']
     else:
         sort_order = ["HPXPIXEL", 'TARGETID']
 

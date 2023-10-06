@@ -37,7 +37,8 @@ def add_io_parser(parser=None):
         "--catalog", required=True,
         help="Catalog filename")
     ingroup.add_argument(
-        "--tile-format", action="store_true", help="Read tiles.")
+        "--tile-format", action="store_true",
+        help="Read tile coadd-*.fits files in tiles/cumulative directory.")
     ingroup.add_argument(
         "--mock-analysis", action="store_true",
         help="Input folder is mock. Uses nside=16")
@@ -66,14 +67,15 @@ def add_io_parser(parser=None):
 
 
 def get_spectra_reader_function(
-    input_dir, arms_to_keep, mock_analysis, skip_resomat,
-    read_true_continuum, is_tile, program="dark"
+        input_dir, arms_to_keep, mock_analysis, skip_resomat,
+        read_true_continuum, is_tile, program="dark"
 ):
     """ Returns a callable object (function) that returns a list of Spectrum
     objects for a given catalog of a single healpix. Essentially, a wrapper
     for :meth:`read_onehealpix_file_mock` or :meth:`read_onehealpix_file_data`
     functions. If for data 'SURVEY' column must be present and sorted when
-    calling the function this returns.
+    calling the function this returns in the healpix grouping. Tile grouping
+    requires TILEID and PETAL_LOC.
 
     Arguments
     ---------
@@ -109,7 +111,7 @@ def get_spectra_reader_function(
 
     elif is_tile:
         return functools.partial(
-            read_onetile_file_data,
+            read_onetile_coaddfile_data,
             input_dir=input_dir, arms_to_keep=arms_to_keep,
             skip_resomat=skip_resomat
         )
@@ -151,8 +153,7 @@ def read_resolution_matrices_onehealpix_data(
     """
     # assert (catalog_hpx.size == len(spectra_list))
 
-    unique_surveys, s2 = np.unique(
-        catalog_hpx['SURVEY'], return_index=True)
+    unique_surveys, s2 = np.unique(catalog_hpx['SURVEY'], return_index=True)
     survey_split_cat = np.split(catalog_hpx, s2[1:])
     s2 = np.append(s2, len(spectra_list))
 
@@ -190,13 +191,9 @@ def read_deltas(fname):
     RuntimeError
         If the file is missing certain columns and keys. See :class:`Delta`.
     """
-    deltas_list = []
-    fitsfile = fitsio.FITS(fname)
 
-    for hdu in fitsfile[1:]:
-        deltas_list.append(qsonic.spectrum.Delta(hdu))
-
-    fitsfile.close()
+    with fitsio.FITS(fname) as fts:
+        deltas_list = [qsonic.spectrum.Delta(hdu) for hdu in fts[1:]]
 
     return deltas_list
 
@@ -332,7 +329,8 @@ def _read_true_continuum(targetids, fspec):
 def _read_onehealpix_file(
         targetids_by_survey, fspec, arms_to_keep, skip_resomat
 ):
-    """ Common function to read a single fits file.
+    """Common function to read a single FITS file for fibermaps with unique
+    TARGETIDs.
 
     Arguments
     ---------
@@ -514,10 +512,57 @@ def read_onehealpix_file_data(
     return spectra_list
 
 
-def read_onetile_file_data(
+def read_onetile_coaddfile_data(
         catalog_tile, input_dir, arms_to_keep, skip_resomat
 ):
-    raise NotImplementedError
+    """Read all coadd FITS files for petals needed for a given tile.
+
+    Arguments
+    ---------
+    catalog_tile: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Catalog for a tile. Ordered by PETAL_LOC and TARGETID.
+    input_dir: str
+        Input directory.
+    arms_to_keep: list(str)
+        Must only contain B, R and Z.
+    skip_resomat: bool
+        If true, do not read resomat.
+
+    Returns
+    ---------
+    spectra_list: list(Spectrum)
+
+    Raises
+    ---------
+    RuntimeWarning
+        If number of quasars in the tile file does not match the catalog.
+    """
+    tileid = catalog_tile['TILEID'][0]
+    lastnight = catalog_tile['LASTNIGHT'][0]
+
+    petal_split_cat = np.split(
+        catalog_tile, np.unique(
+            catalog_tile['PETAL_LOC'], return_index=True)[1][1:]
+    )
+
+    spectra_list = []
+    for cat_by_petal in petal_split_cat:
+        petal = cat_by_petal['PETAL_LOC'][0]
+
+        fspec = (f"{input_dir}/{tileid}/{lastnight}/"
+                 f"coadd-{petal}-{tileid}-thru{lastnight}.fits")
+        data, idx_cat = _read_onehealpix_file(
+            cat_by_petal['TARGETID'], fspec, arms_to_keep, skip_resomat)
+
+        if idx_cat.size != cat_by_petal.size:
+            cat_by_petal = cat_by_petal[idx_cat]
+
+        spectra_list.extend(
+            qsonic.spectrum.generate_spectra_list_from_data(
+                cat_by_petal, data)
+        )
+
+    return spectra_list
 
 
 def read_onehealpix_file_mock(
