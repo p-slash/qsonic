@@ -58,39 +58,30 @@ def get_parser(add_help=True):
 
 
 def args_logic_fnc_qsonic_fit(args):
-    args_pass = True
-
     args.arms = list(set(args.arms))
 
-    if args.true_continuum:
-        if not args.mock_analysis:
-            logging.error(
-                "True continuum is only applicable to mock analysis.")
-            args_pass = False
+    condition_msg = [
+        (args.true_continuum and not args.mock_analysis,
+            "True continuum is only applicable to mock analysis."),
+        (args.true_continuum and not args.fiducial_meanflux,
+            "True continuum analysis requires fiducial mean flux."),
+        (args.true_continuum and not args.fiducial_varlss,
+            "True continuum analysis requires fiducial var_lss."),
+        (args.wave2 <= args.wave1,
+            "wave2 must be greater than wave1."),
+        (args.forest_w2 <= args.forest_w1,
+            "forest_w2 must be greater than forest_w1."),
+        (args.mock_analysis and args.tile_format,
+            "Mock analysis in tile format is not supported."),
+        (args.tile_format and args.save_by_hpx,
+            "Cannot save deltas in healpixes in tile format.")
+    ]
 
-        if not args.fiducial_meanflux:
-            logging.error(
-                "True continuum analysis requires fiducial mean flux.")
-            args_pass = False
+    for c, msg in condition_msg:
+        if c:
+            logging.error(msg)
 
-        if not args.fiducial_varlss:
-            logging.error("True continuum analysis requires fiducial var_lss.")
-            args_pass = False
-
-    if args.wave2 <= args.wave1:
-        logging.error("wave2 must be greater than wave1.")
-        args_pass = False
-
-    if args.forest_w2 <= args.forest_w1:
-        logging.error("forest_w2 must be greater than forest_w1.")
-        args_pass = False
-
-    if args.mock_analysis and args.tile_format:
-        logging.error(
-            "Mock analysis in tile format is not supported.")
-        args_pass = False
-
-    return args_pass
+    return not any(_[0] for _ in condition_msg)
 
 
 def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
