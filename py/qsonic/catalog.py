@@ -294,7 +294,8 @@ def _add_healpix(catalog, n_side, keep_columns):
     if 'HPXPIXEL' not in keep_columns:
         pixnum = ang2pix(
             n_side, catalog['RA'], catalog['DEC'], lonlat=True, nest=True)
-        catalog = append_fields(catalog, 'HPXPIXEL', pixnum, dtypes=int)
+        catalog = append_fields(
+            catalog, 'HPXPIXEL', pixnum, dtypes=int, useMask=False)
 
     return catalog
 
@@ -342,7 +343,7 @@ def _prime_catalog(
     if 'SURVEY' in colnames and keep_surveys is not None:
         w = np.isin(catalog["SURVEY"], keep_surveys)
         catalog = catalog[w]
-        if len(keep_surveys) > 1:
+        if len(keep_surveys) > 1 and not is_tile:
             sort_order.insert(1, 'SURVEY')
         logging.info(
             f"There are {w.sum()} quasars in given surveys {keep_surveys}.")

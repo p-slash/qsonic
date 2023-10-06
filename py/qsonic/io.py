@@ -43,7 +43,7 @@ def add_io_parser(parser=None):
         "--mock-analysis", action="store_true",
         help="Input folder is mock. Uses nside=16")
     ingroup.add_argument(
-        "--keep-surveys", nargs='+', default=['sv3', 'main'],
+        "--keep-surveys", nargs='+', default=['main'],
         help="Surveys to keep.")
     ingroup.add_argument(
         "--skip-resomat", action="store_true",
