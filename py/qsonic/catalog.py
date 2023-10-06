@@ -74,7 +74,8 @@ def read_quasar_catalog(
     n_side = 16 if is_mock else 64
     catalog = _read(filename)
     catalog = _validate_adjust_column_names(catalog, is_mock, is_tile)
-    catalog = _prime_catalog(catalog, n_side, keep_surveys, zmin, zmax, is_tile)
+    catalog = _prime_catalog(
+        catalog, n_side, keep_surveys, zmin, zmax, is_tile)
 
     return catalog
 
