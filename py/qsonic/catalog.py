@@ -295,7 +295,7 @@ def _add_healpix(catalog, n_side, keep_columns):
         pixnum = ang2pix(
             n_side, catalog['RA'], catalog['DEC'], lonlat=True, nest=True)
         catalog = append_fields(
-            catalog, 'HPXPIXEL', pixnum, dtypes=int, useMask=False)
+            catalog, 'HPXPIXEL', pixnum, dtypes=int, usemask=False)
 
     return catalog
 
