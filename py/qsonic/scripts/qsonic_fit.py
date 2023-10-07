@@ -124,10 +124,10 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
                 args.wave1, args.wave2, args.forest_w1, args.forest_w2)
             spec.remove_nonforest_pixels()
 
-            if not spec.forestwave or spec.rsnr < args.min_rsnr:
-                continue
-
-            spectra_list.append(spec)
+        spectra_list.extend([
+            spec for spec in local_specs
+            if spec.forestwave and spec.rsnr >= args.min_rsnr
+        ])
 
     if args.coadd_arms == "before":
         logging.info("Coadding arms.")

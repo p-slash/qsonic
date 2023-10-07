@@ -9,6 +9,7 @@ from healpy import ang2pix
 import numpy as np
 from numpy.lib.recfunctions import rename_fields, append_fields
 
+from qsonic import QsonicException
 from qsonic.mpi_utils import balance_load, mpi_fnc_bcast
 
 _accepted_extnames = set(['QSO_CAT', 'ZCATALOG', 'METADATA'])
@@ -165,9 +166,23 @@ def mpi_get_local_queue(
     """
     # We decide forest filename list
     # Group into unique pixels
+
     if mpi_rank == 0:
-        catalog = read_quasar_catalog(
-            filename, is_mock, is_tile, keep_surveys, zmin, zmax)
+        try:
+            catalog = read_quasar_catalog(
+                filename, is_mock, is_tile, keep_surveys, zmin, zmax)
+            status = True
+        except Exception as e:
+            logging.exception(e)
+            status = False
+    else:
+        status = False
+
+    status = comm.bcast(status)
+    if not status:
+        raise QsonicException("Error while reading catalog.")
+
+    if mpi_rank == 0:
         split_key = "TILEID" if is_tile else "HPXPIXEL"
         unique_pix, s = np.unique(catalog[split_key], return_index=True)
         split_catalog = np.split(catalog, s[1:])

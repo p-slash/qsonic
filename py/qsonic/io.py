@@ -515,7 +515,7 @@ def read_onehealpix_file_data(
 def read_onetile_coaddfile_data(
         catalog_tile, input_dir, arms_to_keep, skip_resomat
 ):
-    """Read all coadd FITS files for petals needed for a given tile.
+    """Read all petal coadd FITS files for a given tile.
 
     Arguments
     ---------
