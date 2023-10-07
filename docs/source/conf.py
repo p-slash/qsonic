@@ -33,6 +33,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
     'sphinxarg.ext',
+    'sphinx_rtd_theme'
     # 'nbsphinx',
     # 'autoapi.extension'
 ]
