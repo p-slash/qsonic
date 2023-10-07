@@ -83,9 +83,8 @@ class TestMPIUtils(TestCase):
             3 * np.ones(5), 2 * np.ones(4), np.ones(3), 4 * np.ones(1)]
 
         mpi_size = 3
-        q0 = qsonic.mpi_utils.balance_load(split_catalog, mpi_size, 0)
-        q1 = qsonic.mpi_utils.balance_load(split_catalog, mpi_size, 1)
-        q2 = qsonic.mpi_utils.balance_load(split_catalog, mpi_size, 2)
+        q0, q1, q2 = qsonic.mpi_utils.balance_load(split_catalog, mpi_size)
+
         for idx in range(len(split_catalog)):
             npt.assert_allclose(split_catalog[idx], sorted_catalog[idx])
         assert (len(q0) == 1)

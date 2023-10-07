@@ -107,7 +107,7 @@ def mpi_fnc_bcast(fnc, comm=None, mpi_rank=0, err_msg="", *args, **kwargs):
     return result
 
 
-def balance_load(split_catalog, mpi_size, mpi_rank):
+def balance_load(split_catalog, mpi_size):
     """ Load balancing function.
 
     Arguments
@@ -116,25 +116,21 @@ def balance_load(split_catalog, mpi_size, mpi_rank):
         List of catalog. Each element is a ndarray with the same healpix.
     mpi_size: int
         Number of MPI tasks running.
-    mpi_rank: int
-        Rank of the MPI process.
 
     Returns
     ---------
-    local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-        Spectra that current rank is reponsible for in ``split_catalog`` format
+    local_queue: list(list(:external+numpy:py:class:`ndarray <numpy.ndarray>`))
+        Spectra that ranks are reponsible for in ``split_catalog`` format
     """
     number_of_spectra = np.zeros(mpi_size, dtype=int)
-    local_queue = []
+    local_queues = [[] for _ in range(mpi_size)]
     split_catalog.sort(key=lambda x: x.size, reverse=True)  # Descending order
     for cat in split_catalog:
         min_idx = np.argmin(number_of_spectra)
         number_of_spectra[min_idx] += cat.size
+        local_queues[min_idx].append(cat)
 
-        if min_idx == mpi_rank:
-            local_queue.append(cat)
-
-    return local_queue
+    return local_queues
 
 
 class MPISaver():

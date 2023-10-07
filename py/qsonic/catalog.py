@@ -129,20 +129,34 @@ def mpi_read_quasar_catalog(
     return catalog
 
 
-def mpi_get_local_queue(catalog, mpi_rank, mpi_size, is_tile=False):
-    """ Take a 'HPXPIXEL' sorted `catalog` and assign a list of catalogs to
+def mpi_get_local_queue(
+        filename, comm=None, mpi_rank=0, mpi_size=1, is_mock=False,
+        is_tile=False, keep_surveys=None, zmin=0, zmax=100.0
+):
+    """Reads catalog on master and scatter a list of catalogs to every
     mpi_rank. If in tile format, sort key is 'TILEID'.
 
     Arguments
     ----------
-    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        'HPXPIXEL' sorted catalog.
+    filename: str
+        Filename to catalog.
+    comm: MPI comm object or None, default: None
+        MPI comm object for scatter
     mpi_rank: int
         Rank of the MPI process
     mpi_size: int
         Size of MPI processes
+    is_mock: bool, default: False
+        If the catalog is for mocks.
     is_tile: bool, default: False
-        If the catalog is for tiles. Split key will be 'TILEID'.
+        If the catalog is for tiles. Split key will be 'TILEID'. Duplicate
+        TARGETIDs are allowed.
+    keep_surveys: None or list(str), default: None
+        List of surveys to subselect. None keeps all.
+    zmin: float, default: 0
+        Minimum quasar redshift
+    zmax: float, default: 100
+        Maximum quasar redshift
 
     Returns
     ----------
@@ -151,17 +165,24 @@ def mpi_get_local_queue(catalog, mpi_rank, mpi_size, is_tile=False):
     """
     # We decide forest filename list
     # Group into unique pixels
-    split_key = "TILEID" if is_tile else "HPXPIXEL"
-    unique_pix, s = np.unique(catalog[split_key], return_index=True)
-    split_catalog = np.split(catalog, s[1:])
-    logging.info(
-        f"There are {unique_pix.size} keys ({split_key})."
-        " Don't use more MPI processes.")
+    if mpi_rank == 0:
+        catalog = read_quasar_catalog(
+            filename, is_mock, is_tile, keep_surveys, zmin, zmax)
+        split_key = "TILEID" if is_tile else "HPXPIXEL"
+        unique_pix, s = np.unique(catalog[split_key], return_index=True)
+        split_catalog = np.split(catalog, s[1:])
+        logging.info(
+            f"There are {unique_pix.size} keys ({split_key})."
+            " Don't use more MPI processes.")
 
-    # Roughly equal number of spectra
-    logging.info("Load balancing.")
-    # Returns a list of catalog (ndarray)
-    return balance_load(split_catalog, mpi_size, mpi_rank)
+        # Roughly equal number of spectra
+        logging.info("Load balancing.")
+        # Returns a list of catalog (ndarray)
+        local_queue = balance_load(split_catalog, mpi_size)
+    else:
+        local_queue = None
+
+    return comm.scatter(local_queue)
 
 
 def _check_required_columns(required_cols, colnames):

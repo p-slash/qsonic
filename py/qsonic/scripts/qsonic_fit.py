@@ -303,16 +303,16 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     zmax_qso = args.wave2 / (args.forest_w1 + tol) - 1
 
     # read catalog
-    full_catalog = qsonic.catalog.mpi_read_quasar_catalog(
-        args.catalog, comm, mpi_rank, is_mock=args.mock_analysis,
-        is_tile=args.tile_format, keep_surveys=args.keep_surveys,
-        zmin=zmin_qso, zmax=zmax_qso)
-
     local_queue = qsonic.catalog.mpi_get_local_queue(
-        full_catalog, mpi_rank, mpi_size, args.tile_format)
+        args.catalog, comm, mpi_rank, mpi_size, args.mock_analysis,
+        args.tile_format, args.keep_surveys, zmin_qso, zmax_qso)
 
     # Blinding
-    qsonic.spectrum.Spectrum.set_blinding(full_catalog, args)
+    if args.mock_analysis:
+        maxlastnight = None
+    else:
+        maxlastnight = comm.allreduce(np.max(local_queue['LASTNIGHT']), max)
+    qsonic.spectrum.Spectrum.set_blinding(maxlastnight, args)
 
     # Read masks before data
     maskers = mpi_read_masks(local_queue, args, comm, mpi_rank)
