@@ -33,7 +33,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
     'sphinxarg.ext',
-    "sphinxcontrib.jquery"  # based on https://github.com/readthedocs/readthedocs.org/issues/10159#issuecomment-1478717074
+    'sphinx_rtd_theme'
     # 'nbsphinx',
     # 'autoapi.extension'
 ]
