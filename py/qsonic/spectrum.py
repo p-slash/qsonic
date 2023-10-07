@@ -131,16 +131,16 @@ class Spectrum():
         Spectrum._coadd_wave = {'brz': coadd_wave}
 
     @staticmethod
-    def set_blinding(catalog, args):
+    def set_blinding(maxlastnight, args):
         """Set the blinding strategy.
 
-        'LASNIGHT' column, args.mock_analysis, args.forest_w1 decide the
+        'LASTNIGHT' column, args.mock_analysis, args.forest_w1 decide the
         blinding strategy. Mock, side band and SV analyses are not blinded.
 
         Arguments
         ---------
-        catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Entire quasar catalog.
+        maxlastnight: int
+            Maximum LASTNIGHT column of the entire quasar catalog.
         args: argparse.Namespace
             Should have ``mock_analysis (bool)`` and ``forest_w1 (floar)``.
         """
@@ -148,11 +148,11 @@ class Spectrum():
         if args.mock_analysis or args.forest_w1 > Spectrum.WAVE_LYA_A:
             Spectrum._blinding = "none"
         # sv data, no blinding
-        elif all(catalog['LASTNIGHT'] < 20210514):
+        elif maxlastnight < 20210514:
             Spectrum._blinding = "none"
-        elif all(catalog['LASTNIGHT'] < 20210801):
+        elif maxlastnight < 20210801:
             Spectrum._blinding = "desi_m2"
-        elif all(catalog['LASTNIGHT'] < 20220801):
+        elif maxlastnight < 20220801:
             Spectrum._blinding = "desi_y1"
         else:
             Spectrum._blinding = "desi_y3"
