@@ -108,7 +108,7 @@ def mpi_fnc_bcast(fnc, comm=None, mpi_rank=0, err_msg="", *args, **kwargs):
 
 
 def balance_load(split_catalog, mpi_size):
-    """ Load balancing function.
+    """Load balancing function. The return value can be scattered.
 
     Arguments
     ---------
@@ -120,7 +120,7 @@ def balance_load(split_catalog, mpi_size):
     Returns
     ---------
     local_queue: list(list(:external+numpy:py:class:`ndarray <numpy.ndarray>`))
-        Spectra that ranks are reponsible for in ``split_catalog`` format
+        Spectra that ranks are reponsible for in ``split_catalog`` format.
     """
     number_of_spectra = np.zeros(mpi_size, dtype=int)
     local_queues = [[] for _ in range(mpi_size)]
