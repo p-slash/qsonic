@@ -10,7 +10,7 @@ from scipy.optimize import minimize, curve_fit
 from scipy.interpolate import UnivariateSpline
 from scipy.special import legendre
 
-from mpi4py import MPI
+from mpi4py.MPI import IN_PLACE as MPI_INPLACE
 
 from qsonic import QsonicException
 from qsonic.spectrum import valid_spectra
@@ -532,8 +532,8 @@ class PiccaContinuumFitter():
                 self.flux_stacker.add(wave_arm, flux, weight)
 
         self.flux_stacker.calculate()
-        self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
-        self.comm.Allreduce(MPI.IN_PLACE, counts)
+        self.comm.Allreduce(MPI_INPLACE, norm_flux)
+        self.comm.Allreduce(MPI_INPLACE, counts)
         w = counts > 0
 
         if w.sum() != self.nbins:
@@ -1064,10 +1064,10 @@ class VarLSSFitter():
         if self.comm is None:
             return
 
-        self.subsampler.allreduce(self.comm, MPI.IN_PLACE)
+        self.subsampler.allreduce(self.comm, MPI_INPLACE)
 
-        self.comm.Allreduce(MPI.IN_PLACE, self._num_pixels)
-        self.comm.Allreduce(MPI.IN_PLACE, self._num_qso)
+        self.comm.Allreduce(MPI_INPLACE, self._num_pixels)
+        self.comm.Allreduce(MPI_INPLACE, self._num_qso)
 
     def _calc_subsampler_stats(self):
         """ Calculates mean, variance and error on the variance.
@@ -1440,8 +1440,8 @@ class FluxStacker():
     def calculate(self):
         """Calculate stacked flux by allreducing if necessary."""
         if self.comm is not None:
-            self.comm.Allreduce(MPI.IN_PLACE, self._interp.fp)
-            self.comm.Allreduce(MPI.IN_PLACE, self._interp.ep)
+            self.comm.Allreduce(MPI_INPLACE, self._interp.fp)
+            self.comm.Allreduce(MPI_INPLACE, self._interp.ep)
 
         w = self._interp.ep > 0
         self._interp.fp[w] /= self._interp.ep[w]
