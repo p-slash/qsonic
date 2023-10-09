@@ -311,7 +311,8 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     if args.mock_analysis:
         maxlastnight = None
     else:
-        maxlastnight = comm.allreduce(np.max(local_queue['LASTNIGHT']), max)
+        maxlastnight = np.max([_['LASTNIGHT'].max() for _ in local_queue])
+        maxlastnight = comm.allreduce(maxlastnight, max)
     qsonic.spectrum.Spectrum.set_blinding(maxlastnight, args)
 
     # Read masks before data
