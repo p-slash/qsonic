@@ -39,11 +39,15 @@ Here's an example code snippet to use IO interface.
     is_mock = False
     skip_resomat = True
 
+    # Setup reader function
+    readerFunction = qsonic.io.get_spectra_reader_function(
+        indir, arms, is_mock, skip_resomat,
+        read_true_continuum=False, is_tile=False)
+
     w1 = 3600.
     w2 = 6000.
     fw1 = 1050.
     fw2 = 1180.
-    remove_nonforest_pixels = True # Less memory use
 
     catalog = qsonic.catalog.read_quasar_catalog(fname)
 
@@ -56,9 +60,7 @@ Here's an example code snippet to use IO interface.
     for hpx_cat in split_catalog:
         healpix = hpx_cat['HPXPIXEL'][0]
 
-        spectra_by_hpx = qsonic.io.read_spectra_onehealpix(
-            hpx_cat, indir, arms, is_mock, skip_resomat
-        )
+        spectra_by_hpx = readerFunction(hpx_cat)
 
         # Do stuff with spectra in this healpix
         ...

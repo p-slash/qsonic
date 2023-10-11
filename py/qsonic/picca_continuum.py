@@ -1,5 +1,6 @@
 """Continuum fitting module."""
 import argparse
+import logging
 
 import numpy as np
 from numba import njit
@@ -13,7 +14,7 @@ from mpi4py import MPI
 
 from qsonic import QsonicException
 from qsonic.spectrum import valid_spectra
-from qsonic.mpi_utils import logging_mpi, mpi_fnc_bcast, MPISaver
+from qsonic.mpi_utils import mpi_fnc_bcast, MPISaver
 from qsonic.mathtools import (
     mypoly1d, block_covariance_of_square,
     FastLinear1DInterp, FastCubic1DInterp,
@@ -441,18 +442,15 @@ class PiccaContinuumFitter():
 
         num_valid_fits = self.comm.allreduce(num_valid_fits)
         num_invalid_fits = self.comm.allreduce(num_invalid_fits)
-        logging_mpi(f"Number of valid fits: {num_valid_fits}", self.mpi_rank)
-        logging_mpi(f"Number of invalid fits: {num_invalid_fits}",
-                    self.mpi_rank)
+        logging.info(f"Number of valid fits: {num_valid_fits}")
+        logging.info(f"Number of invalid fits: {num_invalid_fits}")
 
         if num_valid_fits == 0:
             raise QsonicException("Crucial error: No valid continuum fits!")
 
         invalid_ratio = num_invalid_fits / (num_valid_fits + num_invalid_fits)
         if invalid_ratio > 0.2:
-            logging_mpi(
-                "More than 20% spectra have invalid fits.", self.mpi_rank,
-                "warning")
+            logging.warning("More than 20% spectra have invalid fits.")
 
     def _project_normalize_meancont(self, new_meancont):
         """ Project out higher order Legendre polynomials from the new mean
@@ -539,9 +537,7 @@ class PiccaContinuumFitter():
         w = counts > 0
 
         if w.sum() != self.nbins:
-            logging_mpi(
-                "Extrapolating empty bins in the mean continuum.",
-                self.mpi_rank, "warning")
+            logging.warning("Extrapolating empty bins in the mean continuum.")
 
         norm_flux[w] /= counts[w]
         norm_flux[~w] = np.mean(norm_flux[w])
@@ -575,7 +571,7 @@ class PiccaContinuumFitter():
             text += f"{w:7.2f}\t| {n:7.2e}\t| +- {e:7.2e}\n"
 
         text += f"Change in chi2: {chi2_change*100:.4e}%"
-        logging_mpi(text, 0)
+        logging.info(text)
 
         return has_converged
 
@@ -610,7 +606,7 @@ class PiccaContinuumFitter():
             text = "Fitting var_lss"
             initial_guess = self.varlss_interp.fp
 
-        logging_mpi(text, self.mpi_rank)
+        logging.info(text)
         y, ep = self.varlss_fitter.fit(initial_guess)
 
         if not self.fit_eta:
@@ -635,7 +631,7 @@ class PiccaContinuumFitter():
             text += \
                 f"\n{w:7.2f}\t| {v:7.2e} +- {ve:7.2e}\t| {n:7.2e} +- {ne:7.2e}"
 
-        logging_mpi(text, 0)
+        logging.info(text)
 
     def _normalize_flux(self, spectra_list):
         """Multiplies continuum estimates with stacked values in order to
@@ -650,7 +646,7 @@ class PiccaContinuumFitter():
         if not self.normalize_stacked_flux:
             return
 
-        logging_mpi("Forcing stacked flux to be one.", self.mpi_rank)
+        logging.info("Forcing stacked flux to be one.")
 
         for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
@@ -692,8 +688,7 @@ class PiccaContinuumFitter():
         fattr = MPISaver(fname, self.mpi_rank)
 
         for it in range(self.niterations):
-            logging_mpi(
-                f"Fitting iteration {it+1}/{self.niterations}", self.mpi_rank)
+            logging.info(f"Fitting iteration {it+1}/{self.niterations}")
 
             self.save(fattr, f"-{it + 1}")
 
@@ -706,12 +701,11 @@ class PiccaContinuumFitter():
             self.update_var_lss_eta(spectra_list)
 
             if has_converged:
-                logging_mpi("Iteration has converged.", self.mpi_rank)
+                logging.info("Iteration has converged.")
                 break
 
         if not has_converged:
-            logging_mpi("Iteration has NOT converged.", self.mpi_rank,
-                        "warning")
+            logging.warning("Iteration has NOT converged.")
 
         self._normalize_flux(spectra_list)
 
@@ -719,7 +713,7 @@ class PiccaContinuumFitter():
         if self.varlss_fitter:
             self.varlss_fitter.write(fattr)
         fattr.close()
-        logging_mpi("All continua are fit.", self.mpi_rank)
+        logging.info("All continua are fit.")
 
     def true_continuum(self, spectra_list):
         """True continuum reduction. Uses fiducials for mean flux and varlss
@@ -769,7 +763,7 @@ class PiccaContinuumFitter():
             self.varlss_fitter.write(fattr)
         fattr.close()
 
-        logging_mpi("True continuum applied.", self.mpi_rank)
+        logging.info("True continuum applied.")
 
     def save(self, fattr, suff=''):
         """Save mean continuum and var_lss (if fitting) to a fits file.
@@ -814,7 +808,7 @@ class PiccaContinuumFitter():
         if not self.outdir:
             return
 
-        logging_mpi("Saving continuum chi2 catalog.", self.mpi_rank)
+        logging.info("Saving continuum chi2 catalog.")
         corder = self.cont_order + 1
 
         dtype = np.dtype([
@@ -896,7 +890,6 @@ class VarLSSFitter():
         for delta in deltas_list:
             varfitter.add(delta.wave, delta.delta, delta.ivar)
 
-        logging_mpi("Fitting variance for VarLSS and eta", mpi_rank)
         fit_results = np.ones((nwbins, 2))
         fit_results[:, 0] = 0.1
         fit_results, std_results = varfitter.fit(fit_results)
@@ -1154,18 +1147,16 @@ class VarLSSFitter():
              & (self.num_qso[wave_slice] >= VarLSSFitter.min_num_qso))
 
         if w.sum() < 5:
-            logging_mpi(
+            logging.warning(
                 "Not enough statistics for VarLSSFitter at "
-                f"{self.waveobs[iwave]:.2f} A. Increasing validity range...",
-                self.mpi_rank, "warning")
+                f"{self.waveobs[iwave]:.2f} A. Increasing validity range...")
             w = ((self.num_pixels[wave_slice] >= VarLSSFitter.min_num_pix // 2)
                  & (self.num_qso[wave_slice] >= VarLSSFitter.min_num_qso // 2))
 
         if w.sum() < 5:
-            logging_mpi(
+            logging.warning(
                 "Still not enough statistics for VarLSSFitter at "
-                f"{self.waveobs[iwave]:.2f} A.",
-                self.mpi_rank, "warning")
+                f"{self.waveobs[iwave]:.2f} A.")
             return None, None, None
 
         if self.use_cov:
@@ -1174,10 +1165,9 @@ class VarLSSFitter():
             try:
                 _ = np.linalg.cholesky(err2use)
             except np.linalg.LinAlgError:
-                logging_mpi(
+                logging.warning(
                     "Covariance matrix is not positive-definite "
-                    f"{self.waveobs[iwave]:.2f} A. Fallback to diagonals.",
-                    self.mpi_rank, "warning")
+                    f"{self.waveobs[iwave]:.2f} A. Fallback to diagonals.")
 
                 err2use = self.e_var_delta[wave_slice][w]
         else:
@@ -1247,11 +1237,10 @@ class VarLSSFitter():
                 )
             except Exception as e:
                 nfails += 1
-                logging_mpi(
+                logging.warning(
                     "VarLSSFitter failed at wave_obs: "
                     f"{self.waveobs[iwave]:.2f}. "
-                    f"Reason: {e}. Extrapolating.",
-                    self.mpi_rank, "warning")
+                    f"Reason: {e}. Extrapolating.")
             else:
                 fit_results[iwave] = pfit
                 std_results[iwave] = np.sqrt(np.diag(pcov))
@@ -1262,9 +1251,8 @@ class VarLSSFitter():
                 "VarLSSFitter failed at more than 40% points.")
 
         if nfails > 0:
-            logging_mpi(
-                f"VarLSSFitter failed and extrapolated at {nfails} points.",
-                self.mpi_rank, "warning")
+            logging.warning(
+                f"VarLSSFitter failed and extrapolated at {nfails} points.")
 
         # Smooth new estimates
         if smooth:
