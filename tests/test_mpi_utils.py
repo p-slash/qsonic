@@ -75,13 +75,6 @@ class TestMPIUtils(TestCase):
         with pytest.raises(QsonicException):
             qsonic.mpi_utils.mpi_fnc_bcast(np.zeros, None, 0, "Error", -5)
 
-    def test_logging_mpi(self):
-        with self.assertLogs(level='INFO') as cm:
-            qsonic.mpi_utils.logging_mpi("test1", 0)
-            qsonic.mpi_utils.logging_mpi("test2", 1)
-            qsonic.mpi_utils.logging_mpi("test3", 0, "error")
-        self.assertEqual(cm.output, ["INFO:root:test1", "ERROR:root:test3"])
-
     def test_balance_load(self):
         split_catalog = [
             np.ones(3), 2 * np.ones(4), 3 * np.ones(5), 4 * np.ones(1)]
@@ -90,9 +83,8 @@ class TestMPIUtils(TestCase):
             3 * np.ones(5), 2 * np.ones(4), np.ones(3), 4 * np.ones(1)]
 
         mpi_size = 3
-        q0 = qsonic.mpi_utils.balance_load(split_catalog, mpi_size, 0)
-        q1 = qsonic.mpi_utils.balance_load(split_catalog, mpi_size, 1)
-        q2 = qsonic.mpi_utils.balance_load(split_catalog, mpi_size, 2)
+        q0, q1, q2 = qsonic.mpi_utils.balance_load(split_catalog, mpi_size)
+
         for idx in range(len(split_catalog)):
             npt.assert_allclose(split_catalog[idx], sorted_catalog[idx])
         assert (len(q0) == 1)
