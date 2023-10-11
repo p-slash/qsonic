@@ -11,7 +11,7 @@ from qsonic import QsonicException
 import qsonic.catalog
 import qsonic.io
 from qsonic.masks import BALMask
-from qsonic.mpi_utils import logging_mpi, mpi_parse, mpi_fnc_bcast, MPISaver
+from qsonic.mpi_utils import mpi_parse, mpi_fnc_bcast, MPISaver
 from qsonic.picca_continuum import VarLSSFitter
 from qsonic.spectrum import add_wave_region_parser
 
@@ -125,7 +125,7 @@ def mpi_set_targetid_list_to_remove(args, comm=None, mpi_rank=0):
         catalog = None
 
     if catalog is not None and args.remove_bal_qsos:
-        logging_mpi("Checking BAL mask.", mpi_rank)
+        logging.info("Checking BAL mask.")
         BALMask.check_catalog(catalog)
 
         sel_ai = (catalog['VMIN_CIV_450'] > 0) & (catalog['VMAX_CIV_450'] > 0)
@@ -134,13 +134,12 @@ def mpi_set_targetid_list_to_remove(args, comm=None, mpi_rank=0):
         sel_bal = np.any(sel_ai, axis=1) | np.any(sel_bi, axis=1)
         bal_targetids = catalog['TARGETID'][sel_bal]
         ids_to_remove = np.concatenate((ids_to_remove, bal_targetids))
-        logging_mpi(f"Removing {bal_targetids.size} BAL sightlines", mpi_rank)
+        logging.info(f"Removing {bal_targetids.size} BAL sightlines")
 
     if catalog is not None and args.keep_surveys:
         sel_survey = np.isin(catalog['SURVEY'], args.keep_surveys)
         remove_sur_tids = catalog['TARGETID'][~sel_survey]
-        logging_mpi(
-            f"Removing {remove_sur_tids.size} non survey sightlines", mpi_rank)
+        logging.info(f"Removing {remove_sur_tids.size} non survey sightlines")
         ids_to_remove = np.concatenate((ids_to_remove, remove_sur_tids))
 
     return ids_to_remove
@@ -148,7 +147,7 @@ def mpi_set_targetid_list_to_remove(args, comm=None, mpi_rank=0):
 
 def mpi_read_all_deltas(args, comm=None, mpi_rank=0, mpi_size=1):
     start_time = time.time()
-    logging_mpi("Reading deltas.", mpi_rank)
+    logging.info("Reading deltas.")
 
     all_delta_files = mpi_fnc_bcast(
         glob.glob, comm, mpi_rank,
@@ -156,7 +155,7 @@ def mpi_read_all_deltas(args, comm=None, mpi_rank=0, mpi_size=1):
         f"{args.input_dir}/delta-*.fits*")
 
     ndelta_all = len(all_delta_files)
-    logging_mpi(f"There are {ndelta_all} delta files.", mpi_rank)
+    logging.info(f"There are {ndelta_all} delta files.")
     if mpi_size > ndelta_all:
         warnings.warn(
             "There are more MPI processes then number of delta files.")
@@ -169,7 +168,7 @@ def mpi_read_all_deltas(args, comm=None, mpi_rank=0, mpi_size=1):
     deltas_list = [qsonic.io.read_deltas(fname) for fname in files_this_rank]
 
     etime = (time.time() - start_time) / 60  # min
-    logging_mpi(f"Rank{mpi_rank} read {i2-i1} deltas in {etime:.1f} mins.", 0)
+    logging.info(f"Rank{mpi_rank} read {i2-i1} deltas in {etime:.1f} mins.")
 
     return deltas_list
 
@@ -230,18 +229,18 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     for delta in deltas_list:
         varfitter.add(delta.wave, delta.delta, delta.ivar)
 
-    logging_mpi("Fitting variance for VarLSS and eta", mpi_rank)
+    logging.info("Fitting variance for VarLSS and eta")
     fit_results = np.ones((varfitter.nwbins, 2))
     fit_results[:, 0] = 0.1
     fit_results, std_results = varfitter.fit(fit_results)
 
     # Save variance stats to file
-    logging_mpi("Saving variance stats to files", mpi_rank)
+    logging.info("Saving variance stats to files")
     suffix = f"snr{args.min_snr:.1f}-{args.max_snr:.1f}"
     tmpfilename = f"{args.outdir}/{args.fbase}-{suffix}-variance-stats.fits"
     mpi_saver = MPISaver(tmpfilename, mpi_rank)
     varfitter.write(mpi_saver, args.min_snr, args.max_snr)
-    logging_mpi(f"Variance stats saved in {tmpfilename}.", mpi_rank)
+    logging.info(f"Variance stats saved in {tmpfilename}.")
 
     # Save fits results as well
     mpi_saver.write([
@@ -266,15 +265,17 @@ def main():
     mpi_rank = comm.Get_rank()
     mpi_size = comm.Get_size()
 
-    logging.basicConfig(level=logging.DEBUG)
-    logging.captureWarnings(True)
+    logging.basicConfig(
+        format='%(asctime)s - %(levelname)s: %(message)s',
+        datefmt='%Y/%m/%d %I:%M:%S %p',
+        level=logging.DEBUG if mpi_rank == 0 else logging.CRITICAL)
 
     try:
         mpi_run_all(comm, mpi_rank, mpi_size)
     except QsonicException as e:
-        logging_mpi(e, mpi_rank, "exception")
+        logging.exception(e)
         exit(1)
     except Exception as e:
-        logging.error(f"Unexpected error on Rank{mpi_rank}. Abort.")
+        logging.critical(f"Unexpected error on Rank{mpi_rank}. Abort.")
         logging.exception(e)
         comm.Abort()
