@@ -218,7 +218,7 @@ class TestVarLSSFitter(object):
         npt.assert_equal(varlss_fitter._num_qso, expected_numqso)
 
         expected_size = 3 * nwbins
-        varlss_fitter._calc_subsampler_stats()
+        varlss_fitter.calculate_subsampler_stats()
         npt.assert_equal(varlss_fitter.wvalid_bins.sum(), expected_size)
         npt.assert_equal(varlss_fitter.mean_delta.size, expected_size)
 
