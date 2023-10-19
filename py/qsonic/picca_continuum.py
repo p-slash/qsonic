@@ -218,7 +218,7 @@ class PiccaContinuumFitter():
                 args.wave1, args.wave2 - args.wave1, np.ones(3))
 
         self.flux_stacker = FluxStacker(
-            args.wave1, args.wave2, 8., comm=self.comm)
+            args.wave1, args.wave2, 8., self.rfwave, self.dwrf, comm=self.comm)
 
         if args.fiducial_varlss:
             self.varlss_fitter = None
@@ -504,41 +504,29 @@ class PiccaContinuumFitter():
             True if all continuum updates on every point are less than 0.33
             times the error estimates.
         """
-        norm_flux = np.zeros(self.nbins)
-        std_flux = np.empty(self.nbins)
-        counts = np.zeros(self.nbins)
         self.flux_stacker.reset()
 
         for spec in valid_spectra(spectra_list):
             for arm, wave_arm in spec.forestwave.items():
                 wave_rf_arm = wave_arm / (1 + spec.z_qso)
-                bin_idx = (
-                    (wave_rf_arm - self.rfwave[0]) / self.dwrf + 0.5
-                ).astype(int)
 
                 cont = spec.cont_params['cont'][arm]
                 flux = spec.forestflux[arm] / cont
                 weight = spec.forestweight[arm] * cont**2
                 # Deconvolve resolution matrix ?
 
-                norm_flux += np.bincount(
-                    bin_idx, weights=flux * weight, minlength=self.nbins)
-                counts += np.bincount(
-                    bin_idx, weights=weight, minlength=self.nbins)
-
-                self.flux_stacker.add(wave_arm, flux, weight)
+                self.flux_stacker.add(
+                    wave_arm, wave_rf_arm, weight * flux, weight)
 
         self.flux_stacker.calculate()
-        self.comm.Allreduce(MPI.IN_PLACE, norm_flux)
-        self.comm.Allreduce(MPI.IN_PLACE, counts)
-        w = counts > 0
+        w = self.flux_stacker.std_flux_rf > 0
 
-        if w.sum() != self.nbins:
+        if not all(w):
             logging.warning("Extrapolating empty bins in the mean continuum.")
 
-        norm_flux[w] /= counts[w]
+        norm_flux = self.flux_stacker.stacked_flux_rf.copy()
         norm_flux[~w] = np.mean(norm_flux[w])
-        std_flux[w] = 1 / np.sqrt(counts[w])
+        std_flux = self.flux_stacker.std_flux_rf.copy()
         std_flux[~w] = 10 * np.mean(std_flux[w])
 
         # Smooth new estimates
@@ -794,6 +782,12 @@ class PiccaContinuumFitter():
             [self.flux_stacker.waveobs, self.flux_stacker.stacked_flux],
             names=['lambda', 'stacked_flux'],
             extname=f'STACKED_FLUX{suff}')
+
+        fattr.write(
+            [self.rfwave, self.flux_stacker.stacked_flux_rf,
+             self.flux_stacker.std_flux_rf],
+            names=['lambda_rf', 'stacked_flux_rf', 'e_stacked_flux_rf'],
+            extname=f'STACKED_FLUX_RF{suff}')
 
         if self.varlss_fitter is None:
             return
@@ -1413,6 +1407,10 @@ class FluxStacker():
         Upper observed wavelength edge.
     dwobs: float
         Wavelength spacing.
+    waverf: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Rest-frame wavelength bins.
+    dwrf: float
+        Wavelength spacing in the rest frame.
     comm: MPI.COMM_WORLD or None, default: None
         MPI comm object to allreduce if enabled.
 
@@ -1424,13 +1422,21 @@ class FluxStacker():
         Number of wavelength bins
     dwobs: float
         Wavelength spacing. Usually same as observed grid.
+    nwrfbins: int
+        Number of rest-frame wavelength bins
+    waverf0: float
+        The first rest-frame wavelength bin
+    dwrf: float
+        Rest-frame wavelength spacing.
     _interp: FastLinear1DInterp
         Interpolator. Saves stacked_flux in fp and weights in ep.
+    _interp_rf: FastLinear1DInterp
+        Rest-frame interpolator. Saves stacked_flux in fp and weights in ep.
     comm: MPI.COMM_WORLD or None, default: None
         MPI comm object to allreduce if enabled.
     """
 
-    def __init__(self, w1obs, w2obs, dwobs, comm=None):
+    def __init__(self, w1obs, w2obs, dwobs, waverf, dwrf, comm=None):
         # Set up wavelength and inverse variance bins
         self.nwbins = int(round((w2obs - w1obs) / dwobs))
         wave_edges, self.dwobs = np.linspace(
@@ -1443,10 +1449,16 @@ class FluxStacker():
             self.waveobs[0], self.dwobs,
             np.ones(self.nwbins), ep=np.zeros(self.nwbins))
 
+        self.nwrfbins = waverf.size
+        self.waverf0, self.dwrf = waverf[0], dwrf
+        self._interp_rf = FastLinear1DInterp(
+            self.waverf0, self.dwrf, np.ones(self.nwrfbins),
+            ep=np.zeros(self.nwrfbins))
+
     def __call__(self, wave):
         return self._interp(wave)
 
-    def add(self, wave, flux, weight):
+    def add(self, wave, wave_rf, weighted_flux, weight):
         """ Add statistics of a single spectrum.
 
         Updates :attr:`stacked_flux` and :attr:`weights`. Assumes no spectra
@@ -1455,18 +1467,27 @@ class FluxStacker():
         Arguments
         ---------
         wave: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Wavelength array.
-        flux: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Flux array. Specifically f/C.
+            Wavelength array in the observed frame.
+        wave_rf: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Wavelength array in the rest frame.
+        weighted_flux: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Weighted flux array. Specifically w * f/C.
         weight: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Weight array.
         """
         wave_indx = ((wave - self.waveobs[0]) / self.dwobs + 0.5).astype(int)
 
         self._interp.fp += np.bincount(
-            wave_indx, weights=flux * weight, minlength=self.nwbins)
+            wave_indx, weights=weighted_flux, minlength=self.nwbins)
         self._interp.ep += np.bincount(
             wave_indx, weights=weight, minlength=self.nwbins)
+
+        wave_indx = ((wave_rf - self.waverf0) / self.dwrf + 0.5).astype(int)
+
+        self._interp_rf.fp += np.bincount(
+            wave_indx, weights=weighted_flux, minlength=self.nwrfbins)
+        self._interp_rf.ep += np.bincount(
+            wave_indx, weights=weight, minlength=self.nwrfbins)
 
     def calculate(self):
         """Calculate stacked flux by allreducing if necessary."""
@@ -1474,14 +1495,26 @@ class FluxStacker():
             self.comm.Allreduce(MPI.IN_PLACE, self._interp.fp)
             self.comm.Allreduce(MPI.IN_PLACE, self._interp.ep)
 
+            self.comm.Allreduce(MPI.IN_PLACE, self._interp_rf.fp)
+            self.comm.Allreduce(MPI.IN_PLACE, self._interp_rf.ep)
+
         w = self._interp.ep > 0
         self._interp.fp[w] /= self._interp.ep[w]
         self._interp.fp[~w] = 0
+
+        w = self._interp_rf.ep > 0
+        self._interp_rf.fp[w] /= self._interp_rf.ep[w]
+        self._interp_rf.fp[~w] = 0
+
+        self._interp_rf.ep[w] = 1 / np.sqrt(self._interp_rf.ep[w])
 
     def reset(self):
         """Reset :attr:`stacked_flux` and :attr:`weights` arrays to zero."""
         self._interp.fp.fill(0)
         self._interp.ep.fill(0)
+
+        self._interp_rf.fp.fill(0)
+        self._interp_rf.ep.fill(0)
 
     @property
     def stacked_flux(self):
@@ -1492,3 +1525,15 @@ class FluxStacker():
     def weights(self):
         """:external+numpy:py:class:`ndarray <numpy.ndarray>`: Weights."""
         return self._interp.ep
+
+    @property
+    def stacked_flux_rf(self):
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`: Stacked flux in
+        the rest-frame."""
+        return self._interp_rf.fp
+
+    @property
+    def std_flux_rf(self):
+        """:external+numpy:py:class:`ndarray <numpy.ndarray>`: Error in
+        the rest-frame."""
+        return self._interp_rf.ep
