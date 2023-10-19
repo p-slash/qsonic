@@ -1025,8 +1025,8 @@ class VarLSSFitter():
     def reset(self):
         """Reset delta and num arrays to zero."""
         self.subsampler.reset()
-        self._num_pixels *= 0
-        self._num_qso *= 0
+        self._num_pixels.fill(0)
+        self._num_qso.fill(0)
 
     def add(self, wave, delta, ivar):
         """Add statistics of a single spectrum. Updates delta and num arrays.
@@ -1449,8 +1449,8 @@ class FluxStacker():
 
     def reset(self):
         """Reset :attr:`stacked_flux` and :attr:`weights` arrays to zero."""
-        self._interp.fp *= 0
-        self._interp.ep *= 0
+        self._interp.fp.fill(0)
+        self._interp.ep.fill(0)
 
     @property
     def stacked_flux(self):
