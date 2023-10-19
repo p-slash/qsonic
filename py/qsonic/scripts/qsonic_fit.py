@@ -268,7 +268,7 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
         qcfit.iterate(spectra_list)
     else:
         logging.info("True continuum.")
-        qcfit.true_continuum(spectra_list)
+        qcfit.true_continuum(spectra_list, args)
 
     if args.coadd_arms == "after":
         logging.info("Coadding arms.")

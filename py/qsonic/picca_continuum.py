@@ -228,10 +228,7 @@ class PiccaContinuumFitter():
             self.varlss_fitter = VarLSSFitter(
                 args.wave1, args.wave2, use_cov=args.var_use_cov,
                 comm=self.comm)
-            self.varlss_interp = FastCubic1DInterp(
-                self.varlss_fitter.waveobs[0], self.varlss_fitter.dwobs,
-                0.1 * np.ones(self.varlss_fitter.nwbins),
-                ep=np.zeros(self.varlss_fitter.nwbins))
+            self.varlss_interp = self.varlss_fitter.construct_interp(0.1)
 
         self.eta_interp = FastCubic1DInterp(
             self.varlss_interp.xp0, self.varlss_interp.dxp,
@@ -715,7 +712,7 @@ class PiccaContinuumFitter():
         fattr.close()
         logging.info("All continua are fit.")
 
-    def true_continuum(self, spectra_list):
+    def true_continuum(self, spectra_list, args):
         """True continuum reduction. Uses fiducials for mean flux and varlss
         interpolation. Continuum is interpolated using a cubic spline.
 
@@ -727,6 +724,8 @@ class PiccaContinuumFitter():
         ---------
         spectra_list: list(Spectrum)
             Spectrum objects.
+        args: argparse.Namespace
+            Namespace.
         """
         self.cont_order = 0
 
@@ -753,17 +752,28 @@ class PiccaContinuumFitter():
             spec.calc_continuum_chi2()
 
         self.update_mean_cont(spectra_list)
-        self.update_var_lss_eta(spectra_list)
         self._normalize_flux(spectra_list)
 
         fname = f"{self.outdir}/attributes.fits" if self.outdir else ""
         fattr = MPISaver(fname, self.mpi_rank)
         self.save(fattr)
-        if self.varlss_fitter:
-            self.varlss_fitter.write(fattr)
+        logging.info("True continuum applied.")
+
+        # Refit params
+        logging.info("**These DO NOT go into weights**")
+        self.varlss_fitter = VarLSSFitter(
+            args.wave1, args.wave2, use_cov=args.var_use_cov,
+            comm=self.comm)
+        self.varlss_interp = self.varlss_fitter.construct_interp(0.1)
+        self.eta_interp = self.varlss_fitter.construct_interp(1.0)
+
+        self.update_var_lss_eta(spectra_list)
+        self.update_mean_cont(spectra_list)
+        self.save(fattr, '-fit')
+        self.varlss_fitter.write(fattr)
         fattr.close()
 
-        logging.info("True continuum applied.")
+        logging.info("**These DO NOT go into weights**")
 
     def save(self, fattr, suff=''):
         """Save mean continuum and var_lss (if fitting) to a fits file.
@@ -982,6 +992,7 @@ class VarLSSFitter():
         self.nvarbins = nvarbins
         self.use_cov = use_cov
         self.comm = comm
+        self._stats_calculated = False
 
         # Set up wavelength and inverse variance bins
         wave_edges, self.dwobs = np.linspace(
@@ -1022,11 +1033,30 @@ class VarLSSFitter():
         self.subsampler = SubsampleCov(
             (4, self.minlength), nsubsamples, istart)
 
+    def construct_interp(self, y0=1.0):
+        """Return a `FastCubic1DInterp` object that interpolates in observed
+        wavelength bins.
+
+        Arguments
+        ---------
+        y0: float, default: 1.0
+            Initial constant value for the interpolator.
+
+        Returns
+        -------
+        FastCubic1DInterp
+        """
+        return FastCubic1DInterp(
+            self.waveobs[0], self.dwobs,
+            y0 * np.ones(self.nwbins), ep=np.zeros(self.nwbins)
+        )
+
     def reset(self):
         """Reset delta and num arrays to zero."""
         self.subsampler.reset()
         self._num_pixels.fill(0)
         self._num_qso.fill(0)
+        self._stats_calculated = False
 
     def add(self, wave, delta, ivar):
         """Add statistics of a single spectrum. Updates delta and num arrays.
@@ -1059,17 +1089,7 @@ class VarLSSFitter():
         npix[npix > 0] = 1
         self._num_qso += npix
 
-    def _allreduce(self):
-        """ Sums statistics from all MPI process in place."""
-        if self.comm is None:
-            return
-
-        self.subsampler.allreduce(self.comm, MPI.IN_PLACE)
-
-        self.comm.Allreduce(MPI.IN_PLACE, self._num_pixels)
-        self.comm.Allreduce(MPI.IN_PLACE, self._num_qso)
-
-    def _calc_subsampler_stats(self):
+    def calculate_subsampler_stats(self):
         """ Calculates mean, variance and error on the variance.
 
         It also calculates the delete-one Jackknife variance over
@@ -1083,6 +1103,15 @@ class VarLSSFitter():
         Covariance of mean_delta^2 is propagated using the formula in
         :func:`qsonic.mathtools.block_covariance_of_square`.
         """
+        if self._stats_calculated:
+            return
+
+        if self.comm is not None:
+            self.subsampler.allreduce(self.comm, MPI.IN_PLACE)
+
+            self.comm.Allreduce(MPI.IN_PLACE, self._num_pixels)
+            self.comm.Allreduce(MPI.IN_PLACE, self._num_qso)
+
         self.subsampler.get_mean_n_var()
         if self.use_cov:
             self.subsampler.get_mean_n_cov(
@@ -1110,6 +1139,8 @@ class VarLSSFitter():
                 self.subsampler.variance[1],
                 self.subsampler.mean[2]
             )
+
+        self._stats_calculated = True
 
     def _smooth_fit_results(self, fit_results, std_results):
         w = fit_results > 0
@@ -1210,8 +1241,7 @@ class VarLSSFitter():
             behavior as ``fit_results``.
         """
         self._fit_array_shape_assert(initial_guess)
-        self._allreduce()
-        self._calc_subsampler_stats()
+        self.calculate_subsampler_stats()
 
         nfails = 0
         fit_results = np.zeros_like(initial_guess)
@@ -1331,7 +1361,8 @@ class VarLSSFitter():
         """:external+numpy:py:class:`ndarray <numpy.ndarray>`:
         Error on variance delta using delete-one Jackknife. The error of
         :attr:`mean_delta` is propagated, then regularized using
-        :attr:`var2_delta`. See source code of :meth:`_calc_subsampler_stats`.
+        :attr:`var2_delta`. See source code of
+        :meth:`calculate_subsampler_stats`.
         """
         return np.sqrt(self.subsampler.variance[1][self.wvalid_bins])
 
