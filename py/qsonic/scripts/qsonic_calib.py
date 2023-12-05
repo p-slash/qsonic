@@ -276,6 +276,6 @@ def main():
         logging.exception(e)
         exit(1)
     except Exception as e:
-        logging.critical(f"Unexpected error on Rank{mpi_rank}. Abort.")
-        logging.exception(e)
+        logging.critical(
+            f"Unexpected error on Rank{mpi_rank}: {e}. Abort.", exc_info=True)
         comm.Abort()
