@@ -7,7 +7,7 @@ from numba import njit
 import fitsio
 from iminuit import Minuit
 from scipy.optimize import minimize, curve_fit
-from scipy.interpolate import UnivariateSpline
+from scipy.interpolate import UnivariateSpline, CubicSpline
 from scipy.special import legendre
 
 from mpi4py import MPI
@@ -473,11 +473,16 @@ class PiccaContinuumFitter():
             norm = 2 * ci + 1
             leg_ci = legendre(ci)(2 * x - 1)
 
-            B = norm * np.trapz(new_meancont * leg_ci, x=x)
+            B = norm * CubicSpline(
+                x, new_meancont * leg_ci, bc_type='natural', extrapolate=True
+            ).integrate(0, 1)
+
             new_meancont -= B * leg_ci
 
         # normalize
-        mean = np.trapz(new_meancont, x=x)
+        mean = CubicSpline(
+            x, new_meancont, bc_type='natural', extrapolate=True
+        ).integrate(0, 1)
         new_meancont /= mean
 
         return new_meancont, mean
