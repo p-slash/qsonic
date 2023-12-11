@@ -883,12 +883,13 @@ class Delta():
         data = hdu.read()
 
         key = Delta._check_hdu(colnames, "wave")
-        self.wave = data[key]
         if key == "LOGLAM":
             self.wave = 10**data['LOGLAM']
+        else:
+            self.wave = data[key].astype("f8")
 
         key = Delta._check_hdu(colnames, "delta")
-        self.delta = data[key]
-        self.ivar = data['IVAR']
-        self.weight = data['WEIGHT']
-        self.cont = data['CONT']
+        self.delta = data[key].astype("f8")
+        self.ivar = data['IVAR'].astype("f8")
+        self.weight = data['WEIGHT'].astype("f8")
+        self.cont = data['CONT'].astype("f8")
