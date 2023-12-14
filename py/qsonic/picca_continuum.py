@@ -459,7 +459,7 @@ class PiccaContinuumFitter():
         """ Project out higher order Legendre polynomials from the new mean
         continuum since these are degenerate with the free fitting parameters.
         Returns a normalized mean continuum. Integrals are calculated using
-        ``np.trapz`` with ``ln lambda_RF`` as x array.
+        ``CubicSpline`` with ``ln lambda_RF`` as x array.
 
         Arguments
         ---------
