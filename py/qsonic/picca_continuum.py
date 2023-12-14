@@ -67,6 +67,9 @@ def add_picca_continuum_parser(parser=None):
               "It only updates CONT of each delta.")
     )
     cont_group.add_argument(
+        "--eta-calib-ivar", action="store_true",
+        help="Calibrate IVAR with eta estimates.")
+    cont_group.add_argument(
         "--rfdwave", type=float, default=0.8,
         help="Rest-frame wave steps. Complies with forest limits")
     cont_group.add_argument(
@@ -131,6 +134,8 @@ class PiccaContinuumFitter():
         True if fitting eta and fiducial var_lss is not set.
     normalize_stacked_flux: bool
         Normalizes observed flux to be 1 if True.
+    eta_calib_ivar: bool
+        Calibrate IVAR with eta estimates.
     """
 
     def _get_fiducial_interp(self, fname, col2read):
@@ -240,6 +245,7 @@ class PiccaContinuumFitter():
         self.outdir = args.outdir
         self.fit_eta = args.var_fit_eta
         self.normalize_stacked_flux = args.normalize_stacked_flux
+        self.eta_calib_ivar = args.eta_calib_ivar
 
     def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
         """ Cost function to minimize for each quasar.
@@ -642,6 +648,25 @@ class PiccaContinuumFitter():
             for arm, wave_arm in spec.forestwave.items():
                 spec.cont_params['cont'][arm] *= self.flux_stacker(wave_arm)
 
+    def _eta_calibate_ivar(self, spectra_list):
+        """Divides forest ivar values by eta estimates if ``--eta-calib-ivar``
+        is passed.
+
+        Arguments
+        ---------
+        spectra_list: list(Spectrum)
+            Spectrum objects.
+        """
+        if not self.eta_calib_ivar:
+            return
+
+        logging.info("Calibrating IVAR with eta.")
+
+        for spec in spectra_list:
+            for arm, wave_arm in spec.forestwave.items():
+                eta = self.eta_interp(wave_arm)
+                spec.forestivar[arm] /= eta
+
     def iterate(self, spectra_list):
         """Main function to fit continua and iterate.
 
@@ -698,6 +723,7 @@ class PiccaContinuumFitter():
             logging.warning("Iteration has NOT converged.")
 
         self._normalize_flux(spectra_list)
+        self._eta_calibate_ivar(spectra_list)
 
         self.save(fattr)
         if self.varlss_fitter:
