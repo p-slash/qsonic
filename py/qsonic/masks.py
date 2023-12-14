@@ -111,19 +111,23 @@ class BALMask():
     """
     lines = np.array([
         ("lCIV", 1549),
-        ("lSiIV1", 1394),
         ("lSiIV2", 1403),
+        ("lSiIV1", 1394),
         ("lNV", 1240.81),
         ("lLya", 1216.1),
         ("lCIII", 1175),
-        ("lPV1", 1117),
         ("lPV2", 1128),
-        ("lSIV1", 1062),
+        ("lPV1", 1117),
         ("lSIV2", 1074),
-        ("lLyb", 1020),
+        ("lSIV1", 1062),
         ("lOIV", 1031),
         ("lOVI", 1037),
-        ("lOI", 1039)],
+        ("lOI", 1039),
+        ("lLyb", 1025.7),
+        ("lLy3", 972.5),
+        ("lCIII", 977.0),
+        ("lNIII", 989.9),
+        ("lLy4", 949.7)],
         dtype=[("name", "U10"), ("value", 'f8')])
     """:external+numpy:py:class:`ndarray <numpy.ndarray>`: Ion transition
     wavelengths in A."""
@@ -439,6 +443,10 @@ class DLAMask():
         spec_dlas = self.split_catalog[idx]
         for arm, wave_arm in spec.forestwave.items():
             transmission = DLAMask.get_all_dlas(wave_arm, spec_dlas)
+            # Turn off DLA correction for l_rf > l_lya
+            transmission[np.searchsorted(
+                wave_arm, (1 + spec.z_qso) * DLAMask.wave_lya_A):
+            ] = 1
             w = transmission < self.dla_mask_limit
             transmission[w] = 1
 
