@@ -4,7 +4,8 @@ import argparse
 import fitsio
 import numpy as np
 
-from qsonic.mathtools import FastCubic1DInterp, FastLinear1DInterp
+from qsonic.mathtools import (
+    FastCubic1DInterp, FastLinear1DInterp, _zero_function)
 from qsonic.mpi_utils import mpi_fnc_bcast
 
 
@@ -30,6 +31,8 @@ def add_calibration_parser(parser=None):
     calib_group.add_argument(
         "--noise-calibration", help="Noise calibration file.")
     calib_group.add_argument(
+        "--varlss-as-additive-noise", help="var_lss as additive noise term.")
+    calib_group.add_argument(
         "--flux-calibration", help="Flux calibration file.")
 
     return parser
@@ -52,6 +55,8 @@ class NoiseCalibrator():
         Filename to read by ``fitsio``.
     comm: None or MPI.COMM_WORLD, default: None
     mpi_rank: int, default: 0
+    add_varlss: bool, default: False
+        Use var_lss as an additive correction to noise in observed frame.
 
     Attributes
     ----------
@@ -72,15 +77,23 @@ class NoiseCalibrator():
                 "Failed to construct noise calibration from "
                 f"{fname}::wave is not equally spaced.")
 
+        var_lss = np.array(data['var_lss'], dtype='d')
+        varlss_interp = FastCubic1DInterp(waves_0, dwave, var_lss)
+
         eta = np.array(data['eta'], dtype='d')
         eta[eta == 0] = 1
-        return FastCubic1DInterp(waves_0, dwave, eta)
+        eta_interp = FastCubic1DInterp(waves_0, dwave, eta)
 
-    def __init__(self, fname, comm=None, mpi_rank=0):
-        self.eta_interp = mpi_fnc_bcast(
+        return eta_interp, varlss_interp
+
+    def __init__(self, fname, comm=None, mpi_rank=0, add_varlss=False):
+        self.eta_interp, self.varlss_interp = mpi_fnc_bcast(
             self._read, comm, mpi_rank,
             f"Error loading NoiseCalibrator from file {fname}.",
             fname)
+
+        if not add_varlss:
+            self.varlss_interp = _zero_function
 
     def apply(self, spectra_list):
         """ Apply the noise calibration by **only** scaling
@@ -95,7 +108,8 @@ class NoiseCalibrator():
         for spec in spectra_list:
             for arm, wave_arm in spec.forestwave.items():
                 eta = self.eta_interp(wave_arm)
-                spec.forestivar[arm] /= eta
+                varlss = self.varlss_interp(wave_arm)
+                spec.forestivar[arm] /= (eta + spec.forestivar[arm] * varlss)
 
 
 class FluxCalibrator():
