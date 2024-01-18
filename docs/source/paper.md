@@ -1,5 +1,5 @@
 ---
-title: 'QSOnic: fast quasar continuum fitting for DESI spectra'
+title: 'QSOnic: fast quasar continuum fitting'
 tags:
   - Python
   - Cosmology
@@ -32,8 +32,8 @@ The density of the intervening gas is infered from the transmitted flux fraction
 
 # Statement of need
 
-`QSOnic` is an MPI-parallelized, highly optimized Python package specifically built for the Dark Energy Spectroscopic Instrument (DESI), which will collect approximately almost a million Ly$\alpha$ quasar spectra in the near future [@desicollaborationDESIExperimentPart:2016]. `QSOnic` is designed to overcome the numerical challenge posed by this large quantity of spectra by MPI parallization that distributes memory and computation across several compute nodes, and to provide an efficient API to read and manupulate DESI quasar spectra to allow implemetation of other algorithms within the Ly$\alpha$ forest framework. It provides detailed intermediate data products including best-fit parameters for each quasar and covariance matrices estimated by delete-one Jackknife method that is used in pipeline noise calibration. These intermediate products are crucial to ascertain the precision of the fitted continua and the pipeline noise corrections.
+`QSOnic` is an MPI-parallelized, highly optimized Python package specifically built for the Dark Energy Spectroscopic Instrument (DESI), which will collect approximately almost a million Ly$\alpha$ quasar spectra in the near future [@desicollaborationDESIExperimentPart:2016]. `QSOnic` is designed to overcome the numerical challenge posed by this large quantity of spectra by MPI parallization that can distribute the memory and workload across multiple compute nodes, and to provide an efficient API to read and manupulate DESI quasar spectra to allow implemetation of other algorithms within the Ly$\alpha$ forest framework. It provides detailed intermediate data products including best-fit parameters for each quasar and a delete-one Jackknife estimate for the covariance matrix used in pipeline noise calibration correction calculation. These intermediate products are crucial to ascertain the precision of the fitted continua and the pipeline noise corrections.
 
-`QSOnic` will be used in the future scientific publications of the 1D Ly$\alpha$ forest power spectrum and the 3D correlation function measurements from DESI.
+`QSOnic` will be used in the future scientific publications of the 1D Ly$\alpha$ forest power spectrum and the 3D correlation function measurements from DESI data.
 
 # References
