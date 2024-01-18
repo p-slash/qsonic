@@ -1,6 +1,6 @@
 __author__ = 'Naim Goksel Karacayli'
 __email__ = 'ngokselk@gmail.com'
-__version__ = '0.8.1'
+__version__ = '0.8.2'
 
 
 class QsonicException(Exception):
