@@ -145,7 +145,8 @@ def mpi_noise_flux_calibrate(spectra_list, args, comm, mpi_rank):
     if args.noise_calibration:
         logging.info("Applying noise calibration.")
         ncal = qsonic.calibration.NoiseCalibrator(
-            args.noise_calibration, comm, mpi_rank)
+            args.noise_calibration, comm, mpi_rank,
+            args.varlss_as_additive_noise)
         ncal.apply(spectra_list)
 
     if args.flux_calibration:
