@@ -33,6 +33,7 @@ def my_setup_attributes(tmp_path):
 def test_calibrations(setup_data, my_setup_attributes):
     fname = my_setup_attributes
     ncal = qsonic.calibration.NoiseCalibrator(fname)
+    ncal_plus = qsonic.calibration.NoiseCalibrator(fname, add_varlss=True)
     fcal = qsonic.calibration.FluxCalibrator(fname)
 
     cat_by_survey, _, data = setup_data(1)
@@ -45,6 +46,9 @@ def test_calibrations(setup_data, my_setup_attributes):
     ncal.apply(spectra_list)
     npt.assert_allclose(spec.forestivar['B'], 0.5)
     npt.assert_allclose(spec.forestivar['R'], 0.5)
+    ncal_plus.apply(spectra_list)
+    npt.assert_allclose(spec.forestivar['B'], 0.2)
+    npt.assert_allclose(spec.forestivar['R'], 0.2)
 
     fcal.apply(spectra_list)
     npt.assert_allclose(spec.forestflux['B'], f0 / 5)
