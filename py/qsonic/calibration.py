@@ -31,7 +31,8 @@ def add_calibration_parser(parser=None):
     calib_group.add_argument(
         "--noise-calibration", help="Noise calibration file.")
     calib_group.add_argument(
-        "--varlss-as-additive-noise", help="var_lss as additive noise term.")
+        "--varlss-as-additive-noise", action="store_true",
+        help="var_lss as additive noise term.")
     calib_group.add_argument(
         "--flux-calibration", help="Flux calibration file.")
 
