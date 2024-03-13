@@ -11,7 +11,7 @@ One important aspect of the algorithm is that the definition of the quasar conti
 
     \Lambda &= \frac{\log\lambda_\mathrm{RF} - \log\lambda_\mathrm{RF}^{(1)}}{\log\lambda_\mathrm{RF}^{(2)} - \log\lambda_\mathrm{RF}^{(1)}},
 
-where :math:`\lambda_\mathrm{RF}` is the wavelength in quasar's rest frame. We assume that the global mean continuum :math:`\overline{C}(\lambda_\mathrm{RF})` does not depend on redshift, and therefore our model only adjusts :math:`\overline{F}(z)`, as well as solves for the  :math:`a_q` and :math:`b_q` parameters for each quasar. In other words, the amplitude and slope parameters do not only fit for intrinsic quasar diversity such as brightness, but also for the IGM mean flux. This can be alleviated by passing a FITS file to ``--fiducial-meanflux`` option in QSOnic.
+where :math:`\lambda_\mathrm{RF}` is the wavelength in quasar's rest frame. (1) and (2) superscripts correspond to lower and upper rest-frame wavelength ends considered in the analysis, and are set by ``--forest-w1`` and ``--forest-w2`` respectively. We assume that the global mean continuum :math:`\overline{C}(\lambda_\mathrm{RF})` does not depend on redshift, and therefore our model only adjusts :math:`\overline{F}(z)`, as well as solves for the  :math:`a_q` and :math:`b_q` parameters for each quasar. In other words, the amplitude and slope parameters do not only fit for intrinsic quasar diversity such as brightness, but also for the IGM mean flux. This can be alleviated by passing a FITS file to ``--fiducial-meanflux`` option in QSOnic.
 Given these definitions, transmitted flux fluctuations are given by
 
 .. math::
