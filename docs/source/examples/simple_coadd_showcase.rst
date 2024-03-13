@@ -1,6 +1,12 @@
 Simple coadd showcase
 =====================
 
+*Example: DESI early data release*
+
+If you have a NERSC account, e.g. through DESI, DES, LSST-DESC, or other DOE-sponsored projects, DESI early data release (EDR) is available at ``/global/cfs/cdirs/desi/public/edr``. Otherwise follow the instructions to download the spectra using `Globus <https://data.desi.lbl.gov/doc/access/>`_. Note that you need 80 TB storage space. Let us call this directory ``${EDR_DIRECTORY}``. The coadded spectra are in ``${EDR_DIRECTORY}/spectro/redux/fuji/healpix`` and the quasar catalog for the Lyman-alpha forest analysis is ``${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits``.
+
+For this example, we are going to read all arms (B, R, Z), but will not read the resolution matrix.
+
 .. code:: python3
 
     import numpy as np
@@ -9,13 +15,8 @@ Simple coadd showcase
     import qsonic.catalog
     import qsonic.io
 
-For this example, we are using v0 catalog for iron release. We are going
-to read all arms (B, R, Z), but will not read the resolution matrix.
-
-.. code:: python3
-
-    fname = "/global/cfs/cdirs/desicollab/science/lya/y1-kp6/iron-tests/catalogs/QSO_cat_iron_main_dark_healpix_v0-altbal.fits"
-    indir = "/global/cfs/cdirs/desi/spectro/redux/iron/healpix"
+    fname = "${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits"
+    indir = "${EDR_DIRECTORY}/spectro/redux/fuji/healpix"
     arms = ['B', 'R', 'Z']
     is_mock = False
     skip_resomat = True
@@ -32,7 +33,7 @@ reading all the quasar spectra in that file.
 
 .. code:: python3
 
-    catalog = qsonic.catalog.read_quasar_catalog(fname)
+    catalog = qsonic.catalog.read_quasar_catalog(fname, is_mock=is_mock)
 
     # Group into unique pixels
     unique_pix, s = np.unique(catalog['HPXPIXEL'], return_index=True)
@@ -65,11 +66,15 @@ are stored as dictionaries similar to
 
 .. parsed-literal::
 
-    {'B': array([3600. , 3600.8, 3601.6, ..., 5798.4, 5799.2, 5800. ]), 'R': array([5760. , 5760.8, 5761.6, ..., 7618.4, 7619.2, 7620. ]), 'Z': array([7520. , 7520.8, 7521.6, ..., 9822.4, 9823.2, 9824. ])}
-    {'B': array([ 1.8225803 ,  4.4297943 , -0.9742097 , ...,  0.36117804,
-            1.2084235 ,  0.53845596], dtype=float32), 'R': array([ 0.8617237 ,  0.7800246 ,  1.2475883 , ...,  1.3106785 ,
-           -1.0977093 , -0.06496035], dtype=float32), 'Z': array([-0.02818574,  0.47825524,  0.25585857, ...,  0.48654887,
-            0.54619426,  0.3381963 ], dtype=float32)}
+    {'B': array([3600. , 3600.8, 3601.6, ..., 5798.4, 5799.2, 5800. ]),
+     'R': array([5760. , 5760.8, 5761.6, ..., 7618.4, 7619.2, 7620. ]),
+     'Z': array([7520. , 7520.8, 7521.6, ..., 9822.4, 9823.2, 9824. ])}
+    {'B': array([ 2.8399339 ,  5.5985265 ,  1.6996089 , ..., -0.02623173,
+            0.12586579,  0.17652267], dtype=float32),
+     'R': array([ 0.59253263, -4.5705295 ,  0.7594522 , ...,  2.133106  ,
+            0.19382767, -0.8677871 ], dtype=float32),
+     'Z': array([0.5383575 , 0.4969392 , 0.83893967, ..., 0.44942966, 0.642498  ,
+           0.68266016], dtype=float32)}
 
 
 .. code:: python3
