@@ -31,7 +31,7 @@ See :doc:`/generated/modules` for details.
    :glob:
 
    installation
-   desi_edr_tutorial
+   quick_start
    examples/lookChi2Catalog
    examples/simple_coadd_showcase
    howitworks
