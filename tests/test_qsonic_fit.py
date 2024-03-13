@@ -29,6 +29,16 @@ class TestQsonicFit(TestCase):
         x = qsonic.scripts.qsonic_fit.args_logic_fnc_qsonic_fit(args)
         assert not x
 
+        options = (
+            "--input-dir indir --catalog incat -o outdir "
+            "--true-continuum --mock-analysis --fiducial-meanflux mf "
+            "--fiducial-varlss vs --noise-calibration nc "
+            "--varlss-as-additive-noise --flux-calibration fc"
+        ).split(' ')
+        args = parser.parse_args(options)
+        x = qsonic.scripts.qsonic_fit.args_logic_fnc_qsonic_fit(args)
+        assert x
+
 
 if __name__ == '__main__':
     pytest.main()
