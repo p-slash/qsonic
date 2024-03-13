@@ -10,8 +10,10 @@ Welcome to qsonic's documentation!
 
 Programs
 --------
-+ ``qsonic-fit`` performs picca-like continuum fitting. See :ref:`here <qsonic fit arguments>` or execute ``srun -n 1 qsonic-fit --help`` for help.
-+ ``qsonic-calib`` calculates stacked flux and performs variance fitting with noise calibration (eta) enabled.  See :ref:`here <qsonic calib arguments>` ``srun -n 1 qsonic-calib --help`` for help.
++ ``qsonic-fit`` performs picca-like continuum fitting. See :ref:`here <qsonic fit arguments>` or execute ``qsonic-fit --help`` for help.
++ ``qsonic-calib`` calculates stacked flux and performs variance fitting with noise calibration (eta) enabled.  See :ref:`here <qsonic calib arguments>` ``qsonic-calib --help`` for help.
+
+Note: Some platforms require these help commands to begin with ``mpirun -np 1`` or ``srun -n 1``.
 
 Source
 ------
@@ -29,7 +31,7 @@ See :doc:`/generated/modules` for details.
    :glob:
 
    installation
-   quick_start
+   desi_edr_tutorial
    examples/lookChi2Catalog
    examples/simple_coadd_showcase
    howitworks
