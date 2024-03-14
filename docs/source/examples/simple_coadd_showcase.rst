@@ -51,6 +51,9 @@ reading all the quasar spectra in that file.
     There are 71 spectra in healpix 9145.
 
 
+Plot one spectrum
+-----------------
+
 Let’s investigate one spectrum. Wavelength, flux and inverse variance
 are stored as dictionaries similar to
 `desispec.spectra.Spectra <https://desispec.readthedocs.io/en/latest/api.html#desispec-spectra>`_.
@@ -88,6 +91,9 @@ are stored as dictionaries similar to
 
 .. image:: ../_static/simple_coadd_showcase_3arms.png
 
+
+Plot coadded spectrum
+---------------------
 
 Now, we coadd the arms using inverse variance and replot. The spectrum
 attributes will still be dictionaries with a single key ``brz`` no
