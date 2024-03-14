@@ -9,13 +9,12 @@ This tutorial builds on the DESI early data release example detailed in :ref:`Qu
     import numpy as np
     import matplotlib.pyplot as plt
 
-.. code:: python3
-
     # Point to output delta folder
     output_delta_folder = "Delta-co1"
     fchi2 = fitsio.FITS(f"{output_delta_folder}/continuum_chi2_catalog.fits")[1]
     fchi2
 
+Output:
 .. parsed-literal::
 
     
@@ -66,7 +65,7 @@ Now let us investigate the ``attributes.fits`` file, which contains the mean con
     fattr = fitsio.FITS(f"{output_delta_folder}/attributes.fits")
     fattr
 
-
+Output:
 .. parsed-literal::
 
     
@@ -109,7 +108,7 @@ Now let us investigate the ``attributes.fits`` file, which contains the mean con
 
     fattr['VAR_STATS']
 
-
+Output:
 .. parsed-literal::
 
     
@@ -138,7 +137,7 @@ Note you will have ``cov_var_delta`` only if you ran ``qsonic-fit`` with ``--var
 
 
 
-
+Output:
 .. parsed-literal::
 
     
@@ -187,7 +186,7 @@ Note you will have ``cov_var_delta`` only if you ran ``qsonic-fit`` with ``--var
 Plotting var_pipe vs var_obs for a wavelength bin
 -------------------------------------------------
 
-.. code:: ipython3
+.. code:: python3
 
     hdr = fattr['VAR_STATS'].read_header()
     nwbins = hdr['NWBINS']
@@ -217,13 +216,13 @@ Plotting var_pipe vs var_obs for a wavelength bin
 
 
 
-.. image:: chi2cat_varpipe-obs.png
+.. image:: ../_static/chi2cat_varpipe-obs.png
 
 
 Plot covariance between these points
 ------------------------------------
 
-.. code:: ipython3
+.. code:: python3
 
     cov = dat['cov_var_delta'][:, valid]
     norm = np.sqrt(cov.diagonal())
@@ -234,13 +233,13 @@ Plot covariance between these points
 
 
 
-.. image:: chi2cat_covariance.png
+.. image:: ../_static/chi2cat_covariance.png
 
 
 Plot var_pipe vs mean_delta
 ---------------------------
 
-.. code:: ipython3
+.. code:: python3
 
     plt.errorbar(
         dat['var_pipe'], dat['mean_delta'], np.sqrt(dat['var_delta'] / dat['num_pixels']),
@@ -255,4 +254,4 @@ Plot var_pipe vs mean_delta
 
 
 
-.. image:: chi2cat_varpipe-mean.png
+.. image:: ../_static/chi2cat_varpipe-mean.png
