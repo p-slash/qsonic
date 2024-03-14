@@ -10,8 +10,8 @@ Welcome to qsonic's documentation!
 
 Programs
 --------
-+ ``qsonic-fit`` performs picca-like continuum fitting. See :ref:`here <qsonic fit arguments>` or execute ``qsonic-fit --help`` for help.
-+ ``qsonic-calib`` calculates stacked flux and performs variance fitting with noise calibration (eta) enabled.  See :ref:`here <qsonic calib arguments>` ``qsonic-calib --help`` for help.
++ ``qsonic-fit`` is the main continuum fitting script. It requires MPI. Each MPI task is responsible for independent sky regions based on HEALPix. Reading and fitting the continuum are done in parallel. After all quasars are fit with a continuum, all processes syncronize to calculate the mean continuum and check for convergence. See :ref:`here <qsonic fit arguments>` or execute ``qsonic-fit --help`` for help.
++ ``qsonic-calib`` calculates stacked flux, var_lss and eta terms for a given set of deltas. This script does not perform continuum fitting, and so allows for fast calculations for SNR splits, parameter variations in wavelength and variance binning. Also requires MPI. See :ref:`here <qsonic calib arguments>` ``qsonic-calib --help`` for help.
 
 Note: Some platforms require these help commands to begin with ``mpirun -np 1`` or ``srun -n 1``.
 
