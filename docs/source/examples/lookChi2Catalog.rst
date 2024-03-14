@@ -15,6 +15,7 @@ This tutorial builds on the DESI early data release example detailed in :ref:`Qu
     fchi2
 
 Output:
+
 .. parsed-literal::
 
     
@@ -66,6 +67,7 @@ Now let us investigate the ``attributes.fits`` file, which contains the mean con
     fattr
 
 Output:
+
 .. parsed-literal::
 
     
@@ -109,6 +111,7 @@ Output:
     fattr['VAR_STATS']
 
 Output:
+
 .. parsed-literal::
 
     
@@ -138,6 +141,7 @@ Note you will have ``cov_var_delta`` only if you ran ``qsonic-fit`` with ``--var
 
 
 Output:
+
 .. parsed-literal::
 
     
