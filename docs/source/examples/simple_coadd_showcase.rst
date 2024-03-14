@@ -1,9 +1,7 @@
 Simple coadd showcase
 =====================
 
-*Example: DESI early data release*
-
-If you have a NERSC account, e.g. through DESI, DES, LSST-DESC, or other DOE-sponsored projects, DESI early data release (EDR) is available at ``/global/cfs/cdirs/desi/public/edr``. Otherwise follow the instructions to download the spectra using `Globus <https://data.desi.lbl.gov/doc/access/>`_. Note that you need 80 TB storage space. Let us call this directory ``${EDR_DIRECTORY}``. The coadded spectra are in ``${EDR_DIRECTORY}/spectro/redux/fuji/healpix`` and the quasar catalog for the Lyman-alpha forest analysis is ``${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits``.
+This tutorial builds on the DESI early data release example detailed in :ref:`Quick Start <edr example and workaround>`. I assume you have access to the EDR data, and created ``QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits`` file that fixes the compatibility issue.
 
 For this example, we are going to read all arms (B, R, Z), but will not read the resolution matrix.
 
@@ -15,7 +13,7 @@ For this example, we are going to read all arms (B, R, Z), but will not read the
     import qsonic.catalog
     import qsonic.io
 
-    fname = "${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits"
+    fname_catalog = "QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits"
     indir = "${EDR_DIRECTORY}/spectro/redux/fuji/healpix"
     arms = ['B', 'R', 'Z']
     is_mock = False
