@@ -1,6 +1,8 @@
 Look into output files
 ========================
 
+This tutorial builds on the DESI early data release example detailed in :ref:`Quick Start <edr example and workaround>`. I assume you have access to the EDR data, created ``QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits`` file that fixes the compatibility issue, and obtained deltas.
+
 .. code:: python3
 
     import fitsio
@@ -9,7 +11,9 @@ Look into output files
 
 .. code:: python3
 
-    fchi2 = fitsio.FITS("Delta-co1/continuum_chi2_catalog.fits")[1]
+    # Point to output delta folder
+    output_delta_folder = "Delta-co1"
+    fchi2 = fitsio.FITS(f"{output_delta_folder}/continuum_chi2_catalog.fits")[1]
     fchi2
 
 .. parsed-literal::
@@ -19,14 +23,15 @@ Look into output files
       extension: 1
       type: BINARY_TBL
       extname: CHI2_CAT
-      rows: 471137
+      rows: 411359
       column info:
         TARGETID            i8  
         Z                   f4  
         HPXPIXEL            i8  
-        MPI_RANK            i4  
-        MEANSNR             f4  
+        ARMS                S5  
+        MEANSNR             f4  array[3]
         RSNR                f4  
+        MPI_RANK            i4  
         CONT_valid          b1  
         CONT_chi2           f4  
         CONT_dof            i4  
@@ -54,71 +59,62 @@ Look into output files
 .. image:: ../_static/chi2cat_hist.png
 
 
-Now let us investigate the ``attributes.fits`` file, which contain mean continuum, varlss-eta and stacked flux values for all iterations. Note this version lacks the final extensions, but they are the same as shown from another file.
+Now let us investigate the ``attributes.fits`` file, which contains the mean continuum in ``CONT-i`` extensions, stacked fluxes in observed frame in ``STACKED_FLUX-i``, in rest-frame in ``STACKED_FLUX_RF-i`` extensions, and varlss-eta values in ``VAR_FUNC-i`` extenstions for all iterations.
 
 .. code:: python3
 
-    fattr = fitsio.FITS("Delta-co1/attributes.fits")
+    fattr = fitsio.FITS(f"{output_delta_folder}/attributes.fits")
     fattr
-
-
 
 
 .. parsed-literal::
 
     
       file: Delta-co1/attributes.fits
-      mode: READONLY
       extnum hdutype         hduname[v]
       0      IMAGE_HDU       
       1      BINARY_TBL      CONT-1
-      2      BINARY_TBL      VAR_FUNC-1
-      3      BINARY_TBL      CONT-2
-      4      BINARY_TBL      VAR_FUNC-2
-      5      BINARY_TBL      CONT-3
-      6      BINARY_TBL      VAR_FUNC-3
-      7      BINARY_TBL      CONT-4
-      8      BINARY_TBL      VAR_FUNC-4
-      9      BINARY_TBL      CONT-5
-      10     BINARY_TBL      VAR_FUNC-5
-      11     BINARY_TBL      CONT-6
-      12     BINARY_TBL      VAR_FUNC-6
-      13     BINARY_TBL      CONT-7
-      14     BINARY_TBL      VAR_FUNC-7
-
-The final iteration extensions can now be found ``attributes.fits`` as of version>=0.6.
-
-.. code:: python3
-
-    fstats = fitsio.FITS("Delta-co1/var_stats/qsonic-eta-fits-snr0.0-100.0-variance-stats.fits")
-    fstats
-
-
-
-
-.. parsed-literal::
-
-    
-      file: Delta-co1/var_stats/qsonic-eta-fits-snr0.0-100.0-variance-stats.fits
-      mode: READONLY
-      extnum hdutype         hduname[v]
-      0      IMAGE_HDU       
-      1      BINARY_TBL      VAR_STATS
-      2      BINARY_TBL      VAR_FUNC
-      3      BINARY_TBL      STACKED_FLUX
+      2      BINARY_TBL      STACKED_FLUX-1
+      3      BINARY_TBL      STACKED_FLUX_RF-1
+      4      BINARY_TBL      VAR_FUNC-1
+      5      BINARY_TBL      CONT-2
+      6      BINARY_TBL      STACKED_FLUX-2
+      7      BINARY_TBL      STACKED_FLUX_RF-2
+      8      BINARY_TBL      VAR_FUNC-2
+      9      BINARY_TBL      CONT-3
+      10     BINARY_TBL      STACKED_FLUX-3
+      11     BINARY_TBL      STACKED_FLUX_RF-3
+      12     BINARY_TBL      VAR_FUNC-3
+      13     BINARY_TBL      CONT-4
+      14     BINARY_TBL      STACKED_FLUX-4
+      15     BINARY_TBL      STACKED_FLUX_RF-4
+      16     BINARY_TBL      VAR_FUNC-4
+      17     BINARY_TBL      CONT-5
+      18     BINARY_TBL      STACKED_FLUX-5
+      19     BINARY_TBL      STACKED_FLUX_RF-5
+      20     BINARY_TBL      VAR_FUNC-5
+      21     BINARY_TBL      CONT-6
+      22     BINARY_TBL      STACKED_FLUX-6
+      23     BINARY_TBL      STACKED_FLUX_RF-6
+      24     BINARY_TBL      VAR_FUNC-6
+      25     BINARY_TBL      CONT
+      26     BINARY_TBL      STACKED_FLUX
+      27     BINARY_TBL      STACKED_FLUX_RF
+      28     BINARY_TBL      VAR_FUNC
+      29     BINARY_TBL      VAR_STATS
 
 
 
 .. code:: python3
 
-    fstats['VAR_STATS']
+    fattr['VAR_STATS']
 
 
 .. parsed-literal::
 
     
-      file: Delta-co1/var_stats/qsonic-eta-fits-snr0.0-100.0-variance-stats.fits
-      extension: 1
+      file: Delta-co1/attributes.fits
+      extension: 29
       type: BINARY_TBL
       extname: VAR_STATS
       rows: 2500
@@ -138,7 +134,7 @@ Note you will have ``cov_var_delta`` only if you ran ``qsonic-fit`` with ``--var
 
 .. code:: python3
 
-    fstats['VAR_STATS'].read_header()
+    fattr['VAR_STATS'].read_header()
 
 
 
@@ -188,41 +184,75 @@ Note you will have ``cov_var_delta`` only if you ran ``qsonic-fit`` with ``--var
 
 
 
-.. code:: python3
+Plotting var_pipe vs var_obs for a wavelength bin
+-------------------------------------------------
 
-    nwbins = fstats['VAR_STATS'].read_header()['NWBINS']
-    nvarbins = fstats['VAR_STATS'].read_header()['NVARBINS']
+.. code:: ipython3
 
-    var_stats_data = fstats['VAR_STATS'].read().reshape(nwbins, nvarbins)
-
-
+    hdr = fattr['VAR_STATS'].read_header()
+    nwbins = hdr['NWBINS']
+    nvarbins = hdr['NVARBINS']
+    min_nqso = hdr['MINNQSO']
+    min_npix = hdr['MINNPIX']
+    del hdr
+    
+    var_stats_data = fattr['VAR_STATS'].read().reshape(nwbins, nvarbins)
+    
+    # Pick a wavelength bin to plot
     iw = 2
     dat = var_stats_data[iw]
-    valid = (dat['num_pixels'] > 500) & (dat['num_qso'] > 50)
+    valid = (dat['num_qso'] >= min_nqso) & (dat['num_pixels'] >= min_npix)
     dat = dat[valid]
     
-    plt.errorbar(dat['var_pipe'], dat['var_delta'], dat['e_var_delta'], fmt='-')
+    plt.errorbar(
+        dat['var_pipe'], dat['var_delta'], dat['e_var_delta'],
+        fmt='.', alpha=1, label=f"{np.mean(dat['wave']):.0f} A")
     plt.xlabel("Pipeline variance")
     plt.ylabel("Observed variance")
     plt.xscale("log")
     plt.yscale("log")
+    plt.grid()
+    plt.legend()
     plt.show()
-    
-    plt.errorbar(dat['var_pipe'], dat['mean_delta'], fmt='.-')
-    plt.xlabel("Pipeline variance")
-    plt.ylabel("Observed mean delta")
-    plt.xscale("log")
-    plt.show()
-    
+
+
+
+.. image:: chi2cat_varpipe-obs.png
+
+
+Plot covariance between these points
+------------------------------------
+
+.. code:: ipython3
+
     cov = dat['cov_var_delta'][:, valid]
     norm = np.sqrt(cov.diagonal())
     plt.imshow(cov / np.outer(norm, norm), vmin=-1, vmax=1, cmap=plt.cm.seismic)
+    plt.gca().invert_yaxis()
+    plt.gca().invert_xaxis()
+    plt.show()
 
 
-.. image:: ../_static/chi2cat_varpipe-obs.png
 
-.. image:: ../_static/chi2cat_varpipe-mean.png
-
-.. image:: ../_static/chi2cat_covariance.png
+.. image:: chi2cat_covariance.png
 
 
+Plot var_pipe vs mean_delta
+---------------------------
+
+.. code:: ipython3
+
+    plt.errorbar(
+        dat['var_pipe'], dat['mean_delta'], np.sqrt(dat['var_delta'] / dat['num_pixels']),
+        fmt='.', alpha=1, label=f"{np.mean(dat['wave']):.0f} A")
+    plt.xlabel("Pipeline variance")
+    plt.ylabel("Observed mean delta")
+    plt.xscale("log")
+    plt.grid()
+    plt.axhline(0, c='k')
+    plt.legend()
+    plt.show()
+
+
+
+.. image:: chi2cat_varpipe-mean.png
