@@ -22,24 +22,24 @@ Running qsonic-fit
 
 **Example: DESI early data release**
 
-If you have a NERSC account, e.g. through DESI, DES, LSST-DESC, or other DOE-sponsored projects, DESI early data release (EDR) is available at ``/global/cfs/cdirs/desi/public/edr``. Otherwise follow the instructions to download the spectra using `Globus <https://data.desi.lbl.gov/doc/access/>`_. Note that you need 80 TB storage space. Let us call this directory ``${EDR_DIRECTORY}``. The coadded spectra are in ``${EDR_DIRECTORY}/spectro/redux/fuji/healpix`` and the quasar catalog for the Lyman-alpha forest analysis is ``${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits``. QSOnic is designed to work on DESI data release 1 (DR1), which will be publicly available in late 2024/early 2025, and above. Unfortunately, the blinding strategy implemented for DR1 is not compatible with the EDR quasar catalogs, so we need a workaround.
+If you have a NERSC account, e.g. through DESI, DES, LSST-DESC, or other DOE-sponsored projects, DESI early data release (EDR) is available at ``/global/cfs/cdirs/desi/public/edr``. Otherwise follow the instructions to download the spectra using `Globus <https://data.desi.lbl.gov/doc/access/>`_. Note that you need 80 TB storage space. Let us call this directory ``${EDR_DIRECTORY}``. The coadded spectra are in ``${EDR_DIRECTORY}/spectro/redux/fuji/healpix`` and the quasar catalog for the Lyman-alpha forest analysis is ``${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits``. QSOnic is designed to work on DESI data release 1 (DR1) (will be publicly available in late 2024/early 2025) and above. Unfortunately, the blinding strategy implemented for DR1 is not compatible with the EDR quasar catalogs, so we need a workaround.
 
-*Workaround for EDR catalogs*: The blinding strategy requires ``LASTNIGHT`` column to be present in the catalog, which is missing from ``QSO_cat_fuji_healpix_only_qso_targets.fits``. Furthermore, we need to limit our analysis to the relevant survey for the Lyman-alpha forest clustering analyses which is the 1% survey (SV3). Following commands will read the EDR catalog, select SV3 quasars and append a constant ``LASTNIGHT`` column that marks the last night of observing for EDR.
+*Workaround for EDR catalogs*: The blinding strategy requires ``LASTNIGHT`` column to be present in the quasar catalog, which is missing from ``QSO_cat_fuji_healpix_only_qso_targets.fits``. Furthermore, we need to limit our analysis to the relevant survey and program for the Lyman-alpha forest clustering analyses which is the 1% survey (SV3) and dark program. Following commands will read the EDR catalog, select SV3 quasars and append a constant ``LASTNIGHT`` column that marks the last night of observing for EDR.
 
 
 .. code-block:: python
 
-    from numpy.lib.recfunctions import append_fields
     import fitsio
+    from numpy.lib.recfunctions import append_fields
 
     org_catalog = fitsio.read(
         "${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits",
         ext=1)
 
-    # select SV3 quasars and append LASTNIGHT column
+    # select quasars in SV3-dark and append LASTNIGHT column
     new_catalog = append_fields(
-        org_catalog[org_catalog['LASTNIGHT'] == 'sv3'],
-        'LASTNIGHT', 20210513, dtypes=int, usemask=False)
+        org_catalog[(org_catalog['SURVEY'] == 'sv3') & (org_catalog['PROGRAM'] == 'dark')],
+        'LASTNIGHT', [20210513], dtypes=int, usemask=False)
 
     with fitsio.FITS(
             "QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits", 'rw',
@@ -55,13 +55,14 @@ Now we can pass this catalog into ``qsonic-fit`` script as the quasar catalog.
     srun -n 128 -c 2 qsonic-fit \
     --input-dir ${EDR_DIRECTORY}/spectro/redux/fuji/healpix \
     --catalog QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits \
+    --keep-surveys sv3 \
     -o OUTPUT_FOLDER \
     --num-iterations 10 \
     --wave1 3600 --wave2 5500 \
     --forest-w1 1040 --forest-w2 1200 \
     --skip-resomat
 
-Note you still need to pass a valid output folder.  See :ref:`qsonic-fit arguments <qsonic fit arguments>` for all options you can tweak in the continuum fitting.
+Note, we passed ``--keep-surveys sv3`` argument to the script, and you still need to pass a valid output folder.  See :ref:`qsonic-fit arguments <qsonic fit arguments>` for all options you can tweak in the continuum fitting.
 
 
 Reading spectra
