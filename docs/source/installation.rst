@@ -26,7 +26,7 @@ The following commands will create a conda environment and install qsonic.
     iminuit~=2.18.0
     mpi4py 
 
-Note: MPI is necessary to run qsonic scripts.
+Note: MPI is *necessary* to run qsonic scripts.
 
 NERSC
 -----
