@@ -37,6 +37,7 @@ See :doc:`/generated/modules` for details.
    examples/lookChi2Catalog
    examples/simple_coadd_showcase
    howitworks
+   examples/desi_member_examples
    generated/modules
 
 
