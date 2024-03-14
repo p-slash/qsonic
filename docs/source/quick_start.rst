@@ -18,16 +18,43 @@ Running qsonic-fit
     --skip-resomat
 
 
-*Example: DESI early data release*
+.. _edr example and workaround:
 
-If you have a NERSC account, e.g. through DESI, DES, LSST-DESC, or other DOE-sponsored projects, DESI early data release (EDR) is available at ``/global/cfs/cdirs/desi/public/edr``. Otherwise follow the instructions to download the spectra using `Globus <https://data.desi.lbl.gov/doc/access/>`_. Note that you need 80 TB storage space. Let us call this directory ``${EDR_DIRECTORY}``. The coadded spectra are in ``${EDR_DIRECTORY}/spectro/redux/fuji/healpix`` and the quasar catalog for the Lyman-alpha forest analysis is ``${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits``.
+**Example: DESI early data release**
 
+If you have a NERSC account, e.g. through DESI, DES, LSST-DESC, or other DOE-sponsored projects, DESI early data release (EDR) is available at ``/global/cfs/cdirs/desi/public/edr``. Otherwise follow the instructions to download the spectra using `Globus <https://data.desi.lbl.gov/doc/access/>`_. Note that you need 80 TB storage space. Let us call this directory ``${EDR_DIRECTORY}``. The coadded spectra are in ``${EDR_DIRECTORY}/spectro/redux/fuji/healpix`` and the quasar catalog for the Lyman-alpha forest analysis is ``${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits``. QSOnic is designed to work on DESI data release 1 (DR1), which will be publicly available in late 2024/early 2025, and above. Unfortunately, the blinding strategy implemented for DR1 is not compatible with the EDR quasar catalogs, so we need a workaround.
+
+*Workaround for EDR catalogs*: The blinding strategy requires ``LASTNIGHT`` column to be present in the catalog, which is missing from ``QSO_cat_fuji_healpix_only_qso_targets.fits``. Furthermore, we need to limit our analysis to the relevant survey for the Lyman-alpha forest clustering analyses which is the 1% survey (SV3). Following commands will read the EDR catalog, select SV3 quasars and append a constant ``LASTNIGHT`` column that marks the last night of observing for EDR.
+
+
+.. code-block:: python
+
+    from numpy.lib.recfunctions import append_fields
+    import fitsio
+
+    org_catalog = fitsio.read(
+        "${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits",
+        ext=1)
+
+    # select SV3 quasars and append LASTNIGHT column
+    new_catalog = append_fields(
+        org_catalog[org_catalog['LASTNIGHT'] == 'sv3'],
+        'LASTNIGHT', 20210513, dtypes=int, usemask=False)
+
+    with fitsio.FITS(
+            "QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits", 'rw',
+            clobber=True
+    ) as fts:
+        fts.write(new_catalog, extname='ZCATALOG')
+
+
+Now we can pass this catalog into ``qsonic-fit`` script as the quasar catalog.
 
 .. code-block:: shell
 
     srun -n 128 -c 2 qsonic-fit \
     --input-dir ${EDR_DIRECTORY}/spectro/redux/fuji/healpix \
-    --catalog ${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits \
+    --catalog QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits \
     -o OUTPUT_FOLDER \
     --num-iterations 10 \
     --wave1 3600 --wave2 5500 \
@@ -48,7 +75,7 @@ Here's an example code snippet to use IO interface following the EDR instruction
     import qsonic.catalog
     import qsonic.io
 
-    fname = "${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits"
+    fname_catalog = "QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits"
     indir = "${EDR_DIRECTORY}/spectro/redux/fuji/healpix"
     arms = ['B', 'R']
     is_mock = False
@@ -64,7 +91,7 @@ Here's an example code snippet to use IO interface following the EDR instruction
     fw1 = 1050.
     fw2 = 1180.
 
-    catalog = qsonic.catalog.read_quasar_catalog(fname)
+    catalog = qsonic.catalog.read_quasar_catalog(fname_catalog, is_mock=is_mock)
 
     # Group into unique pixels
     unique_pix, s = np.unique(catalog['HPXPIXEL'], return_index=True)
