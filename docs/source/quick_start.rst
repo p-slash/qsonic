@@ -65,6 +65,18 @@ Now we can pass this catalog into ``qsonic-fit`` script as the quasar catalog.
 
 Note, we passed ``--keep-surveys sv3`` argument to the script, and you still need to pass a valid output folder.  See :ref:`qsonic-fit arguments <qsonic fit arguments>` for all options you can tweak in the continuum fitting.
 
+Running qsonic-calib
+--------------------
+
+``qsonic-calib`` calculates var_lss and eta terms for a given set of deltas. This script does not perform continuum fitting, and so allows for fast calculations for SNR splits, parameter variations in wavelength and variance binning. Using the same ``OUTPUT_FOLDER`` that we saved our deltas, you can run ``qsonic-calib`` for SNR>2 deltas as follows:
+
+.. code:: shell
+
+    srun -n 16 -c 2 qsonic-calib \
+    -i OUTPUT_FOLDER -o OUTPUT_FOLDER \
+    --nvarbins 200 --var-use-cov --min-snr 2 \
+    --wave1 3600 --wave2 5500 \
+    --forest-w1 1040 --forest-w2 1200
 
 Reading spectra
 ---------------
