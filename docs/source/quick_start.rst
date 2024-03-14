@@ -20,11 +20,12 @@ Running qsonic-fit
 
 .. _edr example and workaround:
 
-**Example: DESI early data release**
+Example: DESI early data release
+--------------------------------
 
 If you have a NERSC account, e.g. through DESI, DES, LSST-DESC, or other DOE-sponsored projects, DESI early data release (EDR) is available at ``/global/cfs/cdirs/desi/public/edr``. Otherwise follow the instructions to download the spectra using `Globus <https://data.desi.lbl.gov/doc/access/>`_. Note that you need 80 TB storage space. Let us call this directory ``${EDR_DIRECTORY}``. The coadded spectra are in ``${EDR_DIRECTORY}/spectro/redux/fuji/healpix`` and the quasar catalog for the Lyman-alpha forest analysis is ``${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits``. QSOnic is designed to work on DESI data release 1 (DR1) (will be publicly available in late 2024/early 2025) and above. Unfortunately, the blinding strategy implemented for DR1 is not compatible with the EDR quasar catalogs, so we need a workaround.
 
-*Workaround for EDR catalogs*: The blinding strategy requires ``LASTNIGHT`` column to be present in the quasar catalog, which is missing from ``QSO_cat_fuji_healpix_only_qso_targets.fits``. Furthermore, we need to limit our analysis to the relevant survey and program for the Lyman-alpha forest clustering analyses which is the 1% survey (SV3) and dark program. Following commands will read the EDR catalog, select SV3 quasars and append a constant ``LASTNIGHT`` column that marks the last night of observing for EDR.
+**Workaround for EDR catalogs:** The blinding strategy requires ``LASTNIGHT`` column to be present in the quasar catalog, which is missing from ``QSO_cat_fuji_healpix_only_qso_targets.fits``. Furthermore, we need to limit our analysis to the relevant survey and program for the Lyman-alpha forest clustering analyses which is the 1% survey (SV3) and dark program. Following commands will read the EDR catalog, select SV3 quasars and append a constant ``LASTNIGHT`` column that marks the last night of observing for EDR.
 
 
 .. code-block:: python
