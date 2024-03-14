@@ -12,7 +12,7 @@ Running qsonic-fit
     --input-dir INPUT_DIRECTORY \
     --catalog QUASAR_CATALOG \
     -o OUTPUT_FOLDER \
-    --no-iterations 10 \
+    --num-iterations 10 \
     --wave1 3600 --wave2 5500 \
     --forest-w1 1050 --forest-w2 1180 \
     --skip-resomat
@@ -29,7 +29,7 @@ If you have a NERSC account, e.g. through DESI, DES, LSST-DESC, or other DOE-spo
     --input-dir ${EDR_DIRECTORY}/spectro/redux/fuji/healpix \
     --catalog ${EDR_DIRECTORY}/vac/edr/qso/v1.0/QSO_cat_fuji_healpix_only_qso_targets.fits \
     -o OUTPUT_FOLDER \
-    --no-iterations 10 \
+    --num-iterations 10 \
     --wave1 3600 --wave2 5500 \
     --forest-w1 1040 --forest-w2 1200 \
     --skip-resomat
