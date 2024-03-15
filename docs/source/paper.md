@@ -37,7 +37,7 @@ The density of the intervening gas is inferred from the transmitted flux fractio
 Furthermore, `QSOnic` provides an efficient API to read and manipulate DESI quasar spectra to allow implementation of other algorithms within the Ly$\alpha$ forest framework. It saves detailed intermediate data products including best-fit parameters for each quasar and the covariance matrix used in pipeline noise calibration correction ($\eta$ parameter in references [@bourbouxCompletedSDSSIVExtended:2020; @karacayliOptimal1DLy:2024]). These intermediate products are crucial to ascertain the precision of the fitted continua and the pipeline noise corrections.
 
 
-`QSOnic` is built on the same principle of [picca](https://github.com/igmhub/picca) continuum fitting algorithm. Unlike `picca`, `QSOnic` has robust convergence criteria, provides a generic API for DESI quasar spectra, and saves more intermediate data products. Due to optimized IO routines, MPI parallelization and efficient numerical algorithms, it may be faster than `picca`.
+`QSOnic` is built on the same principle of [picca](https://github.com/igmhub/picca) continuum fitting algorithm. Unlike `picca`, `QSOnic` has robust convergence criteria, provides a generic API for DESI quasar spectra, and saves more intermediate data products. Due to optimized IO routines, MPI parallelization and efficient numerical algorithms, it may be faster than `picca`. DESI Ly$\alpha$ forest working group and its ancillary topical groups are responsible for coordinating the efforts between different packages.
 
 `QSOnic` will be used in future scientific publications of the 1D Ly$\alpha$ forest power spectrum and the 3D correlation function measurements from DESI data.
 
