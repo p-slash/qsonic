@@ -15,16 +15,8 @@ The following commands will create a conda environment and install qsonic.
 - Change VERSION to the desired python version. The only restriction is ``VERSION>=3.7`` and there is no upper version restriction. However, I recommend using a python version that is one or two minor points behind the latest version to be safe.
 - Due to occasional compatibility problems between numpy, healpy and astropy, major dependencies are version limited to the following (see ``requirements.txt``):
 
-.. parsed-literal::
-
-    numpy~=1.24.0
-    numba~=0.57.0
-    scipy~=1.10.0
-    astropy~=5.2.0
-    healpy~=1.16.0
-    fitsio~=1.1.0
-    iminuit~=2.18.0
-    mpi4py 
+.. include:: ../../requirements.txt 
+    :literal:
 
 Note: MPI is *necessary* to run qsonic scripts.
 
