@@ -30,14 +30,11 @@ See :doc:`/generated/modules` for details.
 
 .. toctree::
    :maxdepth: 2
-   :glob:
 
    installation
    quick_start
-   examples/lookChi2Catalog
-   examples/simple_coadd_showcase
+   examples/index
    howitworks
-   examples/desi_member_examples
    contributing
    generated/modules
 

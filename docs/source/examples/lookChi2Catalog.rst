@@ -1,7 +1,7 @@
 Look into output files
 ========================
 
-This tutorial builds on the DESI early data release example detailed in :ref:`Quick Start <edr example and workaround>`. I assume you have access to the EDR data, created ``QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits`` file that fixes the compatibility issue, and obtained deltas. An empty notebook can be found in the GitHub repo under ``docs/nb/look_into_output_files.ipynb``.
+This tutorial builds on the DESI early data release example detailed in :ref:`Quick Start <edr example and workaround>`. I assume you have access to the EDR data, created ``QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits`` file that fixes the compatibility issue, and obtained deltas. An empty notebook can be found in the GitHub repo under ``docs/nb/look_into_output_files.ipynb`` or downloaded :download:`here <../../nb/look_into_output_files.ipynb>`.
 
 .. code:: python3
 
