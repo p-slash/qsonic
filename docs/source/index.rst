@@ -38,6 +38,7 @@ See :doc:`/generated/modules` for details.
    examples/simple_coadd_showcase
    howitworks
    examples/desi_member_examples
+   contributing
    generated/modules
 
 
