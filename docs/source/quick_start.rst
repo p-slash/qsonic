@@ -17,6 +17,7 @@ Running qsonic-fit
     --forest-w1 1050 --forest-w2 1180 \
     --skip-resomat
 
+See :ref:`qsonic-fit arguments <qsonic fit arguments>` for all options you can tweak in the continuum fitting.
 
 .. _edr example and workaround:
 
@@ -63,7 +64,7 @@ Now we can pass this catalog into ``qsonic-fit`` script as the quasar catalog.
     --forest-w1 1040 --forest-w2 1200 \
     --skip-resomat
 
-Note, we passed ``--keep-surveys sv3`` argument to the script, and you still need to pass a valid output folder.  See :ref:`qsonic-fit arguments <qsonic fit arguments>` for all options you can tweak in the continuum fitting.
+Note, we passed ``--keep-surveys sv3`` argument to the script, and you still need to pass a valid output folder.
 
 Running qsonic-calib
 --------------------
@@ -81,7 +82,7 @@ Running qsonic-calib
 Reading spectra
 ---------------
 
-Here's an example code snippet to use IO interface following the EDR instructions above.
+Here's an example code snippet to use IO interface following the EDR instructions above. See another example :doc:`examples/simple_coadd_showcase` for a step by step tutorial.
 
 .. code-block:: python
 
