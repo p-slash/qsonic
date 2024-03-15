@@ -68,7 +68,7 @@ Note, we passed ``--keep-surveys sv3`` argument to the script, and you still nee
 Running qsonic-calib
 --------------------
 
-``qsonic-calib`` calculates var_lss and eta terms for a given set of deltas. This script does not perform continuum fitting, and so allows for fast calculations for SNR splits, parameter variations in wavelength and variance binning. Using the same ``OUTPUT_FOLDER`` that we saved our deltas, you can run ``qsonic-calib`` for SNR>2 deltas as follows:
+``qsonic-calib`` calculates var_lss and eta terms for a given set of deltas. This script does not perform continuum fitting, and so it enables fast calculations of var_lss and eta for data SNR splits, parameter variations in wavelength and variance binning. Using the same ``OUTPUT_FOLDER`` that we saved our deltas, you can run ``qsonic-calib`` for SNR>2 deltas with 200 variance bins as follows:
 
 .. code:: shell
 

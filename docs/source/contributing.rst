@@ -17,7 +17,7 @@ Contributing Code and Documentation
 Contributions should be done via `pull requests <https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests>`_ from GitHub users' forks of the `qsonic repository <https://github.com/p-slash/qsonic>`_. You can read more about best practices `here <https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/getting-started/best-practices-for-pull-requests>`_. Most importantly, create small PRs and double check your work!
 
 
-Install the developer version following istructions in Installation page. `dev` installation provides ``pytest, flake8, bump2version`` packages. ``pytest`` is needed for testing. You can use ``flake8`` to check for code style consistency.
+Install the developer version following istructions in the Installation page. `dev` installation additionally provides ``pytest, flake8, bump2version`` packages. ``pytest`` is needed for testing. You can use ``flake8`` to check for code style consistency.
 
 **Code style** is `PEP8 <https://peps.python.org/pep-0008/>`_ with all lines limited to a maximum of 79 characters. Run ``flake8 .`` in the main repo folder before pushing your changes.
 
@@ -25,7 +25,7 @@ Install the developer version following istructions in Installation page. `dev` 
 
 **Do not** introduce additional dependencies. The combination of numpy, scipy and astropy can achieve pretty much everything you need.
 
-**Provide** unit tests to check your functions are working as expected.
+**Provide** unit tests to confirm your functions are working as expected.
 
 **Update** docs/, especially tutorials and installation, if needed. API will be automatically generated from docstrings.
 
