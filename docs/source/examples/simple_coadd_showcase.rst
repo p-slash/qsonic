@@ -1,7 +1,7 @@
 Simple coadd showcase
 =====================
 
-This tutorial builds on the DESI early data release example detailed in :ref:`Quick Start <edr example and workaround>`. I assume you have access to the EDR data, and created ``QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits`` file that fixes the compatibility issue. An empty notebook can be found in the GitHub repo under ``docs/nb/simple_coadd_showcase.ipynb``.
+This tutorial builds on the DESI early data release example detailed in :ref:`Quick Start <edr example and workaround>`. I assume you have access to the EDR data, and created ``QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits`` file that fixes the compatibility issue. An empty notebook can be found in the GitHub repo under ``docs/nb/simple_coadd_showcase.ipynb`` or downloaded :download:`here <../../nb/simple_coadd_showcase.ipynb>`.
 
 For this example, we are going to read all arms (B, R, Z), but will not read the resolution matrix.
 
