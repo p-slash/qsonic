@@ -1,6 +1,10 @@
 Simple coadd showcase
 =====================
 
+This tutorial builds on the DESI early data release example detailed in :ref:`Quick Start <edr example and workaround>`. I assume you have access to the EDR data, and created ``QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits`` file that fixes the compatibility issue. An empty notebook can be found in the GitHub repo under ``docs/nb/simple_coadd_showcase.ipynb`` or downloaded :download:`here <../../nb/simple_coadd_showcase.ipynb>`.
+
+For this example, we are going to read all arms (B, R, Z), but will not read the resolution matrix.
+
 .. code:: python3
 
     import numpy as np
@@ -9,13 +13,8 @@ Simple coadd showcase
     import qsonic.catalog
     import qsonic.io
 
-For this example, we are using v0 catalog for iron release. We are going
-to read all arms (B, R, Z), but will not read the resolution matrix.
-
-.. code:: python3
-
-    fname = "/global/cfs/cdirs/desicollab/science/lya/y1-kp6/iron-tests/catalogs/QSO_cat_iron_main_dark_healpix_v0-altbal.fits"
-    indir = "/global/cfs/cdirs/desi/spectro/redux/iron/healpix"
+    fname_catalog = "QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits"
+    indir = "${EDR_DIRECTORY}/spectro/redux/fuji/healpix"
     arms = ['B', 'R', 'Z']
     is_mock = False
     skip_resomat = True
@@ -32,14 +31,14 @@ reading all the quasar spectra in that file.
 
 .. code:: python3
 
-    catalog = qsonic.catalog.read_quasar_catalog(fname)
+    catalog = qsonic.catalog.read_quasar_catalog(fname, is_mock=is_mock)
 
     # Group into unique pixels
     unique_pix, s = np.unique(catalog['HPXPIXEL'], return_index=True)
     split_catalog = np.split(catalog, s[1:])
 
     # Pick one healpix to illustrate
-    hpx_cat = split_catalog[0]
+    hpx_cat = split_catalog[1]
     healpix = hpx_cat['HPXPIXEL'][0]
 
     spectra_by_hpx = readerFunction(hpx_cat)
@@ -49,8 +48,11 @@ reading all the quasar spectra in that file.
 
 .. parsed-literal::
 
-    There are 207 spectra in healpix 0.
+    There are 71 spectra in healpix 9145.
 
+
+Plot one spectrum
+-----------------
 
 Let’s investigate one spectrum. Wavelength, flux and inverse variance
 are stored as dictionaries similar to
@@ -58,18 +60,22 @@ are stored as dictionaries similar to
 
 .. code:: python3
 
-    spec = spectra_by_hpx[0]
+    spec = spectra_by_hpx[3]
     print(spec.wave)
     print(spec.flux)
 
 
 .. parsed-literal::
 
-    {'B': array([3600. , 3600.8, 3601.6, ..., 5798.4, 5799.2, 5800. ]), 'R': array([5760. , 5760.8, 5761.6, ..., 7618.4, 7619.2, 7620. ]), 'Z': array([7520. , 7520.8, 7521.6, ..., 9822.4, 9823.2, 9824. ])}
-    {'B': array([ 1.8225803 ,  4.4297943 , -0.9742097 , ...,  0.36117804,
-            1.2084235 ,  0.53845596], dtype=float32), 'R': array([ 0.8617237 ,  0.7800246 ,  1.2475883 , ...,  1.3106785 ,
-           -1.0977093 , -0.06496035], dtype=float32), 'Z': array([-0.02818574,  0.47825524,  0.25585857, ...,  0.48654887,
-            0.54619426,  0.3381963 ], dtype=float32)}
+    {'B': array([3600. , 3600.8, 3601.6, ..., 5798.4, 5799.2, 5800. ]),
+     'R': array([5760. , 5760.8, 5761.6, ..., 7618.4, 7619.2, 7620. ]),
+     'Z': array([7520. , 7520.8, 7521.6, ..., 9822.4, 9823.2, 9824. ])}
+    {'B': array([0.16013083, 2.1076498 , 6.495008  , ..., 2.2043223 , 1.6862453 ,
+        1.8163666 ], dtype=float32),
+     'R': array([-1.287594  ,  1.731283  ,  0.62619126, ...,  0.9037217 ,
+        1.3648763 ,  1.652868  ], dtype=float32),
+     'Z': array([0.83304965, 1.031328  , 1.6591258 , ..., 0.81355166, 1.0301682 ,
+        1.0923132 ], dtype=float32)}
 
 
 .. code:: python3
@@ -86,6 +92,9 @@ are stored as dictionaries similar to
 .. image:: ../_static/simple_coadd_showcase_3arms.png
 
 
+Plot coadded spectrum
+---------------------
+
 Now, we coadd the arms using inverse variance and replot. The spectrum
 attributes will still be dictionaries with a single key ``brz`` no
 matter which arms are used to coadd.
@@ -100,8 +109,8 @@ matter which arms are used to coadd.
 .. parsed-literal::
 
     {'brz': array([3600. , 3600.8, 3601.6, ..., 9822.4, 9823.2, 9824. ])}
-    {'brz': array([ 1.82258034,  4.42979435, -0.97420972, ...,  0.48654886,
-            0.54619423,  0.3381963 ])}
+    {'brz': array([0.16013082, 2.10764978, 6.49500805, ..., 0.81355166, 1.03016822,
+        1.0923132 ])}
 
 
 .. code:: python3

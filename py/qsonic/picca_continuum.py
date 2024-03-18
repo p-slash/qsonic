@@ -1098,7 +1098,10 @@ class VarLSSFitter():
             Inverse variance array.
         """
         # add 1 to match searchsorted/bincount output/input
-        wave_indx = ((wave - self.waveobs[0]) / self.dwobs + 1.5).astype(int)
+        wave_indx = np.clip(
+            ((wave - self.waveobs[0]) / self.dwobs + 1.5).astype(int),
+            0, self.nwbins + 1
+        )
         ivar_indx = np.searchsorted(self.ivar_edges, ivar)
         all_indx = ivar_indx + wave_indx * (self.nvarbins + 2)
         var = np.zeros_like(ivar)
