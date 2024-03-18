@@ -27,7 +27,7 @@ _required_data_columns = [
 _required_tile_columns = [set(['TILEID']), set(['PETAL_LOC'])]
 """list(set): Required columns for tile data analysis."""
 _optional_columns = [
-    'HPXPIXEL', 'VMIN_CIV_450', 'VMAX_CIV_450', 'VMIN_CIV_2000',
+    'HPXPIXEL', 'PROGRAM', 'VMIN_CIV_450', 'VMAX_CIV_450', 'VMIN_CIV_2000',
     'VMAX_CIV_2000'
 ]
 """list(str): Optional columns."""
