@@ -92,6 +92,8 @@ def get_spectra_reader_function(
         If true, do not read resomat.
     read_true_continuum: bool
         If true, reads the true continuum for mock analysis.
+    is_tile: bool
+        If true, reads for tile grouping
     program: str, default: "dark"
         Always use dark program.
 
