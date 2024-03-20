@@ -10,11 +10,13 @@ import numpy as np
 def setup_data():
     cat_dtype = np.dtype([
         ('TARGETID', '>i8'), ('Z', '>f8'), ('RA', '>f8'), ('DEC', '>f8'),
-        ('HPXPIXEL', '>i8'), ('SURVEY', '<U4')])
+        ('HPXPIXEL', '>i8'), ('SURVEY', '<U4'), ('PETAL_LOC', 'i2'),
+        ('FIBER', 'i4'), ('NIGHT', 'i4'), ('EXPID', 'i4'), ('TILEID', 'i4')])
 
     def _setup_data(nspec):
         cat_by_survey = np.array(
-            [(39627939372861215, 2.328, 229.86, 6.19, 8258, b'main')] * nspec,
+            [(39627939372861215, 2.328, 229.86, 6.19, 8258, b'main', 1, 240,
+              20230918, 10000, 82788)] * nspec,
             dtype=cat_dtype)
         inc = np.roll(np.arange(nspec), 2)
         cat_by_survey['TARGETID'] += inc
