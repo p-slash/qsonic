@@ -95,6 +95,10 @@ class TestIOReading(object):
             cat_by_survey[w][['TARGETID', 'Z', 'HPXPIXEL', 'SURVEY']],
             input_dir, xarms, True)
 
+        new_catalog = np.hstack([_.catrow for _ in slist])
+        for key in new_catalog.dtype.names:
+            assert all(new_catalog[key] == cat_by_survey[key])
+
         assert (len(slist) == cat_by_survey.size)
         for jj, spec in enumerate(slist):
             assert (spec.targetid == cat_by_survey['TARGETID'][jj])
