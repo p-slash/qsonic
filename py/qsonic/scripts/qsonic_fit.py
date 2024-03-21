@@ -298,7 +298,8 @@ def mpi_read_exposures(spectra_list, args, maskers, comm, mpi_rank):
     """Creates a local catalog from spectra_list and reads exposures. Coadding
     of arms is always done with IVAR only as weights (exposures are not coadded
     ). RSNR cut is still applied. CONT is copied from the exposure coadded
-    spectra.
+    spectra. The extension name in the delta files will be
+    ``TARGETID_ARM_EXPID``.
 
     Arguments
     ---------
