@@ -325,6 +325,8 @@ def mpi_read_exposures(spectra_list, args, maskers, comm, mpi_rank):
     start_time = time.time()
 
     local_catalog = np.hstack([_.catrow for _ in spectra_list])
+
+    # Assert if local_catalog is already sorted
     idx_sort = local_catalog.argsort(order=['HPXPIXEL', 'TARGETID'])
     assert all(np.arange(idx_sort.size) == idx_sort)
     del idx_sort
@@ -335,9 +337,8 @@ def mpi_read_exposures(spectra_list, args, maskers, comm, mpi_rank):
     del s, unique_pix
 
     exposure_spectra_list = []
-    # Each process reads its own list
     for cat in local_queue:
-        local_specs = qsonic.io.read_onehealpix_file_data_spectra(
+        local_specs = qsonic.io.read_onehealpix_file_data_uncoadd(
             cat, args.input_dir, args.arms, args.skip_resomat
         )
 
