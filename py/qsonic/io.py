@@ -62,7 +62,9 @@ def add_io_parser(parser=None):
         choices=["before", "after", "disable"],
         help="Coadds arms before or after continuum fitting or not at all.")
     outgroup.add_argument(
-        "--save-exposures", help="Reads and saves exposures.")
+        "--save-exposures", action="store_true",
+        help=("Reads and saves exposures. Tile format not supported. "
+              "See :func:`qsonic.scripts.qsonic_fit.mpi_read_exposures`."))
     outgroup.add_argument(
         "--save-by-hpx", action="store_true",
         help="Save by healpix. If not, saves by MPI rank.")
