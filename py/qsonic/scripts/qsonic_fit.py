@@ -326,9 +326,11 @@ def mpi_read_exposures(spectra_list, args, maskers, comm, mpi_rank):
 
     local_catalog = np.hstack([_.catrow for _ in spectra_list])
 
-    # Assert if local_catalog is already sorted
+    # local_catalog is not sorted
     idx_sort = local_catalog.argsort(order=['HPXPIXEL', 'TARGETID'])
-    assert all(np.arange(idx_sort.size) == idx_sort)
+    spectra_list = np.array(spectra_list)[idx_sort]
+    local_catalog = local_catalog[idx_sort]
+    # assert all(np.arange(idx_sort.size) == idx_sort)
     del idx_sort
 
     # exposures cannot be saved in tile format
