@@ -33,10 +33,10 @@ class TestIOParsers(object):
 
 
 class TestIOReading(object):
-    def test_read_onehealpix_file_data(self, my_setup_fits):
+    def test_read_onehealpix_file_data_coadd(self, my_setup_fits):
         cat_by_survey, input_dir, xarms, indata = my_setup_fits
 
-        spectra_list = qsonic.io.read_onehealpix_file_data(
+        spectra_list = qsonic.io.read_onehealpix_file_data_coadd(
             cat_by_survey, input_dir, xarms, skip_resomat=True)
 
         for key, inval in indata.items():
@@ -61,7 +61,7 @@ class TestIOReading(object):
     def test_read_spectra_onehealpix(self, my_setup_fits):
         cat_by_survey, input_dir, xarms, data = my_setup_fits
 
-        slist = qsonic.io.read_onehealpix_file_data(
+        slist = qsonic.io.read_onehealpix_file_data_coadd(
             cat_by_survey, input_dir, xarms, True)
 
         assert (len(slist) == cat_by_survey.size)
@@ -77,7 +77,7 @@ class TestIOReading(object):
         cat_by_survey2[-ens_:]['TARGETID'] += 20
         npt.assert_array_equal(cat_by_survey, cat_by_survey2[:-ens_])
         with pytest.warns(RuntimeWarning):
-            slist = qsonic.io.read_onehealpix_file_data(
+            slist = qsonic.io.read_onehealpix_file_data_coadd(
                 cat_by_survey2, input_dir, xarms, True)
 
         assert (len(slist) == cat_by_survey.size)
@@ -87,11 +87,11 @@ class TestIOReading(object):
                 npt.assert_allclose(spec.flux[arm], data['flux'][arm][jj])
                 npt.assert_allclose(spec.ivar[arm], data['ivar'][arm][jj])
 
-    def test_read_spectra_onehealpix_spectra(self, my_setup_fits_spectra):
+    def test_read_onehealpix_file_data_uncoadd(self, my_setup_fits_spectra):
         cat_by_survey, input_dir, xarms, data = my_setup_fits_spectra
         _, w = np.unique(cat_by_survey['TARGETID'], return_index=True)
 
-        slist = qsonic.io.read_onehealpix_file_data_spectra(
+        slist = qsonic.io.read_onehealpix_file_data_uncoadd(
             cat_by_survey[w][['TARGETID', 'Z', 'HPXPIXEL', 'SURVEY']],
             input_dir, xarms, True)
 
