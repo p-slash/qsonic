@@ -369,7 +369,7 @@ def mpi_read_exposures(spectra_list, args, maskers, comm, mpi_rank):
 
     # Match & assign cont, forest weight
     for spec in exposure_spectra_list:
-        i = np.nonzero(local_catalog['TARGETID'] == spec.targetid)[0]
+        i = np.nonzero(local_catalog['TARGETID'] == spec.targetid)[0][0]
         spec.cont_params['cont'] = spectra_list[i].cont_params['cont']
 
     etime = (time.time() - start_time) / 60  # min
