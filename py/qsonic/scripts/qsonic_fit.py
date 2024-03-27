@@ -354,12 +354,14 @@ def mpi_read_exposures(spectra_list, args, maskers, comm, mpi_rank):
             if spec.forestwave and spec.rsnr >= args.min_rsnr
         ])
 
-    del local_queue
-
     if args.coadd_arms != "disable":
         logging.info("Coadding arms with pure IVAR weights.")
         for spec in exposure_spectra_list:
             spec.coadd_arms_forest()
+
+    nspec_all = comm.reduce(len(exposure_spectra_list))
+    etime = (time.time() - start_time) / 60  # min
+    logging.info(f"All {nspec_all} exposures are read in {etime:.1f} mins.")
 
     # Noise and flux calibration
     mpi_noise_flux_calibrate(exposure_spectra_list, args, comm, mpi_rank)
