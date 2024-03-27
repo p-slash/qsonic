@@ -838,6 +838,8 @@ class Delta():
         Weights, which includes var_lss.
     cont: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Continuum.
+    reso: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Resolution matrix. ``None`` if not present.
     header: FITS header
         Header.
     targetid: int
@@ -893,3 +895,80 @@ class Delta():
         self.ivar = data['IVAR'].astype("f8")
         self.weight = data['WEIGHT'].astype("f8")
         self.cont = data['CONT'].astype("f8")
+
+        if 'RESOMAT' in colnames:
+            self.reso = data['RESOMAT'].T.astype("f8")
+        else:
+            self.reso = None
+
+    def _coadd_reso(self, other, nwaves, idxes):
+        max_ndia = max(self.reso.shape[0], other.reso.shape[0])
+        coadd_reso = np.zeros((max_ndia, nwaves))
+        coadd_norm = np.zeros(nwaves)
+
+        for j, obj in enumerate([self, other]):
+            weight = obj.weight.copy()
+            weight[weight == 0] = 1e-8
+
+            ddia = max_ndia - obj.reso.shape[0]
+            # Assumption ddia cannot be odd
+            ddia = ddia // 2
+            if ddia > 0:
+                obj.reso = np.pad(obj.reso, ((ddia, ddia), (0, 0)))
+
+            coadd_reso[:, idxes[j]] += weight * obj.reso
+            coadd_norm[idxes[j]] += weight
+
+        coadd_reso /= coadd_norm
+        self.reso = coadd_reso
+
+    def coadd(self, other, dwave=0.8):
+        min_wave = min(self.wave[0], other.wave[0])
+        max_wave = max(self.wave[-1], other.wave[-1])
+
+        nwaves = int((max_wave - min_wave) / dwave + 0.1) + 1
+        coadd_wave = np.linspace(min_wave, max_wave, nwaves)
+        coadd_delta = np.zeros(nwaves)
+        coadd_ivar = np.zeros(nwaves)
+        coadd_lss = np.zeros(nwaves)
+        coadd_cont = np.zeros(nwaves)
+        coadd_norm = np.zeros(nwaves)
+
+        idxes = [None, None]
+        for j, obj in enumerate([self, other]):
+            wave = obj.wave
+            idx = ((wave - min_wave) / dwave + 0.1).astype(int)
+            idxes[j] = idx
+
+            weight = obj.weight
+
+            var = np.zeros_like(weight)
+            w = obj.ivar > 0
+            var[w] = 1 / obj.ivar[w]
+
+            coadd_delta[idx] += weight * obj.delta
+            coadd_cont[idx] += weight * obj.cont
+            coadd_ivar[idx] += weight**2 * var
+            coadd_lss[idx][w] += 1 - weight[w] * var[w]
+            coadd_norm[idx] += weight
+
+        w = coadd_norm > 0
+        coadd_delta[w] /= coadd_norm[w]
+        coadd_cont[w] /= coadd_norm[w]
+        coadd_lss[w] /= coadd_norm[w]
+        coadd_ivar[w] = coadd_norm[w]**2 / coadd_ivar[w]
+
+        if self.reso is not None:
+            self._coadd_reso(other, nwaves, idxes)
+
+        # self.set_smooth_forestivar(self._smoothing_scale)
+        # self.set_forest_weight(varlss_interp, eta_interp)
+
+        self.wave = coadd_wave
+        self.delta = coadd_delta
+        self.ivar = coadd_ivar
+        self.weight = self.ivar / (1 + self.ivar * coadd_lss)
+        self.cont = coadd_cont
+
+        self.mean_snr = np.dot(
+            np.sqrt(coadd_ivar), coadd_delta + 1) / np.sum(coadd_ivar > 0)
