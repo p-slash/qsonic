@@ -33,7 +33,7 @@ See :doc:`/generated/modules` for details.
 
    installation
    quick_start
-   examples/index
+   examples/desi_member_examples
    howitworks
    contributing
    generated/modules

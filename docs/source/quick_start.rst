@@ -1,4 +1,4 @@
-Quick Start
+Tutorial
 ===========
 
 Running qsonic-fit
@@ -54,7 +54,7 @@ Now we can pass this catalog into ``qsonic-fit`` script as the quasar catalog.
 
 .. code-block:: shell
 
-    srun -n 128 -c 2 qsonic-fit \
+    srun -n 16 -c 2 qsonic-fit \
     --input-dir ${EDR_DIRECTORY}/spectro/redux/fuji/healpix \
     --catalog QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits \
     --keep-surveys sv3 \
@@ -64,7 +64,269 @@ Now we can pass this catalog into ``qsonic-fit`` script as the quasar catalog.
     --forest-w1 1040 --forest-w2 1200 \
     --skip-resomat
 
-Note, we passed ``--keep-surveys sv3`` argument to the script, and you still need to pass a valid output folder.
+Note, we passed ``--keep-surveys sv3`` argument to the script, and you still need to pass a valid output folder. This should read 
+
+Look into output files
+----------------------
+
+An empty notebook can be found in the GitHub repo under ``docs/nb/look_into_output_files.ipynb`` or downloaded :download:`here <../nb/look_into_output_files.ipynb>`.
+
+.. code:: python3
+
+    import fitsio
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    # Point to output delta folder
+    output_delta_folder = "Delta-co1"
+    fchi2 = fitsio.FITS(f"{output_delta_folder}/continuum_chi2_catalog.fits")[1]
+    fchi2
+
+Output:
+
+.. parsed-literal::
+
+    
+      file: Delta-co1/continuum_chi2_catalog.fits
+      extension: 1
+      type: BINARY_TBL
+      extname: CHI2_CAT
+      rows: 411359
+      column info:
+        TARGETID            i8  
+        Z                   f4  
+        HPXPIXEL            i8  
+        ARMS                S5  
+        MEANSNR             f4  array[3]
+        RSNR                f4  
+        MPI_RANK            i4  
+        CONT_valid          b1  
+        CONT_chi2           f4  
+        CONT_dof            i4  
+        CONT_x              f4  array[2]
+        CONT_xcov           f4  array[4]
+
+
+
+.. code:: python3
+
+    chi2_data = fchi2.read()
+    is_valid = chi2_data['CONT_valid']
+
+    chi2_v = chi2_data[is_valid]['CONT_chi2'] / chi2_data[is_valid]['CONT_dof']
+    
+    plt.hist(chi2_v, bins=100)
+    plt.axvline(1, c='k')
+    plt.xlabel(r"$\chi^2_\nu$")
+    plt.ylabel("Counts")
+    plt.yscale("log")
+    plt.show()
+
+
+
+.. image:: _static/chi2cat_hist.png
+
+
+Now let us investigate the ``attributes.fits`` file, which contains the mean continuum in ``CONT-i`` extensions, stacked fluxes in observed frame in ``STACKED_FLUX-i``, in rest-frame in ``STACKED_FLUX_RF-i`` extensions, and varlss-eta values in ``VAR_FUNC-i`` extenstions for all iterations.
+
+.. code:: python3
+
+    fattr = fitsio.FITS(f"{output_delta_folder}/attributes.fits")
+    fattr
+
+Output:
+
+.. parsed-literal::
+
+    
+      file: Delta-co1/attributes.fits
+      extnum hdutype         hduname[v]
+      0      IMAGE_HDU       
+      1      BINARY_TBL      CONT-1
+      2      BINARY_TBL      STACKED_FLUX-1
+      3      BINARY_TBL      STACKED_FLUX_RF-1
+      4      BINARY_TBL      VAR_FUNC-1
+      5      BINARY_TBL      CONT-2
+      6      BINARY_TBL      STACKED_FLUX-2
+      7      BINARY_TBL      STACKED_FLUX_RF-2
+      8      BINARY_TBL      VAR_FUNC-2
+      9      BINARY_TBL      CONT-3
+      10     BINARY_TBL      STACKED_FLUX-3
+      11     BINARY_TBL      STACKED_FLUX_RF-3
+      12     BINARY_TBL      VAR_FUNC-3
+      13     BINARY_TBL      CONT-4
+      14     BINARY_TBL      STACKED_FLUX-4
+      15     BINARY_TBL      STACKED_FLUX_RF-4
+      16     BINARY_TBL      VAR_FUNC-4
+      17     BINARY_TBL      CONT-5
+      18     BINARY_TBL      STACKED_FLUX-5
+      19     BINARY_TBL      STACKED_FLUX_RF-5
+      20     BINARY_TBL      VAR_FUNC-5
+      21     BINARY_TBL      CONT-6
+      22     BINARY_TBL      STACKED_FLUX-6
+      23     BINARY_TBL      STACKED_FLUX_RF-6
+      24     BINARY_TBL      VAR_FUNC-6
+      25     BINARY_TBL      CONT
+      26     BINARY_TBL      STACKED_FLUX
+      27     BINARY_TBL      STACKED_FLUX_RF
+      28     BINARY_TBL      VAR_FUNC
+      29     BINARY_TBL      VAR_STATS
+
+
+
+.. code:: python3
+
+    fattr['VAR_STATS']
+
+Output:
+
+.. parsed-literal::
+
+    
+      file: Delta-co1/attributes.fits
+      extension: 29
+      type: BINARY_TBL
+      extname: VAR_STATS
+      rows: 2500
+      column info:
+        wave                f8  
+        var_pipe            f8  
+        e_var_pipe          f8  
+        var_delta           f8  
+        e_var_delta         f8  
+        mean_delta          f8  
+        var2_delta          f8  
+        num_pixels          i8  
+        num_qso             i8  
+        cov_var_delta       f8  array[100]
+
+Note you will have ``cov_var_delta`` only if you ran ``qsonic-fit`` with ``--var-use-cov`` option.
+
+.. code:: python3
+
+    fattr['VAR_STATS'].read_header()
+
+
+
+Output:
+
+.. parsed-literal::
+
+    
+    XTENSION= 'BINTABLE'           / binary table extension
+    BITPIX  =                    8 / 8-bit bytes
+    NAXIS   =                    2 / 2-dimensional binary table
+    NAXIS1  =                  872 / width of table in bytes
+    NAXIS2  =                 2500 / number of rows in table
+    PCOUNT  =                    0 / size of special data area
+    GCOUNT  =                    1 / one data group (required keyword)
+    TFIELDS =                   10 / number of fields in each row
+    TTYPE1  = 'wave'               / label for field   1
+    TFORM1  = 'D'                  / data format of field: 8-byte DOUBLE
+    TTYPE2  = 'var_pipe'           / label for field   2
+    TFORM2  = 'D'                  / data format of field: 8-byte DOUBLE
+    TTYPE3  = 'e_var_pipe'         / label for field   3
+    TFORM3  = 'D'                  / data format of field: 8-byte DOUBLE
+    TTYPE4  = 'var_delta'          / label for field   4
+    TFORM4  = 'D'                  / data format of field: 8-byte DOUBLE
+    TTYPE5  = 'e_var_delta'        / label for field   5
+    TFORM5  = 'D'                  / data format of field: 8-byte DOUBLE
+    TTYPE6  = 'mean_delta'         / label for field   6
+    TFORM6  = 'D'                  / data format of field: 8-byte DOUBLE
+    TTYPE7  = 'var2_delta'         / label for field   7
+    TFORM7  = 'D'                  / data format of field: 8-byte DOUBLE
+    TTYPE8  = 'num_pixels'         / label for field   8
+    TFORM8  = 'K'                  / data format of field: 8-byte INTEGER
+    TTYPE9  = 'num_qso'            / label for field   9
+    TFORM9  = 'K'                  / data format of field: 8-byte INTEGER
+    TTYPE10 = 'cov_var_delta'      / label for field  10
+    TFORM10 = '100D'               / data format of field: 8-byte DOUBLE
+    EXTNAME = 'VAR_STATS'          / name of this binary table extension
+    MINNPIX =                  500 / 
+    MINNQSO =                   50 / 
+    MINSNR  =                    0 / 
+    MAXSNR  =                  100 / 
+    WAVE1   =               3660.0 / 
+    WAVE2   =               6540.0 / 
+    NWBINS  =                   25 / 
+    IVAR1   =                 0.05 / 
+    IVAR2   =              10000.0 / 
+    NVARBINS=                  100 / 
+
+
+
+Plotting var_pipe vs var_obs for a wavelength bin
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code:: python3
+
+    hdr = fattr['VAR_STATS'].read_header()
+    nwbins = hdr['NWBINS']
+    nvarbins = hdr['NVARBINS']
+    min_nqso = hdr['MINNQSO']
+    min_npix = hdr['MINNPIX']
+    del hdr
+    
+    var_stats_data = fattr['VAR_STATS'].read().reshape(nwbins, nvarbins)
+    
+    # Pick a wavelength bin to plot
+    iw = 2
+    dat = var_stats_data[iw]
+    valid = (dat['num_qso'] >= min_nqso) & (dat['num_pixels'] >= min_npix)
+    dat = dat[valid]
+    
+    plt.errorbar(
+        dat['var_pipe'], dat['var_delta'], dat['e_var_delta'],
+        fmt='.', alpha=1, label=f"{np.mean(dat['wave']):.0f} A")
+    plt.xlabel("Pipeline variance")
+    plt.ylabel("Observed variance")
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.grid()
+    plt.legend()
+    plt.show()
+
+
+
+.. image:: _static/chi2cat_varpipe-obs.png
+
+
+Plot covariance between these points
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code:: python3
+
+    cov = dat['cov_var_delta'][:, valid]
+    norm = np.sqrt(cov.diagonal())
+    plt.imshow(cov / np.outer(norm, norm), vmin=-1, vmax=1, cmap=plt.cm.seismic)
+    plt.gca().invert_yaxis()
+    plt.gca().invert_xaxis()
+    plt.show()
+
+
+
+.. image:: _static/chi2cat_covariance.png
+
+
+Plot var_pipe vs mean_delta
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code:: python3
+
+    plt.errorbar(
+        dat['var_pipe'], dat['mean_delta'], np.sqrt(dat['var_delta'] / dat['num_pixels']),
+        fmt='.', alpha=1, label=f"{np.mean(dat['wave']):.0f} A")
+    plt.xlabel("Pipeline variance")
+    plt.ylabel("Observed mean delta")
+    plt.xscale("log")
+    plt.grid()
+    plt.axhline(0, c='k')
+    plt.legend()
+    plt.show()
+
+
+
+.. image:: _static/chi2cat_varpipe-mean.png
 
 Running qsonic-calib
 --------------------
@@ -82,7 +344,7 @@ Running qsonic-calib
 Reading spectra
 ---------------
 
-Here's an example code snippet to use IO interface following the EDR instructions above. See another example :doc:`examples/simple_coadd_showcase` for a step by step tutorial.
+Here's an example code snippet to use IO interface following the EDR instructions above. See below for a step by step tutorial.
 
 .. code-block:: python
 
@@ -121,3 +383,133 @@ Here's an example code snippet to use IO interface following the EDR instruction
 
         # Do stuff with spectra in this healpix
         ...
+
+
+Simple coadd showcase
+---------------------
+
+An empty notebook can be found in the GitHub repo under ``docs/nb/simple_coadd_showcase.ipynb`` or downloaded :download:`here <../nb/simple_coadd_showcase.ipynb>`.
+
+For this example, we are going to read all arms (B, R, Z), but will not read the resolution matrix.
+
+.. code:: python3
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+    
+    import qsonic.catalog
+    import qsonic.io
+
+    fname_catalog = "QSO_cat_fuji_healpix_only_qso_targets_sv3_fix.fits"
+    indir = "${EDR_DIRECTORY}/spectro/redux/fuji/healpix"
+    arms = ['B', 'R', 'Z']
+    is_mock = False
+    skip_resomat = True
+
+    # Setup reader function
+    readerFunction = qsonic.io.get_spectra_reader_function(
+        indir, arms, is_mock, skip_resomat,
+        read_true_continuum=False, is_tile=False)
+
+First, we read the catalog. Since ``qsonic`` sorts this the catalog by
+HPXPIXEL, we can find the unique healpix values and split the catalog
+into healpix groups. For example purposes, we are picking a single healpix and
+reading all the quasar spectra in that file.
+
+.. code:: python3
+
+    catalog = qsonic.catalog.read_quasar_catalog(fname, is_mock=is_mock)
+
+    # Group into unique pixels
+    unique_pix, s = np.unique(catalog['HPXPIXEL'], return_index=True)
+    split_catalog = np.split(catalog, s[1:])
+
+    # Pick one healpix to illustrate
+    hpx_cat = split_catalog[1]
+    healpix = hpx_cat['HPXPIXEL'][0]
+
+    spectra_by_hpx = readerFunction(hpx_cat)
+
+    print(f"There are {len(spectra_by_hpx)} spectra in healpix {healpix}.")
+
+
+.. parsed-literal::
+
+    There are 71 spectra in healpix 9145.
+
+
+Plot one spectrum
+^^^^^^^^^^^^^^^^^
+
+Let’s investigate one spectrum. Wavelength, flux and inverse variance
+are stored as dictionaries similar to
+`desispec.spectra.Spectra <https://desispec.readthedocs.io/en/latest/api.html#desispec-spectra>`_.
+
+.. code:: python3
+
+    spec = spectra_by_hpx[3]
+    print(spec.wave)
+    print(spec.flux)
+
+
+.. parsed-literal::
+
+    {'B': array([3600. , 3600.8, 3601.6, ..., 5798.4, 5799.2, 5800. ]),
+     'R': array([5760. , 5760.8, 5761.6, ..., 7618.4, 7619.2, 7620. ]),
+     'Z': array([7520. , 7520.8, 7521.6, ..., 9822.4, 9823.2, 9824. ])}
+    {'B': array([0.16013083, 2.1076498 , 6.495008  , ..., 2.2043223 , 1.6862453 ,
+        1.8163666 ], dtype=float32),
+     'R': array([-1.287594  ,  1.731283  ,  0.62619126, ...,  0.9037217 ,
+        1.3648763 ,  1.652868  ], dtype=float32),
+     'Z': array([0.83304965, 1.031328  , 1.6591258 , ..., 0.81355166, 1.0301682 ,
+        1.0923132 ], dtype=float32)}
+
+
+.. code:: python3
+
+    plt.figure(figsize=(12, 5))
+    for arm, wave_arm in spec.wave.items():
+        plt.plot(wave_arm, spec.flux[arm], label=arm, alpha=0.7)
+    plt.legend()
+    plt.ylim(-1, 5)
+    plt.show()
+
+
+
+.. image:: _static/simple_coadd_showcase_3arms.png
+
+
+Plot coadded spectrum
+^^^^^^^^^^^^^^^^^^^^^
+
+Now, we coadd the arms using inverse variance and replot. The spectrum
+attributes will still be dictionaries with a single key ``brz`` no
+matter which arms are used to coadd.
+
+.. code:: python3
+
+    spec.simple_coadd()
+    print(spec.wave)
+    print(spec.flux)
+
+
+.. parsed-literal::
+
+    {'brz': array([3600. , 3600.8, 3601.6, ..., 9822.4, 9823.2, 9824. ])}
+    {'brz': array([0.16013082, 2.10764978, 6.49500805, ..., 0.81355166, 1.03016822,
+        1.0923132 ])}
+
+
+.. code:: python3
+
+    plt.figure(figsize=(12, 5))
+    for arm, wave_arm in spec.wave.items():
+        plt.plot(wave_arm, spec.flux[arm], label=arm, alpha=0.7, c='k')
+    plt.legend()
+    plt.ylim(-1, 5)
+    plt.show()
+
+
+
+.. image:: _static/simple_coadd_showcase_coadded.png
+
