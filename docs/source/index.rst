@@ -32,8 +32,8 @@ See :doc:`/generated/modules` for details.
    :maxdepth: 2
 
    installation
-   quick_start
-   examples/index
+   tutorial
+   examples/desi_member_examples
    howitworks
    contributing
    generated/modules
