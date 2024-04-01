@@ -210,6 +210,14 @@ class TestDelta(object):
         npt.assert_almost_equal(delta.reso, 1)
         npt.assert_almost_equal(delta.weight, 2. / 3.)
 
+        with fitsio.FITS(fname, 'rw', clobber=True) as fts:
+            delta.write(fts)
+
+        with fitsio.FITS(fname) as fts:
+            delta2 = qsonic.spectrum.Delta(fts[1])
+
+        npt.assert_almost_equal(delta.delta, delta.delta)
+
 
 @pytest.fixture
 def setup_delta_data(tmp_path):
