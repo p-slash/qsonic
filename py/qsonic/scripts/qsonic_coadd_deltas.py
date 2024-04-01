@@ -118,7 +118,7 @@ def main():
     logging.info(
         f"There are {len(forest_by_hpx)} healpixels. Writing to files.")
 
-    _fnc = functools.partial(_write_one_hpx, output_dir=args.output_dir)
+    _fnc = functools.partial(write_one_hpx, output_dir=args.output_dir)
 
     with Pool(processes=args.nproc) as pool:
         pool.starmap(_fnc, forest_by_hpx.items())
