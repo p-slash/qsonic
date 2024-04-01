@@ -91,7 +91,7 @@ def main():
         forest_by_hpx[hpx].append(delta)
 
     logging.info(f"Writing to files.")
-    for hpx, list_deltas in forest_by_hpx:
+    for hpx, list_deltas in forest_by_hpx.items():
         with fitsio.FITS(
                 f"{args.output_dir}/delta-{hpx}.fits", 'rw', clobber=True
         ) as fts:
