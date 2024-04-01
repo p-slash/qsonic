@@ -949,7 +949,7 @@ class Delta():
             coadd_delta[idx] += weight * obj.delta
             coadd_cont[idx] += weight * obj.cont
             coadd_ivar[idx] += weight**2 * var
-            coadd_lss[idx][w] += 1 - weight[w] * var[w]
+            coadd_lss[idx] += 1 - weight * var
             coadd_norm[idx] += weight
 
         w = coadd_norm > 0
@@ -960,9 +960,6 @@ class Delta():
 
         if self.reso is not None:
             self._coadd_reso(other, nwaves, idxes)
-
-        # self.set_smooth_forestivar(self._smoothing_scale)
-        # self.set_forest_weight(varlss_interp, eta_interp)
 
         self.wave = coadd_wave
         self.delta = coadd_delta
