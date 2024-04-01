@@ -1,4 +1,5 @@
 import argparse
+import functools
 import glob
 import logging
 
@@ -78,6 +79,25 @@ def read_dirs_to_dict(directories, nproc):
     return forest_dict
 
 
+def write_one_hpx(hpx, list_deltas, output_dir):
+    """Writes to one healpix delta file.
+
+    Arguments
+    ---------
+    hpx: int
+        Healpixel.
+    list_deltas: list(Delta)
+        List of delta files.
+    output_dir: str
+        Output directory.
+    """
+    with fitsio.FITS(
+            f"{output_dir}/delta-{hpx}.fits", 'rw', clobber=True
+    ) as fts:
+        for delta in list_deltas:
+            delta.write(fts)
+
+
 def main():
     args = get_parser().parse_args()
 
@@ -95,10 +115,10 @@ def main():
             args.nside, delta.ra, delta.dec, lonlat=True, nest=args.nest)
         forest_by_hpx[hpx].append(delta)
 
-    logging.info(f"Writing to files.")
-    for hpx, list_deltas in forest_by_hpx.items():
-        with fitsio.FITS(
-                f"{args.output_dir}/delta-{hpx}.fits", 'rw', clobber=True
-        ) as fts:
-            for delta in list_deltas:
-                delta.write(fts)
+    logging.info(
+        f"There are {len(forest_by_hpx)} healpixels. Writing to files.")
+
+    _fnc = functools.partial(_write_one_hpx, output_dir=args.output_dir)
+
+    with Pool(processes=args.nproc) as pool:
+        pool.starmap(_fnc, forest_by_hpx.items())
