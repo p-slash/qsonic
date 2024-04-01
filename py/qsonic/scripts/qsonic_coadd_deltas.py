@@ -74,6 +74,11 @@ def read_onedir_to_dict(directory, forest_dict, nproc):
 def main():
     args = get_parser().parse_args()
 
+    logging.basicConfig(
+        format='%(asctime)s - %(levelname)s: %(message)s',
+        datefmt='%Y/%m/%d %I:%M:%S %p',
+        level=logging.DEBUG)
+
     forest_dict = {}
     for directory in args.input_dirs:
         forest_dict = read_onedir_to_dict(directory, forest_dict, args.nproc)
