@@ -38,29 +38,36 @@ def get_parser():
     return parser
 
 
-def read_onedir_to_dict(directory, forest_dict, nproc):
-    """Reads a single directory full of ``delta-*.fits`` files, and coadds them
+def read_dirs_to_dict(directories, nproc):
+    """Reads all directories full of ``delta-*.fits`` files, and coadds them
     into ``forest_dict`` dictionary.
 
     Arguments
     ---------
-    directory: str
-        Directory to search for `delta-*.fits`` files.
-    forest_dict: dict(Delta)
-        Dictionary of Delta objects by ``TARGETID`` as key.
+    directories: list(str)
+        List of directories to search for `delta-*.fits`` files.
     nproc: int
         Number of processes.
 
     Returns
     -------
     forest_dict: dict(Delta)
+        Dictionary of Delta objects by ``TARGETID`` as key.
     """
-    logging.info(f"Reading {directory}.")
-    fnames = glob.glob(f"{directory}/delta-*.fits")
+    logging.info("Making list of all delta files.")
+    fnames = []
+    for directory in directories:
+        fnames.extend(glob.glob(f"{directory}/delta-*.fits"))
+
+    if not fnames:
+        raise Exception("No delta files are found!")
+
+    logging.info(f"There are {len(fnames)} files.")
     with Pool(processes=nproc) as pool:
         deltas = pool.map(qsonic.io.read_deltas, fnames)
 
     logging.info(f"Coadding deltas.")
+    forest_dict = {}
     for onelist in deltas:
         for delta in onelist:
             if delta.targetid in forest_dict:
@@ -79,9 +86,7 @@ def main():
         datefmt='%Y/%m/%d %I:%M:%S %p',
         level=logging.DEBUG)
 
-    forest_dict = {}
-    for directory in args.input_dirs:
-        forest_dict = read_onedir_to_dict(directory, forest_dict, args.nproc)
+    forest_dict = read_dirs_to_dict(args.input_dirs, args.nproc)
 
     logging.info(f"Grouping into healpixels.")
     forest_by_hpx = defaultdict(list)
