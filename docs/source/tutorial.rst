@@ -66,6 +66,8 @@ Now we can pass this catalog into ``qsonic-fit`` script as the quasar catalog.
 
 Note we passed ``--keep-surveys sv3`` argument to the script, and you still need to pass a valid output folder. This minimal example should calculate quasar continua for about 11,000 spectra. It requires less than 1 GB of RAM and should finish in about a minute for 16 MPI tasks with two cores each. The output files require 320 MB storage. Reading the resolution matrix (by removing ``--skip-resomat`` option) multiplies the storage and RAM requirements by a factor of four and slows down reading/writing data. This slow down is neglible for this example, but are relevant for large samples.
 
+.. _look into output files reference:
+
 Look into output files
 ----------------------
 
