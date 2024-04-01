@@ -891,6 +891,7 @@ class Delta():
             self.wave = data[key].astype("f8")
 
         key = Delta._check_hdu(colnames, "delta")
+        self._is_blinded = key == "DELTA_BLIND"
         self.delta = data[key].astype("f8")
         self.ivar = data['IVAR'].astype("f8")
         self.weight = data['WEIGHT'].astype("f8")
@@ -900,6 +901,36 @@ class Delta():
             self.reso = data['RESOMAT'].T.astype("f8")
         else:
             self.reso = None
+
+    def write(self, fts_file):
+        """Writes to FITS file. This function is aimed at saving coadded
+        deltas.
+
+        Writes 'LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT' columns and
+        'RESOMAT' column if resolution matrix is present to extension name
+        ``targetid``. FITS file must be initialized before. Note that ``arm``
+        is lost in the extension name.
+
+        Arguments
+        ---------
+        fts_file: FITS file
+            The file handler, not filename.
+        """
+        hdr_dict = self.header
+
+        cols = [self.wave, self.delta, self.ivar, self.weight, self.cont]
+        names = ['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT']
+
+        if self._is_blinded:
+            names[1] = 'DELTA_BLIND'
+
+        if self.reso is not None:
+            cols.append(self.reso.T)
+            names.append('RESOMAT')
+
+        fts_file.write(
+            cols, names=names, header=hdr_dict,
+            extname=f"{self.targetid}")
 
     def _coadd_reso(self, other, nwaves, idxes):
         max_ndia = max(self.reso.shape[0], other.reso.shape[0])
@@ -969,3 +1000,14 @@ class Delta():
 
         self.mean_snr = np.dot(
             np.sqrt(coadd_ivar), coadd_delta + 1) / np.sum(coadd_ivar > 0)
+        self.header['MEANSNR'] = self.mean_snr
+
+    @property
+    def ra(self):
+        """float: Right ascension in degrees."""
+        return np.degrees(self.header['RA'])
+
+    @property
+    def dec(self):
+        """float: Declination in degrees"""
+        return np.degrees(self.header['DEC'])
