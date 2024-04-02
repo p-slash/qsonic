@@ -975,7 +975,7 @@ class Delta():
             idxes[j] = idx
 
             var = np.zeros_like(obj.weight)
-            w = obj.ivar > 0
+            w = (obj.weight > 0) & (obj.ivar > 0)
             var[w] = 1 / obj.ivar[w]
 
             coadd_delta[idx] += obj.weight * obj.delta
