@@ -96,7 +96,7 @@ Cleaning & Saving
 -----------------
 The last two steps are straightforward. We coadd arms after continuum fitting and recalculate chi2 values if ``--coadd_arms after``. We save a catalog continuum parameters and chi2 (see :ref:`here <look into output files reference>`).
 
-We check for short spectra once more, which is important if ``--coadd_arms disable``.
+We check for short spectra once more, which is important if ``--coadd_arms disable``. We apply additive var_lss noise correction.
 
 We finally save delta files in BinaryTable format. Delta files are organized in MPI ranks. It is also possible to save by the original healpix numbers in the catalog, but this creates a lot of files.
 
