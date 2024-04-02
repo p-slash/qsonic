@@ -898,6 +898,8 @@ class Delta():
         self.weight = data['WEIGHT'].astype("f8")
         self.cont = data['CONT'].astype("f8")
 
+        self.delta[self.ivar == 0] = 0
+
         if 'RESOMAT' in colnames:
             self.reso = data['RESOMAT'].T.astype("f8")
         else:
