@@ -608,7 +608,8 @@ def read_onehealpix_file_mock(
         data['cont'] = _read_true_continuum(catalog_hpx['TARGETID'], fspec)
 
     if skip_resomat:
-        return qsonic.spectrum.generate_spectra_list_from_data(catalog_hpx, data)
+        return qsonic.spectrum.generate_spectra_list_from_data(
+            catalog_hpx, data)
 
     with fitsio.FITS(fspec) as fitsfile:
         for arm in arms_to_keep:
