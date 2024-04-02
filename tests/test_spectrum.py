@@ -192,6 +192,7 @@ class TestDelta(object):
         with fitsio.FITS(fname) as fts:
             delta = qsonic.spectrum.Delta(fts[1])
 
+        wave = delta.wave.copy()
         npt.assert_almost_equal(delta.delta, 1)
         npt.assert_almost_equal(delta.ivar, 1)
         npt.assert_almost_equal(delta.weight, 0.5)
@@ -203,12 +204,17 @@ class TestDelta(object):
 
         delta.delta *= 0.4
         delta2.delta *= 0.6
+        delta2.ivar[:5] = 0
+        delta2.weight[:5] = 0
         delta.coadd(delta2)
-        npt.assert_almost_equal(delta.delta, 0.5)
-        npt.assert_almost_equal(delta.cont, 1)
-        npt.assert_almost_equal(delta.ivar, 2)
-        npt.assert_almost_equal(delta.reso, 1)
-        npt.assert_almost_equal(delta.weight, 2. / 3.)
+        npt.assert_almost_equal(delta.ivar[:5], 1)
+        npt.assert_almost_equal(delta.delta[:5], 0.4)
+        npt.assert_almost_equal(delta.wave, wave)
+        npt.assert_almost_equal(delta.delta[5:], 0.5)
+        npt.assert_almost_equal(delta.cont[5:], 1)
+        npt.assert_almost_equal(delta.ivar[5:], 2)
+        npt.assert_almost_equal(delta.reso[5:], 1)
+        npt.assert_almost_equal(delta.weight[5:], 2. / 3.)
 
         with fitsio.FITS(fname, 'rw', clobber=True) as fts:
             delta.write(fts)
@@ -216,7 +222,8 @@ class TestDelta(object):
         with fitsio.FITS(fname) as fts:
             delta2 = qsonic.spectrum.Delta(fts[1])
 
-        npt.assert_almost_equal(delta.delta, delta.delta)
+        npt.assert_almost_equal(delta2.delta, delta.delta)
+        npt.assert_almost_equal(delta2.wave, wave)
 
 
 @pytest.fixture
