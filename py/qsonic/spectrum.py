@@ -722,6 +722,7 @@ class Spectrum():
             delta = self.forestflux[arm] / cont_est - 1
             ivar = self.forestivar[arm] * cont_est**2
             weight = self.forestweight[arm] * cont_est**2
+            delta[ivar == 0] = 0
 
             cols = [wave_arm, delta, ivar, weight, cont_est]
             if self.forestreso:
@@ -967,21 +968,19 @@ class Delta():
 
         idxes = [None, None]
         for j, obj in enumerate([self, other]):
-            wave = obj.wave
-            idx = ((wave - min_wave) / dwave + 0.1).astype(int)
+            i0 = ((obj.wave[0] - min_wave) / dwave + 0.1).astype(int)
+            idx = np.s_[i0:i0 + obj.wave.size]
             idxes[j] = idx
 
-            weight = obj.weight
-
-            var = np.zeros_like(weight)
+            var = np.zeros_like(obj.weight)
             w = obj.ivar > 0
             var[w] = 1 / obj.ivar[w]
 
-            coadd_delta[idx] += weight * obj.delta
-            coadd_cont[idx] += weight * obj.cont
-            coadd_ivar[idx] += weight**2 * var
-            coadd_lss[idx] += 1 - weight * var
-            coadd_norm[idx] += weight
+            coadd_delta[idx] += obj.weight * obj.delta
+            coadd_cont[idx] += obj.weight * obj.cont
+            coadd_ivar[idx] += obj.weight**2 * var
+            coadd_lss[idx] += 1 - obj.weight * var
+            coadd_norm[idx] += obj.weight
 
         w = coadd_norm > 0
         coadd_delta[w] /= coadd_norm[w]
