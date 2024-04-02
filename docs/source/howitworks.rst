@@ -11,7 +11,7 @@ One important aspect of the algorithm is that the definition of the quasar conti
 
     \Lambda &= \frac{\log\lambda_\mathrm{RF} - \log\lambda_\mathrm{RF}^{(1)}}{\log\lambda_\mathrm{RF}^{(2)} - \log\lambda_\mathrm{RF}^{(1)}},
 
-where :math:`\lambda_\mathrm{RF}` is the wavelength in quasar's rest frame. We assume that the global mean continuum :math:`\overline{C}(\lambda_\mathrm{RF})` does not depend on redshift, and therefore our model only adjusts :math:`\overline{F}(z)`, as well as solves for the  :math:`a_q` and :math:`b_q` parameters for each quasar. In other words, the amplitude and slope parameters do not only fit for intrinsic quasar diversity such as brightness, but also for the IGM mean flux. This can be alleviated by passing a FITS file to ``--fiducial-meanflux`` option in QSOnic.
+where :math:`\lambda_\mathrm{RF}` is the wavelength in quasar's rest frame. (1) and (2) superscripts correspond to lower and upper rest-frame wavelength ends considered in the analysis, and are set by ``--forest-w1`` and ``--forest-w2`` respectively. We assume that the global mean continuum :math:`\overline{C}(\lambda_\mathrm{RF})` does not depend on redshift, and therefore our model only adjusts :math:`\overline{F}(z)`, as well as solves for the  :math:`a_q` and :math:`b_q` parameters for each quasar. In other words, the amplitude and slope parameters do not only fit for intrinsic quasar diversity such as brightness, but also for the IGM mean flux. This can be alleviated by passing a FITS file to ``--fiducial-meanflux`` option in QSOnic.
 Given these definitions, transmitted flux fluctuations are given by
 
 .. math::
@@ -51,7 +51,7 @@ We determine if the data needs to be blinded in :meth:`qsonic.spectrum.Spectrum.
 
 We read masks in :func:`qsonic.scripts.qsonic_fit.mpi_read_masks`. See :mod:`qsonic.masks` for :class:`SkyMask <qsonic.masks.SkyMask>`, :class:`BALMask <qsonic.masks.BALMask>` and :class:`DLAMask <qsonic.masks.DLAMask>` file conventions.
 
-We read spectra in :func:`qsonic.scripts.qsonic_fit.mpi_read_spectra_local_queue`. This is done by reading all **quasar** spectra in a healpix file using the function :func:`qsonic.io.read_spectra_onehealpix`, which uses slices to read **only** the quasar spectra in a given file. Then, the analysis region is enforced by the given wavelength arguments, which also populate ``forest*`` attributes of :class:`qsonic.spectrum.Spectrum`. Even though underlying API can keep the entire spectrum, we drop all regions that are outside the analysis region to save memory. Furthermore, a right-side SNR (RSNR) cut is applied to remove quasars if such an option is passed while reading, but techinally this is part of priming.
+We read spectra in :func:`qsonic.scripts.qsonic_fit.mpi_read_spectra_local_queue`. This is done by reading all **quasar** spectra in a healpix file using the reader function returned by :func:`qsonic.io.get_spectra_reader_function`, which uses slices to read **only** the quasar spectra in a given file. Then, the analysis region is enforced by the given wavelength arguments, which also populate ``forest*`` attributes of :class:`qsonic.spectrum.Spectrum`. Even though underlying API can keep the entire spectrum, we drop all regions that are outside the analysis region to save memory. Furthermore, a right-side SNR (RSNR) cut is applied to remove quasars if such an option is passed while reading, but techinally this is part of priming.
 
 Priming
 -------
@@ -81,7 +81,7 @@ This stage starts with the construction of a :class:`PiccaContinuumFitter <qsoni
 
 We then start iterating, which itself consists of three major steps: initialization, fitting, updating the global variables. The initialization sets ``cont_params`` variable of every Spectrum object. Continuum polynomial order is carried by setting ``cont_params[x]``. At each iteration:
 
-#. Global variables (mean continuum, var_lss) are saved to ``attributes.fits`` file (see :doc:`/examples/lookChi2Catalog`). This ensures the order of what is used in each iteration. 
+#. Global variables (mean continuum, var_lss) are saved to ``attributes.fits`` file (see :ref:`here <look into output files reference>`). This ensures the order of what is used in each iteration. 
 #. All spectra are fit (see :meth:`fit_continuum <qsonic.picca_continuum.PiccaContinuumFitter.fit_continuum>`).
 #. Mean continuum is updated by stacking, smoothing and removing degenarate modes. We check for convergence (update is small). See :meth:`update_mean_cont <qsonic.picca_continuum.PiccaContinuumFitter.update_mean_cont>` and :meth:`_project_normalize_meancont <qsonic.picca_continuum.PiccaContinuumFitter._project_normalize_meancont>`.
 #. If we are fitting for var_lss, we fit and update by calculating variance statistics.
@@ -94,7 +94,7 @@ You can read :class:`VarLSSFitter <qsonic.picca_continuum.VarLSSFitter>` to unde
 
 Cleaning & Saving
 -----------------
-The last two steps are straightforward. We coadd arms after continuum fitting and recalculate chi2 values if ``--coadd_arms after``. We save a catalog continuum parameters and chi2 (see :doc:`/examples/lookChi2Catalog`).
+The last two steps are straightforward. We coadd arms after continuum fitting and recalculate chi2 values if ``--coadd_arms after``. We save a catalog continuum parameters and chi2 (see :ref:`here <look into output files reference>`).
 
 We check for short spectra once more, which is important if ``--coadd_arms disable``.
 
