@@ -2,6 +2,7 @@ import argparse
 import copy
 import pytest
 
+import fitsio
 import numpy as np
 import numpy.testing as npt
 
@@ -183,6 +184,78 @@ class TestSpectrum(object):
         npt.assert_almost_equal(spec.ivar['brz'][wronly:], 1)
 
         npt.assert_almost_equal(spec.ivar['brz'][wbonly:wronly], 2)
+
+
+class TestDelta(object):
+    def test_delta_init(self, setup_delta_data):
+        fname = setup_delta_data
+        with fitsio.FITS(fname) as fts:
+            delta = qsonic.spectrum.Delta(fts[1])
+
+        wave = delta.wave.copy()
+        npt.assert_almost_equal(delta.delta, 1)
+        npt.assert_almost_equal(delta.ivar, 1)
+        npt.assert_almost_equal(delta.weight, 0.5)
+        npt.assert_almost_equal(delta.cont, 1)
+        npt.assert_almost_equal(delta.reso, 1)
+
+        with fitsio.FITS(fname) as fts:
+            delta2 = qsonic.spectrum.Delta(fts[1])
+
+        delta.delta *= 0.4
+        delta2.delta *= 0.6
+        delta2.ivar[:5] = 0
+        delta2.weight[:5] = 0
+        delta.coadd(delta2)
+        npt.assert_almost_equal(delta.ivar[:5], 1)
+        npt.assert_almost_equal(delta.delta[:5], 0.4)
+        npt.assert_almost_equal(delta.wave, wave)
+        npt.assert_almost_equal(delta.delta[5:], 0.5)
+        npt.assert_almost_equal(delta.cont[5:], 1)
+        npt.assert_almost_equal(delta.ivar[5:], 2)
+        npt.assert_almost_equal(delta.reso[5:], 1)
+        npt.assert_almost_equal(delta.weight[5:], 2. / 3.)
+
+        with fitsio.FITS(fname, 'rw', clobber=True) as fts:
+            delta.write(fts)
+
+        with fitsio.FITS(fname) as fts:
+            delta2 = qsonic.spectrum.Delta(fts[1])
+
+        npt.assert_almost_equal(delta2.delta, delta.delta)
+        npt.assert_almost_equal(delta2.wave, wave)
+
+
+@pytest.fixture
+def setup_delta_data(tmp_path):
+    fname = tmp_path / "delta-0.fits"
+
+    hdr_dict = {
+        'TARGETID': 39627939372861215,
+        'Z': 2.328,
+        'MEANSNR': 1
+    }
+
+    sigma = 1
+    sigma_lss = 1
+    ndata = 100
+    ivar = np.ones(ndata) / sigma**2
+    weight = np.ones(ndata) / (sigma**2 + sigma_lss**2)
+
+    wave_arm = 3800. + 0.8 * np.arange(ndata)
+    delta = np.ones(ndata)
+    cont_est = np.ones(ndata)
+    reso = np.ones((11, ndata))
+    with fitsio.FITS(fname, 'rw', clobber=True) as fts:
+        cols = [wave_arm, delta, ivar, weight, cont_est, reso.T.astype('f8')]
+
+        fts.write(
+            cols,
+            names=['LAMBDA', 'DELTA', 'IVAR', 'WEIGHT', 'CONT', 'RESOMAT'],
+            header=hdr_dict,
+            extname=f"{hdr_dict['TARGETID']}")
+
+    yield fname
 
 
 if __name__ == '__main__':
