@@ -145,10 +145,10 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
 
 def mpi_noise_flux_calibrate(spectra_list, args, comm, mpi_rank):
     if args.noise_calibration:
-        logging.info("Applying noise calibration.")
+        logging.info("Applying noise calibration (eta only).")
         ncal = qsonic.calibration.NoiseCalibrator(
             args.noise_calibration, comm, mpi_rank,
-            args.varlss_as_additive_noise)
+            add_varlss=False)
         ncal.apply(spectra_list)
 
     if args.flux_calibration:
@@ -273,16 +273,30 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
         logging.info("True continuum.")
         qcfit.true_continuum(spectra_list, args)
 
+    valid_spectra = list(qsonic.spectrum.valid_spectra(spectra_list))
+
+    # Final noise calibration for additive var_lss.
+    if args.noise_calibration and args.varlss_as_additive_noise:
+        logging.info("Applying noise calibration (varlss only).")
+        ncal = qsonic.calibration.NoiseCalibrator(
+            args.noise_calibration, comm, mpi_rank,
+            add_varlss=True, no_eta=True)
+        ncal.apply(valid_spectra)
+
+        for spec in valid_spectra:
+            spec.set_smooth_forestivar(spec._smoothing_scale)
+            spec.set_forest_weight(qcfit.varlss_interp, qcfit.eta_interp)
+
     if args.coadd_arms == "after":
         logging.info("Coadding arms.")
-        for spec in qsonic.spectrum.valid_spectra(spectra_list):
+        for spec in valid_spectra:
             spec.coadd_arms_forest(qcfit.varlss_interp, qcfit.eta_interp)
             spec.calc_continuum_chi2()
 
     qcfit.save_contchi2_catalog(spectra_list)
 
     # Keep only valid spectra
-    spectra_list = list(qsonic.spectrum.valid_spectra(spectra_list))
+    spectra_list = valid_spectra
 
     # Final cleaning. Especially important if not coadding arms.
     for spec in spectra_list:

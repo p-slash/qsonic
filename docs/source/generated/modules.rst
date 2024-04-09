@@ -24,3 +24,4 @@ Scripts
 
    scripts.qsonic_fit
    scripts.qsonic_calib
+   scripts.qsonic_coadd_deltas
