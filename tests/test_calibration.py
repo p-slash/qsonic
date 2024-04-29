@@ -46,6 +46,13 @@ def test_calibrations(setup_data, my_setup_attributes):
     ncal.apply(spectra_list)
     npt.assert_allclose(spec.forestivar['B'], 0.5)
     npt.assert_allclose(spec.forestivar['R'], 0.5)
+
+    with pytest.raises(Exception):
+        ncal_plus.apply(spectra_list)
+
+    spec.cont_params['cont'] = {
+        arm: np.ones_like(flux) for arm, flux in spec.forestflux.items()
+    }
     ncal_plus.apply(spectra_list)
     npt.assert_allclose(spec.forestivar['B'], 0.2)
     npt.assert_allclose(spec.forestivar['R'], 0.2)
