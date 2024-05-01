@@ -75,7 +75,7 @@ def args_logic_fnc_qsonic_fit(args):
             "Mock analysis in tile format is not supported."),
         (args.tile_format and args.save_by_hpx,
             "Cannot save deltas in healpixes in tile format."),
-        (args.save_exposures and args.tile_format,
+        (args.exposures != "disable" and args.tile_format,
             "Cannot save exposures in tile format.")
     ]
 
@@ -114,7 +114,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
 
     readerFunction = qsonic.io.get_spectra_reader_function(
         args.input_dir, args.arms, args.mock_analysis, args.skip_resomat,
-        args.true_continuum, args.tile_format)
+        args.true_continuum, args.tile_format, args.exposures == "before")
 
     spectra_list = []
     # Each process reads its own list
@@ -308,7 +308,7 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
     return spectra_list
 
 
-def mpi_read_exposures(spectra_list, args, maskers, comm, mpi_rank):
+def mpi_read_exposures_after(spectra_list, args, maskers, comm, mpi_rank):
     """Creates a local catalog from spectra_list and reads exposures. Coadding
     of arms is always done with IVAR only as weights (exposures are not coadded
     ). RSNR cut is still applied. CONT is copied from the exposure coadded
@@ -446,8 +446,8 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # Continuum fitting
     spectra_list = mpi_continuum_fitting(spectra_list, args, comm, mpi_rank)
 
-    if args.save_exposures:
-        spectra_list = mpi_read_exposures(
+    if args.exposures == "after":
+        spectra_list = mpi_read_exposures_after(
             spectra_list, args, maskers, comm, mpi_rank)
 
     # Save deltas
