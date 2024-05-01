@@ -180,6 +180,34 @@ def fft_gaussian_smooth(x, sigma_pix=20, mode='edge'):
     return y
 
 
+def get_median_outlier_mask(flux, ivar, esigma=3.5):
+    """Calculates median of flux and sigma = 1.4826 * MAD. Returns a boolean
+    array to mask pixels if ``abs(f[i] - median) > esigma * max(n[i], sigma)``.
+
+    Arguments
+    ---------
+    flux: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Flux array.
+    ivar: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Inverse variance array.
+    esigma: float, default: 3.5
+        Sigma to identify outliers via MAD.
+
+    Returns
+    ---------
+    mask: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        Bool array. Mask if true.
+    """
+    w = ivar != 0
+    if not any(w):
+        return np.ones(flux.size, dtype=bool)
+
+    abs_diff = np.abs(flux - np.median(flux[w]))
+    isig_mad = min(1.0, 1.0 / (1.4826 * np.median(abs_diff[w])))
+    isig_cut = np.fmin(np.sqrt(ivar), isig_mad) / esigma
+    return abs_diff * isig_cut > 1.0
+
+
 def get_smooth_ivar(ivar, sigma_pix=20, esigma=3.5):
     """ Smoothing ``ivar`` values to reduce signal-noise coupling.
 
