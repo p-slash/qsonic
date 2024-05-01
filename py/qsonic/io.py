@@ -62,9 +62,12 @@ def add_io_parser(parser=None):
         choices=["before", "after", "disable"],
         help="Coadds arms before or after continuum fitting or not at all.")
     outgroup.add_argument(
-        "--save-exposures", action="store_true",
-        help=("Reads and saves exposures. Tile format not supported. "
-              "See :func:`qsonic.scripts.qsonic_fit.mpi_read_exposures`."))
+        "--exposures", default="disable",
+        choices=["before", "after", "disable"],
+        help=("Reads exposures before or after continuum fitting and saves. "
+              "Tile format not supported. Related function "
+              ":func:`qsonic.scripts.qsonic_fit.mpi_read_exposures_after`."
+              ))
     outgroup.add_argument(
         "--save-by-hpx", action="store_true",
         help="Save by healpix. If not, saves by MPI rank.")
@@ -73,7 +76,7 @@ def add_io_parser(parser=None):
 
 def get_spectra_reader_function(
         input_dir, arms_to_keep, mock_analysis, skip_resomat,
-        read_true_continuum, is_tile, program="dark"
+        read_true_continuum, is_tile, read_exposures, program="dark"
 ):
     """ Returns a callable object (function) that returns a list of Spectrum
     objects for a given catalog of a single healpix. Essentially, a wrapper
@@ -96,6 +99,8 @@ def get_spectra_reader_function(
         If true, reads the true continuum for mock analysis.
     is_tile: bool
         If true, reads for tile grouping
+    read_exposures: bool
+        If true, reads exposures for healpix format only.
     program: str, default: "dark"
         Always use dark program.
 
@@ -121,6 +126,13 @@ def get_spectra_reader_function(
             read_onetile_coaddfile_data,
             input_dir=input_dir, arms_to_keep=arms_to_keep,
             skip_resomat=skip_resomat
+        )
+
+    elif read_exposures:
+        return functools.partial(
+            read_onehealpix_file_data_uncoadd,
+            input_dir=input_dir, arms_to_keep=arms_to_keep,
+            skip_resomat=skip_resomat, program=program
         )
 
     else:
