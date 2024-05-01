@@ -58,7 +58,6 @@ class TestSpectrum(object):
         assert (not spec.forestreso)
 
         spec.flux['B'][10:15] = 1e2
-        spec.ivar['B'][10:15] = 0
         spec.set_forest_region(3600., 6000., 1050., 1180.)
         npt.assert_equal(spec.forestflux['B'][10:15], 0)
 
