@@ -103,7 +103,7 @@ We finally save delta files in BinaryTable format. Delta files are organized in 
 
 Additional notes
 ----------------
-**Saving exposures**: This option can be enabled by passing ``--save-exposures``. This will read exposures after continuum fitting is done. Coadding of arms (if ``--coadd_arms != disable``) is always done with only IVAR as weights (exposures are not coadded). RSNR cut is still applied. Continuum is copied from the exposure coadded spectra. The extension name in the delta files will be ``TARGETID_ARM_EXPID``.
+**Saving exposures**: This option can be enabled by passing ``--exposures after`` or ``--exposures before``. ``before`` option reads exposures before continuum fitting and treat each exposure independently. ``after`` option will read exposures after continuum fitting is done. Continuum is copied from the exposure coadded spectra. Coadding of arms (if ``--coadd_arms != disable``) is always done with only IVAR as weights (exposures are not coadded). RSNR cut is still applied. In both cases, the extension name in the delta files will be ``TARGETID_ARM_EXPID``.
 
 
 .. [Bautista2017] Bautista J. E., et al., 2017, `A&A, 603, A12 <https://ui.adsabs.harvard.edu/abs/2017A%26A...603A..12B/abstract>`_
