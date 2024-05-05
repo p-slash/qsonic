@@ -9,6 +9,7 @@ Modules
 
    calibration
    catalog
+   continuum_models
    io
    masks
    mathtools
