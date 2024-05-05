@@ -38,17 +38,18 @@ class TestMPIUtils(TestCase):
         parser = get_parser()
 
         options = ("--input-dir indir --catalog incat -o outdir "
-                   "--mock-analysis --true-continuum "
+                   "--mock-analysis --continuum-model true "
                    "--fiducial-meanflux mflux "
                    "--fiducial-varlss varlss").split(' ')
         args = qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options,
                                           args_logic_fnc_qsonic_fit)
+        assert args.continuum_model == "true"
         assert args.true_continuum
         assert args.mock_analysis
 
         with pytest.raises(SystemExit):
             options = ("--input-dir indir --catalog incat -o outdir "
-                       "--true-continuum").split(' ')
+                       "--continuum-model true").split(' ')
             qsonic.mpi_utils.mpi_parse(parser, comm, mpi_rank, options,
                                        args_logic_fnc_qsonic_fit)
 

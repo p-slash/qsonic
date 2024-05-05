@@ -20,8 +20,6 @@ from qsonic.mathtools import (
     SubsampleCov
 )
 
-from qsonic.continuum_models.picca_continuum_model import PiccaContinuumModel
-
 
 def add_picca_continuum_parser(parser=None):
     """ Adds PiccaContinuumFitter related arguments to parser. These
@@ -46,8 +44,13 @@ def add_picca_continuum_parser(parser=None):
         "--num-iterations", type=int, default=10,
         help="Number of iterations for continuum fitting.")
     cont_group.add_argument(
+        "--continuum-model", default="picca", choices=["picca", "true"],
+        help="Continuum model. *picca* fits the continuum in the forest "
+        "region. *true* is the true continuum analysis for mock analysis."
+    )
+    cont_group.add_argument(
         "--true-continuum", action="store_true",
-        help="True continuum analysis deltas if mock analysis")
+        help="Alternative argument for true continuum analysis.")
     cont_group.add_argument(
         "--fiducial-meanflux", help="Fiducial mean flux FITS file.")
     cont_group.add_argument(
@@ -194,6 +197,7 @@ class PiccaContinuumFitter():
         # We first decide how many bins will approximately satisfy
         # rest-frame wavelength spacing. Then we create wavelength edges, and
         # transform these edges into centers
+        self.args = args
         self.nbins = int(round(
             (args.forest_w2 - args.forest_w1) / args.rfdwave))
         edges, self.dwrf = np.linspace(
@@ -240,10 +244,23 @@ class PiccaContinuumFitter():
         self.normalize_stacked_flux = args.normalize_stacked_flux
         self.eta_calib_ivar = args.eta_calib_ivar
 
-        self.model = PiccaContinuumModel(
-            self.meancont_interp, self.meanflux_interp, self.varlss_interp,
-            self.eta_interp, self.cont_order, self.rfwave[0], self._denom,
-            args.minimizer)
+        if args.continuum_model == "picca":
+            from qsonic.continuum_models.picca_continuum_model import \
+                PiccaContinuumModel
+
+            self.model = PiccaContinuumModel(
+                self.meancont_interp, self.meanflux_interp, self.varlss_interp,
+                self.eta_interp, self.cont_order, self.rfwave[0], self._denom,
+                args.minimizer)
+
+        elif args.continuum_model == "true":
+            from qsonic.continuum_models.true_continuum_model import \
+                TrueContinuumModel
+
+            self.model = TrueContinuumModel(
+                self.meanflux_interp, self.varlss_interp)
+            self.cont_order = 0
+            self.niterations = 1
 
     def fit_continua(self, spectra_list):
         """ Fits all continua for a list of Spectrum objects.
@@ -547,72 +564,24 @@ class PiccaContinuumFitter():
         self._eta_calibate_ivar(spectra_list)
 
         self.save(fattr)
-        if self.varlss_fitter:
-            self.varlss_fitter.write(fattr)
+        if self.varlss_fitter is None:
+            self.fit_final_varlss(spectra_list)
+            self.save(fattr, '-fit')
+
+        self.varlss_fitter.write(fattr)
         fattr.close()
         logging.info("All continua are fit.")
 
-    def true_continuum(self, spectra_list, args):
-        """True continuum reduction. Uses fiducials for mean flux and varlss
-        interpolation. Continuum is interpolated using a cubic spline.
-
-        .. warning::
-
-            This function would work even if you did not pass any fiducial.
-
-        Arguments
-        ---------
-        spectra_list: list(Spectrum)
-            Spectrum objects.
-        args: argparse.Namespace
-            Namespace.
-        """
-        self.cont_order = 0
-
-        for spec in spectra_list:
-            spec.cont_params['method'] = 'true'
-            spec.cont_params['valid'] = True
-            spec.cont_params['x'] = np.zeros(1)
-            spec.cont_params['xcov'] = np.eye(1)
-            spec.cont_params['dof'] = spec.get_real_size()
-            spec.cont_params['cont'] = {}
-
-            w1 = spec.cont_params['true_data_w1']
-            dwave = spec.cont_params['true_data_dwave']
-            tcont = spec.cont_params['true_data']
-
-            tcont_interp = FastCubic1DInterp(w1, dwave, tcont)
-
-            for arm, wave_arm in spec.forestwave.items():
-                cont_est = tcont_interp(wave_arm)
-                cont_est *= self.meanflux_interp(wave_arm)
-                spec.cont_params['cont'][arm] = cont_est
-
-            spec.set_forest_weight(self.varlss_interp)
-            spec.calc_continuum_chi2()
-
-        self.update_mean_cont(spectra_list)
-        self._normalize_flux(spectra_list)
-
-        fname = f"{self.outdir}/attributes.fits" if self.outdir else ""
-        fattr = MPISaver(fname, self.mpi_rank)
-        self.save(fattr)
-        logging.info("True continuum applied.")
-
-        # Refit params
+    def fit_final_varlss(self, spectra_list):
         logging.info("**These DO NOT go into weights**")
         self.varlss_fitter = VarLSSFitter(
-            args.wave1, args.wave2, use_cov=args.var_use_cov,
+            self.args.wave1, self.args.wave2, use_cov=self.args.var_use_cov,
             comm=self.comm)
         self.varlss_interp = self.varlss_fitter.construct_interp(0.1)
         self.eta_interp = self.varlss_fitter.construct_interp(1.0)
 
         self.update_var_lss_eta(spectra_list)
         self.update_mean_cont(spectra_list)
-        self.save(fattr, '-fit')
-        self.varlss_fitter.write(fattr)
-        fattr.close()
-
         logging.info("**These DO NOT go into weights**")
 
     def save(self, fattr, suff=''):
