@@ -1,4 +1,5 @@
 """Picca continuum model."""
+import logging
 import numpy as np
 from iminuit import Minuit
 from scipy.optimize import minimize
@@ -237,6 +238,8 @@ class PiccaContinuumModel(BaseContinuumModel):
         spectra_list: list(Spectrum)
             Spectrum objects to fit.
         """
+        logging.info("Initializing Picca continuum fitting.")
+
         for spec in spectra_list:
             spec.cont_params['method'] = 'picca'
             spec.cont_params['x'] = np.append(
