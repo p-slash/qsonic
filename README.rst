@@ -4,6 +4,9 @@ QSOnic
 
 *Lightining-fast continuum fitting*
 
+.. image:: https://joss.theoj.org/papers/10.21105/joss.06373/status.svg
+   :target: https://doi.org/10.21105/joss.06373
+
 .. image:: https://img.shields.io/pypi/v/qsonic?color=blue
     :target: https://pypi.org/project/qsonic
 
@@ -18,7 +21,7 @@ QSOnic
     :target: https://qsonic.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
-**QSOnic** is an MPI-parallelized, highly optimized quasar continuum fitting package for DESI built on the same algorithm as `picca <https://github.com/igmhub/picca>`_, but *faster*. It also provides an efficient API to read DESI quasar spectra.
+**QSOnic** is an MPI-parallelized, highly optimized quasar continuum fitting package for DESI built on the same algorithm as `picca <https://github.com/igmhub/picca>`_, but *faster*. It also provides an efficient API to read DESI quasar spectra. If you use this software, please cite the article in the Journal of Open Source Software (JOSS).
 
 The key differences
 -------------------
