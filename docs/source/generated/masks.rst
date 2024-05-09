@@ -1,4 +1,4 @@
-qsonic.masks
+masks
 =====================
 
 .. automodule:: qsonic.masks

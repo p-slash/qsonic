@@ -1,4 +1,4 @@
-qsonic.calibration
+calibration
 =========================
 
 .. automodule:: qsonic.calibration

@@ -1,4 +1,4 @@
-qsonic.scripts.qsonic_fit
+qsonic_fit
 =======================================
 
 
