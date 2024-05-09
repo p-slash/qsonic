@@ -44,13 +44,17 @@ def add_picca_continuum_parser(parser=None):
         "--num-iterations", type=int, default=10,
         help="Number of iterations for continuum fitting.")
     cont_group.add_argument(
-        "--continuum-model", default="picca", choices=["picca", "true"],
+        "--continuum-model", choices=["picca", "true", "input"],
+        default="picca",
         help="Continuum model. *picca* fits the continuum in the forest "
-        "region. *true* is the true continuum analysis for mock analysis."
+        "region. *true* is the true continuum analysis for mock analysis. "
+        " *input* in the input continuum analysis for all."
     )
     cont_group.add_argument(
         "--true-continuum", action="store_true",
         help="Alternative argument for true continuum analysis.")
+    cont_group.add_argument(
+        "--input-continuum-dir", help="Input continuum directory.")
     cont_group.add_argument(
         "--fiducial-meanflux", help="Fiducial mean flux FITS file.")
     cont_group.add_argument(
@@ -193,34 +197,13 @@ class PiccaContinuumFitter():
             f"Failed to construct fiducial mean flux or varlss from {fname}.",
             fname, col2read)
 
-    def __init__(self, args):
-        # We first decide how many bins will approximately satisfy
-        # rest-frame wavelength spacing. Then we create wavelength edges, and
-        # transform these edges into centers
-        self.args = args
-        self.nbins = int(round(
-            (args.forest_w2 - args.forest_w1) / args.rfdwave))
-        edges, self.dwrf = np.linspace(
-            args.forest_w1, args.forest_w2, self.nbins + 1, retstep=True)
-        self.rfwave = (edges[1:] + edges[:-1]) / 2
-        self._denom = np.log(self.rfwave[-1] / self.rfwave[0])
-
-        self.meancont_interp = FastCubic1DInterp(
-            self.rfwave[0], self.dwrf, np.ones(self.nbins),
-            ep=np.zeros(self.nbins))
-
-        self.comm = MPI.COMM_WORLD
-        self.mpi_rank = self.comm.Get_rank()
-
+    def _set_meanflux_varlss_interps(self, args):
         if args.fiducial_meanflux:
             self.meanflux_interp = self._get_fiducial_interp(
                 args.fiducial_meanflux, 'MEANFLUX')
         else:
             self.meanflux_interp = FastLinear1DInterp(
                 args.wave1, args.wave2 - args.wave1, np.ones(3))
-
-        self.flux_stacker = FluxStacker(
-            args.wave1, args.wave2, 8., self.rfwave, self.dwrf, comm=self.comm)
 
         if args.fiducial_varlss:
             self.varlss_fitter = None
@@ -232,18 +215,7 @@ class PiccaContinuumFitter():
                 comm=self.comm)
             self.varlss_interp = self.varlss_fitter.construct_interp(0.1)
 
-        self.eta_interp = FastCubic1DInterp(
-            self.varlss_interp.xp0, self.varlss_interp.dxp,
-            np.ones_like(self.varlss_interp.fp),
-            ep=np.zeros_like(self.varlss_interp.fp))
-
-        self.niterations = args.num_iterations
-        self.cont_order = args.cont_order
-        self.outdir = args.outdir
-        self.fit_eta = args.var_fit_eta
-        self.normalize_stacked_flux = args.normalize_stacked_flux
-        self.eta_calib_ivar = args.eta_calib_ivar
-
+    def _set_continuum_model(self, args):
         if args.continuum_model == "picca":
             from qsonic.continuum_models.picca_continuum_model import \
                 PiccaContinuumModel
@@ -261,6 +233,54 @@ class PiccaContinuumFitter():
                 self.meanflux_interp, self.varlss_interp)
             self.cont_order = 0
             self.niterations = 1
+
+        elif args.continuum_model == "input":
+            from qsonic.continuum_models.input_continuum_model import \
+                InputContinuumModel
+
+            self.model = InputContinuumModel(
+                args.input_continuum_dir, self.meanflux_interp,
+                self.varlss_interp, self.eta_interp)
+            self.cont_order = 0
+            self.niterations = 1
+
+    def __init__(self, args):
+        self.comm = MPI.COMM_WORLD
+        self.mpi_rank = self.comm.Get_rank()
+
+        self.args = args
+        self.niterations = args.num_iterations
+        self.cont_order = args.cont_order
+        self.outdir = args.outdir
+        self.fit_eta = args.var_fit_eta
+        self.normalize_stacked_flux = args.normalize_stacked_flux
+        self.eta_calib_ivar = args.eta_calib_ivar
+
+        # We first decide how many bins will approximately satisfy
+        # rest-frame wavelength spacing. Then we create wavelength edges, and
+        # transform these edges into centers
+        self.nbins = int(round(
+            (args.forest_w2 - args.forest_w1) / args.rfdwave))
+        edges, self.dwrf = np.linspace(
+            args.forest_w1, args.forest_w2, self.nbins + 1, retstep=True)
+        self.rfwave = (edges[1:] + edges[:-1]) / 2
+        self._denom = np.log(self.rfwave[-1] / self.rfwave[0])
+
+        self.meancont_interp = FastCubic1DInterp(
+            self.rfwave[0], self.dwrf, np.ones(self.nbins),
+            ep=np.zeros(self.nbins))
+
+        self.flux_stacker = FluxStacker(
+            args.wave1, args.wave2, 8., self.rfwave, self.dwrf, comm=self.comm)
+
+        self._set_meanflux_varlss_interps(args)
+
+        self.eta_interp = FastCubic1DInterp(
+            self.varlss_interp.xp0, self.varlss_interp.dxp,
+            np.ones_like(self.varlss_interp.fp),
+            ep=np.zeros_like(self.varlss_interp.fp))
+
+        self._set_continuum_model(args)
 
     def fit_continua(self, spectra_list):
         """ Fits all continua for a list of Spectrum objects.
