@@ -1,4 +1,3 @@
-"""True continuum for mock analysis."""
 import logging
 import numpy as np
 
@@ -7,8 +6,9 @@ from qsonic.continuum_models.base_continuum_model import BaseContinuumModel
 
 
 class TrueContinuumModel(BaseContinuumModel):
-    """True continuum reduction. Uses fiducials for mean flux and varlss
-    interpolation. Continuum is interpolated using a cubic spline.
+    """True continuum model class for mock analysis. Uses fiducials for mean
+    flux and varlss interpolation. Continuum is interpolated using a cubic
+    spline.
 
     Parameters
     ----------
