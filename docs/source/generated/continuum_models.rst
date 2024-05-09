@@ -1,10 +1,9 @@
-qsonic.continuum_models
+continuum_models
 =======================
 
 .. automodule:: qsonic.continuum_models.base_continuum_model
    :members:
    :undoc-members:
-   :show-inheritance:
 
 
 .. automodule:: qsonic.continuum_models.picca_continuum_model
