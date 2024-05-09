@@ -1,4 +1,3 @@
-"""Picca continuum model."""
 import logging
 import numpy as np
 from iminuit import Minuit
