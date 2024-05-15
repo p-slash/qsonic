@@ -1,6 +1,7 @@
 """Mathematical utility objects and functions."""
 import numpy as np
 from numba import njit
+from scipy.ndimage import median_filter
 
 from qsonic import QsonicException
 
@@ -180,9 +181,10 @@ def fft_gaussian_smooth(x, sigma_pix=20, mode='edge'):
     return y
 
 
-def get_median_outlier_mask(flux, ivar, esigma=3.5):
-    """Calculates median of flux and sigma = 1.4826 * MAD. Returns a boolean
-    array to mask pixels if ``abs(f[i] - median) > esigma * max(n[i], sigma)``.
+def get_median_outlier_mask(flux, ivar, esigma=3.5, nwindow=11):
+    """Calculates median[i] of flux and sigma = 1.4826 * MAD[i] based on moving
+    median filter of size ``nwindow``. Returns a boolean array to mask pixels
+    if ``abs(f[i] - median[i]) > esigma * max(n[i], sigma[i])``.
 
     Arguments
     ---------
@@ -192,6 +194,8 @@ def get_median_outlier_mask(flux, ivar, esigma=3.5):
         Inverse variance array.
     esigma: float, default: 3.5
         Sigma to identify outliers via MAD.
+    nwindow: int, default: 11
+        Window size of the moving median filter.
 
     Returns
     ---------
@@ -199,13 +203,18 @@ def get_median_outlier_mask(flux, ivar, esigma=3.5):
         Bool array. Mask if true.
     """
     w = ivar != 0
-    if not any(w):
-        return np.ones(flux.size, dtype=bool)
+    mask = np.zeros(flux.size, dtype=bool)
+    mask[~w] = True
 
-    abs_diff = np.abs(flux - np.median(flux[w]))
-    isig_mad = min(1.0, 1.0 / (1.4826 * np.median(abs_diff[w])))
-    isig_cut = np.fmin(np.sqrt(ivar), isig_mad) / esigma
-    return abs_diff * isig_cut > 1.0
+    if not any(w):
+        return mask
+
+    abs_diff = np.abs(flux[w] - median_filter(flux[w], nwindow))
+    isig_mad = np.fmin(
+        1.0, 1.0 / (1.4826 * median_filter(abs_diff, nwindow) + 1e-12))
+    isig_cut = np.fmin(np.sqrt(ivar[w]), isig_mad) / esigma
+    mask[w] = abs_diff * isig_cut > 1.0
+    return mask
 
 
 def get_smooth_ivar(ivar, sigma_pix=20, esigma=3.5):
