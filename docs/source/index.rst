@@ -26,8 +26,9 @@ See :doc:`/generated/modules` for details.
 + `masks.py` provides maskers for sky, BAL and DLA. Can be imported without MPI. Sky mask is a simple text file, where colums are  *type* (unused), *wave_min* mininum wavelength, *wave_max* maximum wavelength, *frame* rest-frame (RF) or observed (OBS). BAL mask assumes related ``VMIN_CIV_450, VMAX_CIV_450, VMIN_CIV_2000, VMAX_CIV_2000`` values are already present in `catalog`. DLA masking takes both Lya and Lyb profiles into account, masks ``F<0.8`` and corrects for the wings.
 + `mathtools.py` hosts some functions and classes that are purely numerical. Can be imported without MPI.
 + `mpi_utils.py` hosts MPI related functions such as logging. Can be imported without MPI.
-+ `picca_continuum.py` fits each quasar continuum with a global mean as done in picca. Needs MPI.
++ `picca_continuum.py` fits each quasar continuum and calculates global statistics. Needs MPI.
 + `spectrum.py` has ``Spectrum`` class that stores each quasar spectrum. Can be imported without MPI.
++ `continuum_model` has the supported continuum models including fitting in the forest region as ``PiccaContinuumModel``, and input continuum from another method as ``InputContinuumModel``.
 
 .. toctree::
    :maxdepth: 2
