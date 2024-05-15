@@ -284,7 +284,7 @@ class Spectrum():
 
     def set_forest_region(self, w1, w2, lya1, lya2):
         """ Sets slices for the forest region. Masks outliers in each arm
-        separately based on median statistics
+        separately based on moving median statistics
         (see :func:`qsonic.mathtools.get_median_outlier_mask`). Also calculates
         the mean SNR in the forest and an initial guess for the continuum
         amplitude.

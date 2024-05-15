@@ -46,6 +46,28 @@ class TestMathtools(object):
         xarr_sm = qsonic.mathtools.fft_gaussian_smooth(xarr)
         npt.assert_allclose(xarr, xarr_sm)
 
+    def test_get_median_outlier_mask(self):
+        rng = np.random.default_rng(10)
+        size = 100
+        sigmas = 1 + rng.poisson(5, size=size).astype(float)
+        ivar = sigmas**-2
+        flux = rng.normal(0, sigmas)
+
+        w = qsonic.mathtools.get_median_outlier_mask(flux, ivar)
+        assert not any(w)
+
+        flux[20] = 1e3
+        w = qsonic.mathtools.get_median_outlier_mask(flux, ivar)
+        assert w[20]
+        assert not any(w[:20]) and not any(w[21:])
+
+        ivar[20:40] = 0
+
+        w = qsonic.mathtools.get_median_outlier_mask(flux, ivar)
+        assert all(w[20:40])
+        assert not any(w[:20])
+        assert not any(w[40:])
+
     def test_get_smooth_ivar(self):
         ivar = np.ones(2**10)
         idces = np.array([16, 17, 18, 234, 235, 512, 667, 898, 910, 956])
