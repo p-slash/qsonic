@@ -71,7 +71,7 @@ def args_logic_fnc_qsonic_fit(args):
         (args.true_continuum and not args.fiducial_varlss,
             "True continuum analysis requires fiducial var_lss."),
         (args.true_continuum and args.input_continuum_dir,
-            "Both true continuum and input continuum cannot be set.")
+            "Both true continuum and input continuum cannot be set."),
         (args.wave2 <= args.wave1,
             "wave2 must be greater than wave1."),
         (args.forest_w2 <= args.forest_w1,
