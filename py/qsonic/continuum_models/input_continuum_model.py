@@ -11,16 +11,18 @@ from qsonic.continuum_models.base_continuum_model import BaseContinuumModel
 
 
 def _find_append_continuum(
-        spec, wave_rf_1, dwave_rf, common_targetids, continua
+        specs, wave_rf_1, dwave_rf, common_targetids, continua
 ):
-    idx = np.nonzero(common_targetids == spec.targetid)[0]
-    if idx.size == 0:
-        return
+    for spec in specs:
+        idx = np.nonzero(common_targetids == spec.targetid)[0]
+        if idx.size == 0:
+            return
 
-    idx = idx[0]
-    spec.cont_params['input_w1'] = wave_rf_1
-    spec.cont_params['input_dwave'] = dwave_rf
-    spec.cont_params['input_data'] = continua[idx]
+        idx = idx[0]
+        spec.cont_params['valid'] = True
+        spec.cont_params['input_w1'] = wave_rf_1
+        spec.cont_params['input_dwave'] = dwave_rf
+        spec.cont_params['input_data'] = continua[idx]
 
 
 class InputContinuumModel(BaseContinuumModel):
@@ -101,14 +103,13 @@ class InputContinuumModel(BaseContinuumModel):
             If the file cannot be read. In this case, all objects are assumed
             to have invalid continuum.
         """
-        fname = \
-            f"{self.input_dir}/input-continuum-{self.nside}-{self.pixnum}.fits"
+        fname = f"{self.input_dir}/input-continuum-{self.nside}-{pixnum}.fits"
 
         try:
             with fitsio.FITS(fname) as fitsfile:
                 fbrmap = fitsfile['FIBERMAP'].read(columns='TARGETID')
                 hdr = fitsfile['CONTINUA'].read_header()
-                continua = fitsfile['CONTINUA'].read()
+                continua = fitsfile['CONTINUA'].read().astype(np.float64)
         except Exception as e:
             warnings.warn(
                 f"InputContinuumModel cannot read file {fname}. "
@@ -122,7 +123,7 @@ class InputContinuumModel(BaseContinuumModel):
 
         common_targetids, idx_fbr, _ = np.intersect1d(
             fbrmap, targetids, return_indices=True)
-        hdr['WAVE1'], hdr['DWAVE'], common_targetids, continua[idx_fbr]
+        return hdr['WAVE1'], hdr['DWAVE'], common_targetids, continua[idx_fbr]
 
     def _read_continua(self, spectra_list):
         """Reads and sets input continuum for all elements in ``spectra_list``.
@@ -132,6 +133,7 @@ class InputContinuumModel(BaseContinuumModel):
         If found, :attr:`qsonic.spectrum.Spectrum.cont_params` dictionary gains
         the following::
 
+            cont_params['valid'] = True
             cont_params['input_w1'] (float): First rest-frame wavelength
             cont_params['input_dwave'] (float): Rest-frame wavelength spacing
             cont_params['input_data'] (ndarray): Input continuum
@@ -150,12 +152,10 @@ class InputContinuumModel(BaseContinuumModel):
         idx_sort = local_catalog.argsort(order=['HPXPIXEL', 'TARGETID'])
         spectra_list = np.array(spectra_list)[idx_sort]
         local_catalog = local_catalog[idx_sort]
-        del idx_sort
 
         unique_pix, s = np.unique(local_catalog['HPXPIXEL'], return_index=True)
         hpx_split_catalog = np.split(local_catalog, s[1:])
         hpx_split_spectra_list = np.split(spectra_list, s[1:])
-        del s, unique_pix
 
         for cat, specs in zip(hpx_split_catalog, hpx_split_spectra_list):
             pixnum = cat['HPXPIXEL'][0]
@@ -166,9 +166,8 @@ class InputContinuumModel(BaseContinuumModel):
             if wave_rf_1 == 0:
                 continue
 
-            for spec in specs:
-                _find_append_continuum(
-                    spec, wave_rf_1, dwave_rf, common_targetids, continua)
+            _find_append_continuum(
+                specs, wave_rf_1, dwave_rf, common_targetids, continua)
 
     def fit_continuum(self, spec):
         """Input continuum reduction. Uses fiducials for mean flux and varlss
