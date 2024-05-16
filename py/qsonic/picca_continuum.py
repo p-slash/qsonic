@@ -5,8 +5,7 @@ import logging
 import numpy as np
 from numba import njit
 import fitsio
-from iminuit import Minuit
-from scipy.optimize import minimize, curve_fit
+from scipy.optimize import curve_fit
 from scipy.interpolate import UnivariateSpline, CubicSpline
 from scipy.special import legendre
 
@@ -16,7 +15,7 @@ from qsonic import QsonicException
 from qsonic.spectrum import valid_spectra
 from qsonic.mpi_utils import mpi_fnc_bcast, MPISaver
 from qsonic.mathtools import (
-    mypoly1d, block_covariance_of_square,
+    block_covariance_of_square,
     FastLinear1DInterp, FastCubic1DInterp,
     SubsampleCov
 )
@@ -45,8 +44,17 @@ def add_picca_continuum_parser(parser=None):
         "--num-iterations", type=int, default=10,
         help="Number of iterations for continuum fitting.")
     cont_group.add_argument(
+        "--continuum-model", choices=["picca", "true", "input"],
+        default="picca",
+        help="Continuum model. *picca* fits the continuum in the forest "
+        "region. *true* is the true continuum analysis for mock analysis. "
+        " *input* in the input continuum analysis for all."
+    )
+    cont_group.add_argument(
         "--true-continuum", action="store_true",
-        help="True continuum analysis deltas if mock analysis")
+        help="Alternative argument for true continuum analysis.")
+    cont_group.add_argument(
+        "--input-continuum-dir", help="Input continuum directory.")
     cont_group.add_argument(
         "--fiducial-meanflux", help="Fiducial mean flux FITS file.")
     cont_group.add_argument(
@@ -108,8 +116,6 @@ class PiccaContinuumFitter():
         Denominator for the slope term in the continuum model.
     meancont_interp: FastCubic1DInterp
         Fast cubic spline object for the mean continuum.
-    minimizer: function
-        Function that points to one of the minimizer options.
     comm: MPI.COMM_WORLD
         MPI comm object to reduce, broadcast etc.
     mpi_rank: int
@@ -136,6 +142,8 @@ class PiccaContinuumFitter():
         Normalizes observed flux to be 1 if True.
     eta_calib_ivar: bool
         Calibrate IVAR with eta estimates.
+    model: Derived(BaseContinuumModel)
+        Continuum model to use
     """
 
     def _get_fiducial_interp(self, fname, col2read):
@@ -189,7 +197,65 @@ class PiccaContinuumFitter():
             f"Failed to construct fiducial mean flux or varlss from {fname}.",
             fname, col2read)
 
+    def _set_meanflux_varlss_interps(self, args):
+        if args.fiducial_meanflux:
+            self.meanflux_interp = self._get_fiducial_interp(
+                args.fiducial_meanflux, 'MEANFLUX')
+        else:
+            self.meanflux_interp = FastLinear1DInterp(
+                args.wave1, args.wave2 - args.wave1, np.ones(3))
+
+        if args.fiducial_varlss:
+            self.varlss_fitter = None
+            self.varlss_interp = self._get_fiducial_interp(
+                args.fiducial_varlss, 'VAR_LSS')
+        else:
+            self.varlss_fitter = VarLSSFitter(
+                args.wave1, args.wave2, use_cov=args.var_use_cov,
+                comm=self.comm)
+            self.varlss_interp = self.varlss_fitter.construct_interp(0.1)
+
+    def _set_continuum_model(self, args):
+        if args.continuum_model == "picca":
+            from qsonic.continuum_models.picca_continuum_model import \
+                PiccaContinuumModel
+
+            self.model = PiccaContinuumModel(
+                self.meancont_interp, self.meanflux_interp, self.varlss_interp,
+                self.eta_interp, self.cont_order, self.rfwave[0], self._denom,
+                args.minimizer)
+
+        elif args.continuum_model == "true":
+            from qsonic.continuum_models.true_continuum_model import \
+                TrueContinuumModel
+
+            self.model = TrueContinuumModel(
+                self.meanflux_interp, self.varlss_interp)
+            self.cont_order = 0
+            self.niterations = 1
+
+        elif args.continuum_model == "input":
+            from qsonic.continuum_models.input_continuum_model import \
+                InputContinuumModel
+
+            self.model = InputContinuumModel(
+                args.input_continuum_dir, self.meanflux_interp,
+                self.varlss_interp, self.eta_interp)
+            self.cont_order = 0
+            self.niterations = 1
+
     def __init__(self, args):
+        self.comm = MPI.COMM_WORLD
+        self.mpi_rank = self.comm.Get_rank()
+
+        self.args = args
+        self.niterations = args.num_iterations
+        self.cont_order = args.cont_order
+        self.outdir = args.outdir
+        self.fit_eta = args.var_fit_eta
+        self.normalize_stacked_flux = args.normalize_stacked_flux
+        self.eta_calib_ivar = args.eta_calib_ivar
+
         # We first decide how many bins will approximately satisfy
         # rest-frame wavelength spacing. Then we create wavelength edges, and
         # transform these edges into centers
@@ -204,219 +270,17 @@ class PiccaContinuumFitter():
             self.rfwave[0], self.dwrf, np.ones(self.nbins),
             ep=np.zeros(self.nbins))
 
-        if args.minimizer == "iminuit":
-            self.minimizer = self._iminuit_minimizer
-        elif args.minimizer == "l_bfgs_b":
-            self.minimizer = self._scipy_l_bfgs_b_minimizer
-        else:
-            raise QsonicException(
-                "Undefined minimizer. Developer forgot to implement.")
-
-        self.comm = MPI.COMM_WORLD
-        self.mpi_rank = self.comm.Get_rank()
-
-        if args.fiducial_meanflux:
-            self.meanflux_interp = self._get_fiducial_interp(
-                args.fiducial_meanflux, 'MEANFLUX')
-        else:
-            self.meanflux_interp = FastLinear1DInterp(
-                args.wave1, args.wave2 - args.wave1, np.ones(3))
-
         self.flux_stacker = FluxStacker(
             args.wave1, args.wave2, 8., self.rfwave, self.dwrf, comm=self.comm)
 
-        if args.fiducial_varlss:
-            self.varlss_fitter = None
-            self.varlss_interp = self._get_fiducial_interp(
-                args.fiducial_varlss, 'VAR_LSS')
-        else:
-            self.varlss_fitter = VarLSSFitter(
-                args.wave1, args.wave2, use_cov=args.var_use_cov,
-                comm=self.comm)
-            self.varlss_interp = self.varlss_fitter.construct_interp(0.1)
+        self._set_meanflux_varlss_interps(args)
 
         self.eta_interp = FastCubic1DInterp(
             self.varlss_interp.xp0, self.varlss_interp.dxp,
             np.ones_like(self.varlss_interp.fp),
             ep=np.zeros_like(self.varlss_interp.fp))
 
-        self.niterations = args.num_iterations
-        self.cont_order = args.cont_order
-        self.outdir = args.outdir
-        self.fit_eta = args.var_fit_eta
-        self.normalize_stacked_flux = args.normalize_stacked_flux
-        self.eta_calib_ivar = args.eta_calib_ivar
-
-    def _continuum_costfn(self, x, wave, flux, ivar_sm, z_qso):
-        """ Cost function to minimize for each quasar.
-
-        This is a modified chi2 where amplitude is also part of minimization.
-        Cost of each arm is simply added to the total cost.
-
-        Arguments
-        ---------
-        x: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Polynomial coefficients for quasar diversity.
-        wave: dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-            Observed-frame wavelengths.
-        flux: dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-            Flux.
-        ivar_sm: dict(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
-            Smooth inverse variance.
-        z_qso: float
-            Quasar redshift.
-
-        Returns
-        ---------
-        cost: float
-            Cost (modified chi2) for a given ``x``.
-        """
-        cost = 0
-
-        for arm, wave_arm in wave.items():
-            cont_est = self.get_continuum_model(x, wave_arm / (1 + z_qso))
-            # no_neg = np.sum(cont_est<0)
-            # penalty = wave_arm.size * no_neg**2
-
-            cont_est *= self.meanflux_interp(wave_arm)
-
-            var_lss = self.varlss_interp(wave_arm) * cont_est**2
-            eta = self.eta_interp(wave_arm)
-            weight = ivar_sm[arm] / (eta + ivar_sm[arm] * var_lss)
-            w = weight > 0
-
-            cost += np.dot(
-                weight, (flux[arm] - cont_est)**2
-            ) - np.log(weight[w]).sum()  # + penalty
-
-        return cost
-
-    def get_continuum_model(self, x, wave_rf_arm):
-        """ Returns interpolated continuum model.
-
-        Arguments
-        ---------
-        x: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Polynomial coefficients for quasar diversity.
-        wave_rf_arm: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Rest-frame wavelength per arm.
-
-        Returns
-        ---------
-        cont: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-            Continuum at `wave_rf_arm` values given `x`.
-        """
-        slope = np.log(wave_rf_arm / self.rfwave[0]) / self._denom
-
-        cont = self.meancont_interp(wave_rf_arm) * mypoly1d(x, 2 * slope - 1)
-        # Multiply with resolution
-        # Edges are difficult though
-
-        return cont
-
-    def _iminuit_minimizer(self, spec, a0):
-        def _cost(x):
-            return self._continuum_costfn(
-                x, spec.forestwave, spec.forestflux, spec.forestivar_sm,
-                spec.z_qso)
-
-        x0 = np.zeros_like(spec.cont_params['x'])
-        x0[0] = a0
-        mini = Minuit(_cost, x0)
-        mini.errordef = Minuit.LEAST_SQUARES
-        mini.migrad()
-
-        result = {}
-
-        result['valid'] = mini.valid
-        result['x'] = np.array(mini.values)
-        result['xcov'] = np.array(mini.covariance)
-
-        return result
-
-    def _scipy_l_bfgs_b_minimizer(self, spec, a0):
-        x0 = np.zeros_like(spec.cont_params['x'])
-        x0[0] = a0
-        mini = minimize(
-            self._continuum_costfn,
-            x0,
-            args=(spec.forestwave,
-                  spec.forestflux,
-                  spec.forestivar_sm,
-                  spec.z_qso),
-            method='L-BFGS-B',
-            bounds=None,
-            jac=None
-        )
-
-        result = {}
-
-        result['valid'] = mini.success
-        result['x'] = mini.x
-        result['xcov'] = mini.hess_inv.todense()
-
-        return result
-
-    def fit_continuum(self, spec):
-        """ Fits the continuum for a single Spectrum.
-
-        This function uses
-        :attr:`forestivar_sm <qsonic.spectrum.Spectrum.forestivar_sm>` in
-        inverse variance, which must be smoothed beforehand.
-        It also modifies
-        :attr:`cont_params <qsonic.spectrum.Spectrum.cont_params>`
-        dictionary's ``valid, cont, x, xcov, chi2, dof`` keys.
-        If the best-fitting continuum is **negative at any point**, the fit is
-        **invalidated**. Chi2 is set separately without using the
-        :meth:`cost function <._continuum_costfn>`.
-        ``x`` key is the best-fitting parameter, and ``xcov`` is their inverse
-        Hessian ``hess_inv`` given by
-        :external+scipy:func:`scipy.optimize.minimize` using 'L-BFGS-B' method.
-
-        Arguments
-        ---------
-        spec: Spectrum
-            Spectrum object to fit.
-        """
-        # We can precalculate meanflux and varlss here,
-        # and store them in respective keys to spec.cont_params
-
-        def get_a0():
-            a0 = 0
-            n0 = 1e-6
-            for arm, ivar_arm in spec.forestivar_sm.items():
-                a0 += np.dot(spec.forestflux[arm], ivar_arm)
-                n0 += np.sum(ivar_arm)
-
-            return a0 / n0
-
-        result = self.minimizer(spec, get_a0())
-        spec.cont_params['valid'] = result['valid']
-
-        if spec.cont_params['valid']:
-            spec.cont_params['cont'] = {}
-            for arm, wave_arm in spec.forestwave.items():
-                cont_est = self.get_continuum_model(
-                    result['x'], wave_arm / (1 + spec.z_qso))
-
-                if any(cont_est < 0):
-                    spec.cont_params['valid'] = False
-                    break
-
-                cont_est *= self.meanflux_interp(wave_arm)
-                # cont_est *= self.flux_stacker(wave_arm)
-                spec.cont_params['cont'][arm] = cont_est
-
-        spec.set_forest_weight(self.varlss_interp, self.eta_interp)
-        # We can further eliminate spectra based chi2
-        spec.calc_continuum_chi2()
-
-        if spec.cont_params['valid']:
-            spec.cont_params['x'] = result['x']
-            spec.cont_params['xcov'] = result['xcov']
-        else:
-            spec.cont_params['cont'] = None
-            spec.cont_params['chi2'] = -1
+        self._set_continuum_model(args)
 
     def fit_continua(self, spectra_list):
         """ Fits all continua for a list of Spectrum objects.
@@ -691,13 +555,7 @@ class PiccaContinuumFitter():
         """
         has_converged = False
 
-        for spec in spectra_list:
-            spec.cont_params['method'] = 'picca'
-            spec.cont_params['x'] = np.append(
-                spec.cont_params['x'][0], np.zeros(self.cont_order))
-            spec.cont_params['xcov'] = np.eye(self.cont_order + 1)
-            spec.cont_params['dof'] = \
-                spec.get_real_size() - self.cont_order - 1
+        self.model.init_spectra(spectra_list)
 
         fname = f"{self.outdir}/attributes.fits" if self.outdir else ""
         fattr = MPISaver(fname, self.mpi_rank)
@@ -726,72 +584,24 @@ class PiccaContinuumFitter():
         self._eta_calibate_ivar(spectra_list)
 
         self.save(fattr)
-        if self.varlss_fitter:
-            self.varlss_fitter.write(fattr)
+        if self.varlss_fitter is None:
+            self.fit_final_varlss(spectra_list)
+            self.save(fattr, '-fit')
+
+        self.varlss_fitter.write(fattr)
         fattr.close()
         logging.info("All continua are fit.")
 
-    def true_continuum(self, spectra_list, args):
-        """True continuum reduction. Uses fiducials for mean flux and varlss
-        interpolation. Continuum is interpolated using a cubic spline.
-
-        .. warning::
-
-            This function would work even if you did not pass any fiducial.
-
-        Arguments
-        ---------
-        spectra_list: list(Spectrum)
-            Spectrum objects.
-        args: argparse.Namespace
-            Namespace.
-        """
-        self.cont_order = 0
-
-        for spec in spectra_list:
-            spec.cont_params['method'] = 'true'
-            spec.cont_params['valid'] = True
-            spec.cont_params['x'] = np.zeros(1)
-            spec.cont_params['xcov'] = np.eye(1)
-            spec.cont_params['dof'] = spec.get_real_size()
-            spec.cont_params['cont'] = {}
-
-            w1 = spec.cont_params['true_data_w1']
-            dwave = spec.cont_params['true_data_dwave']
-            tcont = spec.cont_params['true_data']
-
-            tcont_interp = FastCubic1DInterp(w1, dwave, tcont)
-
-            for arm, wave_arm in spec.forestwave.items():
-                cont_est = tcont_interp(wave_arm)
-                cont_est *= self.meanflux_interp(wave_arm)
-                spec.cont_params['cont'][arm] = cont_est
-
-            spec.set_forest_weight(self.varlss_interp)
-            spec.calc_continuum_chi2()
-
-        self.update_mean_cont(spectra_list)
-        self._normalize_flux(spectra_list)
-
-        fname = f"{self.outdir}/attributes.fits" if self.outdir else ""
-        fattr = MPISaver(fname, self.mpi_rank)
-        self.save(fattr)
-        logging.info("True continuum applied.")
-
-        # Refit params
+    def fit_final_varlss(self, spectra_list):
         logging.info("**These DO NOT go into weights**")
         self.varlss_fitter = VarLSSFitter(
-            args.wave1, args.wave2, use_cov=args.var_use_cov,
+            self.args.wave1, self.args.wave2, use_cov=self.args.var_use_cov,
             comm=self.comm)
         self.varlss_interp = self.varlss_fitter.construct_interp(0.1)
         self.eta_interp = self.varlss_fitter.construct_interp(1.0)
 
         self.update_var_lss_eta(spectra_list)
         self.update_mean_cont(spectra_list)
-        self.save(fattr, '-fit')
-        self.varlss_fitter.write(fattr)
-        fattr.close()
-
         logging.info("**These DO NOT go into weights**")
 
     def save(self, fattr, suff=''):

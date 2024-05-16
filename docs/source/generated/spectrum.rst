@@ -1,4 +1,4 @@
-qsonic.spectrum
+spectrum
 ========================
 
 .. automodule:: qsonic.spectrum

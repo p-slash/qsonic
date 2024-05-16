@@ -6,10 +6,13 @@ import fitsio
 import numpy as np
 import numpy.testing as npt
 
-from qsonic.mpi_utils import mpi_parse
 import qsonic.spectrum
+from qsonic.mpi_utils import mpi_parse
+from qsonic.mathtools import FastLinear1DInterp, FastCubic1DInterp
 from qsonic.picca_continuum import (
     PiccaContinuumFitter, VarLSSFitter, add_picca_continuum_parser)
+
+from qsonic.continuum_models.picca_continuum_model import PiccaContinuumModel
 
 
 @pytest.fixture
@@ -51,14 +54,20 @@ def test_add_parser(setup_parser):
     npt.assert_almost_equal(args.rfdwave, 1.2)
 
 
+def get_mpi():
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    mpi_rank = comm.Get_rank()
+    mpi_size = comm.Get_size()
+    assert mpi_size > 0
+
+    return comm, mpi_rank
+
+
 @pytest.mark.mpi
-class TestPiccaContinuum(object):
+class TestPiccaContinuumFitter(object):
     def test_init(self, setup_parser, get_fiducials):
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-        mpi_rank = comm.Get_rank()
-        mpi_size = comm.Get_size()
-        assert mpi_size > 0
+        comm, mpi_rank = get_mpi()
 
         parser = setup_parser
         args = mpi_parse(parser, comm, mpi_rank, [])
@@ -90,60 +99,8 @@ class TestPiccaContinuum(object):
         npt.assert_allclose(qcfit.varlss_interp.fp, 3)
         assert (qcfit.varlss_fitter is None)
 
-    def test_get_continuum_model(self, setup_parser):
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-        mpi_rank = comm.Get_rank()
-        mpi_size = comm.Get_size()
-        assert mpi_size > 0
-
-        parser = setup_parser
-        args = mpi_parse(parser, comm, mpi_rank, [])
-        qcfit = PiccaContinuumFitter(args)
-
-        # np.log(wave_rf_arm / self.rfwave[0]) / self._denom
-        slope = np.linspace(0, 1, 200)
-        wave_rf_arm = qcfit.rfwave[0] * np.exp(qcfit._denom * slope)
-        expected_cont = np.linspace(0, 2, 200)
-
-        x = np.array([1., 1.])
-        cont_est = qcfit.get_continuum_model(x, wave_rf_arm)
-        npt.assert_allclose(cont_est, expected_cont)
-
-        x = np.array([1., 1., 0])
-        cont_est = qcfit.get_continuum_model(x, wave_rf_arm)
-        npt.assert_allclose(cont_est, expected_cont)
-
-    def test_fit_continuum(self, setup_parser, setup_data):
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-        mpi_rank = comm.Get_rank()
-        mpi_size = comm.Get_size()
-        assert mpi_size > 0
-
-        parser = setup_parser
-        args = mpi_parse(parser, comm, mpi_rank, [])
-        qcfit = PiccaContinuumFitter(args)
-        qcfit.varlss_interp.fp *= 0
-        npt.assert_allclose(qcfit.meanflux_interp.fp, 1)
-
-        cat_by_survey, npix, data = setup_data(1)
-        data['ivar']['B'] *= 10
-        data['ivar']['R'] *= 10
-        spec = qsonic.spectrum.generate_spectra_list_from_data(
-            cat_by_survey, data)[0]
-        spec.set_forest_region(3600., 6000., args.forest_w1, args.forest_w2)
-
-        qcfit.fit_continuum(spec)
-        assert (spec.cont_params['valid'])
-        npt.assert_almost_equal(spec.cont_params['x'], [2.1, 0])
-
     def test_project_normalize_meancont(self, setup_parser):
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-        mpi_rank = comm.Get_rank()
-        mpi_size = comm.Get_size()
-        assert mpi_size > 0
+        comm, mpi_rank = get_mpi()
 
         parser = setup_parser
         args = mpi_parse(parser, comm, mpi_rank, ["--cont-order", "3"])
@@ -161,11 +118,7 @@ class TestPiccaContinuum(object):
         npt.assert_almost_equal(new_meancont.mean(), 1, decimal=4)
 
     def test_update_mean_cont(self, setup_parser, setup_data):
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-        mpi_rank = comm.Get_rank()
-        mpi_size = comm.Get_size()
-        assert mpi_size > 0
+        comm, mpi_rank = get_mpi()
 
         parser = setup_parser
         # There are empty bins in the rest-frame, they should be extrapolated
@@ -188,6 +141,59 @@ class TestPiccaContinuum(object):
         qcfit.update_mean_cont(spectra_list)
         npt.assert_allclose(qcfit.meancont_interp.fp, 1, rtol=1e-3)
         npt.assert_almost_equal(qcfit.meancont_interp.fp.mean(), 1)
+
+
+class TestPiccaContinuumModel(object):
+    @staticmethod
+    def get_qcfit():
+        rfwave, dwrf = np.linspace(1050, 1180, 325, retstep=True)
+        denom = np.log(rfwave[-1] / rfwave[0])
+        meancont_interp = FastCubic1DInterp(
+            rfwave[0], dwrf, np.ones(rfwave.size))
+        meanflux_interp = FastLinear1DInterp(
+            3000, 3000, np.ones(3))
+        varlss_interp = FastLinear1DInterp(
+            3000, 3000, 0.1 * np.ones(3))
+
+        eta_interp = FastCubic1DInterp(
+            varlss_interp.xp0, varlss_interp.dxp,
+            np.ones_like(varlss_interp.fp),
+            ep=np.zeros_like(varlss_interp.fp))
+
+        return PiccaContinuumModel(
+            meancont_interp, meanflux_interp, varlss_interp,
+            eta_interp, 1, rfwave[0], denom, "iminuit")
+
+    def test_get_continuum_model(self):
+        qcfit = TestPiccaContinuumModel.get_qcfit()
+        # np.log(wave_rf_arm / self.rfwave[0]) / self._denom
+        slope = np.linspace(0, 1, 200)
+        wave_rf_arm = qcfit.rfwave0 * np.exp(qcfit.denom * slope)
+        expected_cont = np.linspace(0, 2, 200)
+
+        x = np.array([1., 1.])
+        cont_est = qcfit.get_continuum_model(x, wave_rf_arm)
+        npt.assert_allclose(cont_est, expected_cont)
+
+        x = np.array([1., 1., 0])
+        cont_est = qcfit.get_continuum_model(x, wave_rf_arm)
+        npt.assert_allclose(cont_est, expected_cont)
+
+    def test_fit_continuum(self, setup_data):
+        qcfit = TestPiccaContinuumModel.get_qcfit()
+        qcfit.varlss_interp.fp *= 0
+        npt.assert_allclose(qcfit.meanflux_interp.fp, 1)
+
+        cat_by_survey, npix, data = setup_data(1)
+        data['ivar']['B'] *= 10
+        data['ivar']['R'] *= 10
+        spec = qsonic.spectrum.generate_spectra_list_from_data(
+            cat_by_survey, data)[0]
+        spec.set_forest_region(3600., 6000., 1050., 1180.)
+
+        qcfit.fit_continuum(spec)
+        assert (spec.cont_params['valid'])
+        npt.assert_almost_equal(spec.cont_params['x'], [2.1, 0])
 
 
 class TestVarLSSFitter(object):

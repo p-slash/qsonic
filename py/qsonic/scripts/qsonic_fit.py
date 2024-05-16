@@ -60,6 +60,9 @@ def get_parser(add_help=True):
 def args_logic_fnc_qsonic_fit(args):
     args.arms = list(set(args.arms))
 
+    is_true_continuum = args.continuum_model == "true" or args.true_continuum
+    args.true_continuum = is_true_continuum
+
     condition_msg = [
         (args.true_continuum and not args.mock_analysis,
             "True continuum is only applicable to mock analysis."),
@@ -67,6 +70,8 @@ def args_logic_fnc_qsonic_fit(args):
             "True continuum analysis requires fiducial mean flux."),
         (args.true_continuum and not args.fiducial_varlss,
             "True continuum analysis requires fiducial var_lss."),
+        (args.true_continuum and args.input_continuum_dir,
+            "Both true continuum and input continuum cannot be set."),
         (args.wave2 <= args.wave1,
             "wave2 must be greater than wave1."),
         (args.forest_w2 <= args.forest_w1,
@@ -80,6 +85,11 @@ def args_logic_fnc_qsonic_fit(args):
     for c, msg in condition_msg:
         if c:
             logging.error(msg)
+
+    if is_true_continuum:
+        args.continuum_model = "true"
+    if args.input_continuum_dir:
+        args.continuum_model = "input"
 
     return not any(_[0] for _ in condition_msg)
 
@@ -260,16 +270,12 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
     start_time = time.time()
     qcfit = PiccaContinuumFitter(args)
 
-    if not args.true_continuum:
-        # Fit continua
-        # Stack all spectra in each process
-        # Broadcast and recalculate global functions
-        # Iterate
-        logging.info("Fitting continuum.")
-        qcfit.iterate(spectra_list)
-    else:
-        logging.info("True continuum.")
-        qcfit.true_continuum(spectra_list, args)
+    # Fit continua
+    # Stack all spectra in each process
+    # Broadcast and recalculate global functions
+    # Iterate
+    logging.info("Fitting continuum.")
+    qcfit.iterate(spectra_list)
 
     valid_spectra = list(qsonic.spectrum.valid_spectra(spectra_list))
 
