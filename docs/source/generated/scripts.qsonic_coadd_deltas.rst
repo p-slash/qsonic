@@ -1,4 +1,4 @@
-qsonic.scripts.qsonic_coadd_deltas
+qsonic_coadd_deltas
 =======================================
 
 

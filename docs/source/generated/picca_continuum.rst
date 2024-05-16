@@ -1,4 +1,4 @@
-qsonic.picca\_continuum
+picca\_continuum
 ================================
 
 .. automodule:: qsonic.picca_continuum

@@ -1,4 +1,4 @@
-qsonic.mpi\_utils
+mpi\_utils
 ==========================
 
 .. automodule:: qsonic.mpi_utils

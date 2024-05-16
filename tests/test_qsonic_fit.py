@@ -10,7 +10,7 @@ class TestQsonicFit(TestCase):
 
         options = (
             "--input-dir indir --catalog incat -o outdir "
-            "--true-continuum --mock-analysis --fiducial-meanflux mf "
+            "--continuum-model true --mock-analysis --fiducial-meanflux mf "
             "--fiducial-varlss vs"
         ).split(' ')
         args = parser.parse_args(options)
