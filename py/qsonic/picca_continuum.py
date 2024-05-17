@@ -300,7 +300,7 @@ class PiccaContinuumFitter():
 
         # For each forest fit continuum
         for spec in spectra_list:
-            self.fit_continuum(spec)
+            self.model.fit_continuum(spec)
 
             if not spec.cont_params['valid']:
                 num_invalid_fits += 1
