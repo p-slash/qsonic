@@ -189,11 +189,20 @@ class InputContinuumModel(BaseContinuumModel):
 
         for arm, wave_arm in spec.forestwave.items():
             cont_est = input_cont_interp(wave_arm / (1 + spec.z_qso))
+
+            if any(cont_est <= 0) or any(np.isnan(cont_est)):
+                spec.cont_params['valid'] = False
+                break
+
             cont_est *= self.meanflux_interp(wave_arm)
             spec.cont_params['cont'][arm] = cont_est
 
         spec.set_forest_weight(self.varlss_interp, self.eta_interp)
         spec.calc_continuum_chi2()
+
+        if not spec.cont_params['valid']:
+            spec.cont_params['cont'] = None
+            spec.cont_params['chi2'] = -1
 
     def init_spectra(self, spectra_list):
         """ Reads input continuum. Initializes

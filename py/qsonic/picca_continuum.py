@@ -242,7 +242,6 @@ class PiccaContinuumFitter():
                 args.input_continuum_dir, self.meanflux_interp,
                 self.varlss_interp, self.eta_interp)
             self.cont_order = 0
-            self.niterations = 1
 
     def __init__(self, args):
         self.comm = MPI.COMM_WORLD
