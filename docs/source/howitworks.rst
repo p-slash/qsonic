@@ -82,7 +82,7 @@ This stage starts with the construction of a :class:`PiccaContinuumFitter <qsoni
 We then start iterating, which itself consists of three major steps: initialization, fitting, updating the global variables. The initialization sets ``cont_params`` variable of every Spectrum object. Continuum polynomial order is carried by setting ``cont_params[x]``. At each iteration:
 
 #. Global variables (mean continuum, var_lss) are saved to ``attributes.fits`` file (see :ref:`here <look into output files reference>`). This ensures the order of what is used in each iteration. 
-#. All spectra are fit (see :meth:`fit_continuum <qsonic.picca_continuum.PiccaContinuumFitter.fit_continuum>`).
+#. All spectra are fit (see :meth:`fit_continuum <qsonic.continuum_models.picca_continuum_model.PiccaContinuumModel.fit_continuum>`).
 #. Mean continuum is updated by stacking, smoothing and removing degenarate modes. We check for convergence (update is small). See :meth:`update_mean_cont <qsonic.picca_continuum.PiccaContinuumFitter.update_mean_cont>` and :meth:`_project_normalize_meancont <qsonic.picca_continuum.PiccaContinuumFitter._project_normalize_meancont>`.
 #. If we are fitting for var_lss, we fit and update by calculating variance statistics.
 
