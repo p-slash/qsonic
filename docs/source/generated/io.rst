@@ -1,4 +1,4 @@
-﻿qsonic.io
+﻿io
 ==================
 
 .. automodule:: qsonic.io

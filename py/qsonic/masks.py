@@ -74,7 +74,8 @@ class SkyMask():
         self.mask_obs_frame = mask[mask['frame'] == 'OBS']
 
     def apply(self, spec):
-        """ Apply the mask by setting **only** ``spec.forestivar`` to zero.
+        """ Apply the mask by setting **only** ``spec.forestivar`` and
+        ``spec.forestflux`` to zero.
 
         Arguments
         ----------
@@ -100,6 +101,7 @@ class SkyMask():
             for idx1, idx2 in mask_idx_ranges:
                 w[idx1:idx2] = 1
 
+            spec.forestflux[arm][w] = 0
             spec.forestivar[arm][w] = 0
 
 
@@ -152,7 +154,8 @@ class BALMask():
 
     @staticmethod
     def apply(spec):
-        """ Apply the mask by setting **only** ``spec.forestivar`` to zero.
+        """ Apply the mask by setting **only** ``spec.forestivar`` and
+        ``spec.forestflux`` to zero.
 
         Arguments
         ----------
@@ -192,6 +195,7 @@ class BALMask():
             for idx1, idx2 in mask_idx_ranges:
                 w[idx1:idx2] = 1
 
+            spec.forestflux[arm][w] = 0
             spec.forestivar[arm][w] = 0
 
 
@@ -429,7 +433,8 @@ class DLAMask():
         self.split_catalog = np.split(catalog, s[1:])
 
     def apply(self, spec):
-        """ Apply the mask by setting **only** ``spec.forestivar`` to zero.
+        """ Apply the mask by setting ``spec.forestivar`` and
+        ``spec.forestflux`` to zero.
 
         Arguments
         ----------

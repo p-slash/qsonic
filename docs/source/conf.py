@@ -49,6 +49,7 @@ autodoc_default_options = {
     'exclude-members': '__init__',
     'private-members': True
 }
+add_module_names = False
 
 exclude_patterns = []
 
