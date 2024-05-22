@@ -1,8 +1,7 @@
-catalog
+continuum_models
 =======================
 
-.. automodule:: qsonic.catalog
+.. automodule:: qsonic.continuum_models
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: _all_columns

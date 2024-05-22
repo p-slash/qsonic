@@ -1,4 +1,4 @@
-qsonic.scripts.qsonic_calib
+qsonic_calib
 =========================================
 
 

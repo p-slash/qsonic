@@ -1,0 +1,26 @@
+cff-version: "1.2.0"
+authors:
+- family-names: Karaçaylı
+  given-names: Naim Göksel
+  orcid: "https://orcid.org/0000-0001-7336-8912"
+doi: 10.5281/zenodo.11105006
+message: If you use this software, please cite our article in the
+  Journal of Open Source Software.
+preferred-citation:
+  authors:
+  - family-names: Karaçaylı
+    given-names: Naim Göksel
+    orcid: "https://orcid.org/0000-0001-7336-8912"
+  date-published: 2024-05-08
+  doi: 10.21105/joss.06373
+  issn: 2475-9066
+  issue: 97
+  journal: Journal of Open Source Software
+  publisher:
+    name: Open Journals
+  start: 6373
+  title: "QSOnic: fast quasar continuum fitting"
+  type: article
+  url: "https://joss.theoj.org/papers/10.21105/joss.06373"
+  volume: 9
+title: "QSOnic: fast quasar continuum fitting"
