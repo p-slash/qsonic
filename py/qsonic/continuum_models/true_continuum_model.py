@@ -64,3 +64,12 @@ class TrueContinuumModel(BaseContinuumModel):
             spec.cont_params['xcov'] = np.eye(1)
             spec.cont_params['dof'] = spec.get_real_size()
             spec.cont_params['cont'] = {}
+
+    def stacks_residual_flux(self):
+        """:meth:`stack_spectra` stacks actual continuum values.
+
+        Returns
+        -------
+        False: bool
+        """
+        return False
