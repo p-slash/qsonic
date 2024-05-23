@@ -166,6 +166,29 @@ class PiccaContinuumModel(BaseContinuumModel):
 
         return result
 
+    def stack_spectra(self, valid_spectra_list, flux_stacker):
+        """Stacks spectra in the observed and rest-frame. Observed-frame and
+        rest-frame stacking is performed over residuals f/C.
+
+        Arguments
+        ---------
+        valid_spectra_list: list(Spectrum)
+            Valid spectra objects to iterate.
+        flux_stacker: FluxStacker
+            Flux stacker object.
+        """
+        for spec in valid_spectra_list:
+            for arm, wave_arm in spec.forestwave.items():
+                wave_rf_arm = wave_arm / (1 + spec.z_qso)
+
+                cont = spec.cont_params['cont'][arm]
+                weight = spec.forestweight[arm] * cont**2
+                weighted_flux = weight * spec.forestflux[arm] / cont
+
+                flux_stacker.add(
+                    wave_arm, wave_rf_arm, weighted_flux, weighted_flux, weight
+                )
+
     def fit_continuum(self, spec):
         """Fits the continuum for a single Spectrum.
 
@@ -246,3 +269,12 @@ class PiccaContinuumModel(BaseContinuumModel):
             spec.cont_params['xcov'] = np.eye(self.cont_order + 1)
             spec.cont_params['dof'] = \
                 spec.get_real_size() - self.cont_order - 1
+
+    def stacks_residual_flux(self):
+        """:meth:`stack_spectra` stacks residual flux values f/C.
+
+        Returns
+        -------
+        True: bool
+        """
+        return True
