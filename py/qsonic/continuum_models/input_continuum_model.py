@@ -225,3 +225,12 @@ class InputContinuumModel(BaseContinuumModel):
             spec.cont_params['cont'] = {}
 
         self._read_continua(spectra_list)
+
+    def stacks_residual_flux(self):
+        """:meth:`stack_spectra` stacks actual continuum values.
+
+        Returns
+        -------
+        False: bool
+        """
+        return False
