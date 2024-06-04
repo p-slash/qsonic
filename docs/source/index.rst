@@ -10,9 +10,9 @@ Welcome to qsonic's documentation!
 
 Programs
 --------
-+ ``qsonic-fit`` is the main continuum fitting script. It requires MPI. Each MPI task is responsible for independent sky regions based on HEALPix. Reading and fitting the continuum are done in parallel. After all quasars are fit with a continuum, all MPI tasks syncronize to calculate the mean continuum and check for convergence. See :ref:`here <qsonic fit arguments>` or execute ``qsonic-fit --help`` for help.
-+ ``qsonic-calib`` calculates stacked flux, var_lss and eta terms for a given set of deltas. This script does not perform continuum fitting, and so, it enables fast calculations for data SNR splits, parameter variations in wavelength and variance binning. Also requires MPI. See :ref:`here <qsonic calib arguments>` or execute ``qsonic-calib --help`` for help.
-+ ``qsonic-coadd`` is a helper program to coadd delta files by ``TARGETID`` and regroup them by HEALPix.  It uses ``multiprocessing`` to read delta files in parallel and does **not** require MPI. See :ref:`here <qsonic coadd deltas arguments>` or execute ``qsonic-coadd --help`` for help.
++ :ref:`qsonic-fit <qsonic fit arguments>` is the main continuum fitting script. It requires MPI. Each MPI task is responsible for independent sky regions based on HEALPix. Reading and fitting the continuum are done in parallel. After all quasars are fit with a continuum, all MPI tasks syncronize to calculate the mean continuum and check for convergence. See :ref:`here <qsonic fit arguments>` or execute ``qsonic-fit --help`` for help.
++ :ref:`qsonic-calib <qsonic calib arguments>` calculates stacked flux, var_lss and eta terms for a given set of deltas. This script does not perform continuum fitting, and so, it enables fast calculations for data SNR splits, parameter variations in wavelength and variance binning. Also requires MPI. See :ref:`here <qsonic calib arguments>` or execute ``qsonic-calib --help`` for help.
++ :ref:`qsonic-coadd <qsonic coadd deltas arguments>` is a helper program to coadd delta files by ``TARGETID`` and regroup them by HEALPix.  It uses ``multiprocessing`` to read delta files in parallel and does **not** require MPI. See :ref:`here <qsonic coadd deltas arguments>` or execute ``qsonic-coadd --help`` for help.
 
 Note: Some platforms require these help commands to begin with ``mpirun -np 1`` or ``srun -n 1``.
 
