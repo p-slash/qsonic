@@ -59,9 +59,7 @@ def get_parser(add_help=True):
 
 def args_logic_fnc_qsonic_fit(args):
     args.arms = list(set(args.arms))
-
-    is_true_continuum = args.continuum_model == "true" or args.true_continuum
-    args.true_continuum = is_true_continuum
+    args.true_continuum |= (args.continuum_model == "true")
 
     condition_msg = [
         (args.true_continuum and not args.mock_analysis,
@@ -84,16 +82,17 @@ def args_logic_fnc_qsonic_fit(args):
             "Cannot save exposures in tile format.")
     ]
 
-    for c, msg in condition_msg:
-        if c:
-            logging.error(msg)
+    condition_msg = [_ for _ in condition_msg if _[0]]
 
-    if is_true_continuum:
+    for c, msg in condition_msg:
+        logging.error(msg)
+
+    if args.true_continuum:
         args.continuum_model = "true"
     if args.input_continuum_dir:
         args.continuum_model = "input"
 
-    return not any(_[0] for _ in condition_msg)
+    return not condition_msg
 
 
 def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
