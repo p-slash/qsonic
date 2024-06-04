@@ -380,17 +380,8 @@ class PiccaContinuumFitter():
         """
         self.flux_stacker.reset()
 
-        for spec in valid_spectra(spectra_list):
-            for arm, wave_arm in spec.forestwave.items():
-                wave_rf_arm = wave_arm / (1 + spec.z_qso)
-
-                cont = spec.cont_params['cont'][arm]
-                flux = spec.forestflux[arm] / cont
-                weight = spec.forestweight[arm] * cont**2
-                # Deconvolve resolution matrix ?
-
-                self.flux_stacker.add(
-                    wave_arm, wave_rf_arm, weight * flux, weight)
+        self.model.stack_spectra(
+            valid_spectra(spectra_list), self.flux_stacker)
 
         self.flux_stacker.calculate()
         w = self.flux_stacker.std_flux_rf > 0
@@ -406,7 +397,8 @@ class PiccaContinuumFitter():
         # Smooth new estimates
         spl = UnivariateSpline(self.rfwave, norm_flux, w=1 / std_flux)
         new_meancont = spl(self.rfwave)
-        new_meancont *= self.meancont_interp.fp
+        if self.model.stacks_residual_flux():
+            new_meancont *= self.meancont_interp.fp
 
         # remove tilt and higher orders and normalize
         new_meancont, mean_ = self._project_normalize_meancont(new_meancont)
@@ -443,9 +435,6 @@ class PiccaContinuumFitter():
         spectra_list: list(Spectrum)
             Spectrum objects to fit.
         """
-        if self.varlss_fitter is None:
-            return
-
         self.varlss_fitter.reset()
 
         for spec in valid_spectra(spectra_list):
@@ -570,7 +559,8 @@ class PiccaContinuumFitter():
             # Broadcast and recalculate global functions
             has_converged = self.update_mean_cont(spectra_list)
 
-            self.update_var_lss_eta(spectra_list)
+            if self.varlss_fitter:
+                self.update_var_lss_eta(spectra_list)
 
             if has_converged:
                 logging.info("Iteration has converged.")
@@ -1301,7 +1291,7 @@ class FluxStacker():
     def __call__(self, wave):
         return self._interp(wave)
 
-    def add(self, wave, wave_rf, weighted_flux, weight):
+    def add(self, wave, wave_rf, weighted_flux, weighted_cont, weight):
         """ Add statistics of a single spectrum.
 
         Updates :attr:`stacked_flux` and :attr:`weights`. Assumes no spectra
@@ -1315,6 +1305,8 @@ class FluxStacker():
             Wavelength array in the rest frame.
         weighted_flux: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Weighted flux array. Specifically w * f/C.
+        weighted_cont: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+            Weighted continuum array.
         weight: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Weight array.
         """
@@ -1328,7 +1320,7 @@ class FluxStacker():
         wave_indx = ((wave_rf - self.waverf0) / self.dwrf + 0.5).astype(int)
 
         self._interp_rf.fp += np.bincount(
-            wave_indx, weights=weighted_flux, minlength=self.nwrfbins)
+            wave_indx, weights=weighted_cont, minlength=self.nwrfbins)
         self._interp_rf.ep += np.bincount(
             wave_indx, weights=weight, minlength=self.nwrfbins)
 
