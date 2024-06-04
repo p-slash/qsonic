@@ -59,9 +59,7 @@ def get_parser(add_help=True):
 
 def args_logic_fnc_qsonic_fit(args):
     args.arms = list(set(args.arms))
-
-    is_true_continuum = args.continuum_model == "true" or args.true_continuum
-    args.true_continuum = is_true_continuum
+    args.true_continuum |= (args.continuum_model == "true")
 
     condition_msg = [
         (args.true_continuum and not args.mock_analysis,
@@ -79,19 +77,22 @@ def args_logic_fnc_qsonic_fit(args):
         (args.mock_analysis and args.tile_format,
             "Mock analysis in tile format is not supported."),
         (args.tile_format and args.save_by_hpx,
-            "Cannot save deltas in healpixes in tile format.")
+            "Cannot save deltas in healpixes in tile format."),
+        (args.exposures != "disable" and args.tile_format,
+            "Cannot save exposures in tile format.")
     ]
 
-    for c, msg in condition_msg:
-        if c:
-            logging.error(msg)
+    condition_msg = [_ for _ in condition_msg if _[0]]
 
-    if is_true_continuum:
+    for c, msg in condition_msg:
+        logging.error(msg)
+
+    if args.true_continuum:
         args.continuum_model = "true"
     if args.input_continuum_dir:
         args.continuum_model = "input"
 
-    return not any(_[0] for _ in condition_msg)
+    return not condition_msg
 
 
 def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
@@ -122,7 +123,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
 
     readerFunction = qsonic.io.get_spectra_reader_function(
         args.input_dir, args.arms, args.mock_analysis, args.skip_resomat,
-        args.true_continuum, args.tile_format)
+        args.true_continuum, args.tile_format, args.exposures == "before")
 
     spectra_list = []
     # Each process reads its own list
@@ -312,6 +313,94 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
     return spectra_list
 
 
+def mpi_read_exposures_after(spectra_list, args, maskers, comm, mpi_rank):
+    """Creates a local catalog from spectra_list and reads exposures. Coadding
+    of arms is always done with IVAR only as weights (exposures are not coadded
+    ). RSNR cut is still applied. CONT is copied from the exposure coadded
+    spectra. The extension name in the delta files will be
+    ``TARGETID_ARM_EXPID``.
+
+    Arguments
+    ---------
+    spectra_list: list(Spectrum)
+        Spectrum objects for the local MPI rank.
+    args: argparse.Namespace
+        Options passed to script.
+    maskers: list(Masks)
+        Mask objects from `qsonic.masks`.
+    comm: MPI.COMM_WORLD
+        Communication object for reducing data.
+    mpi_rank: int
+        Rank of the MPI process
+
+    Returns
+    ---------
+    exposure_spectra_list: list(Spectrum)
+        Spectrum objects for the local MPI rank. Note there will be duplicate
+        TARGETIDs.
+    """
+    # Initialize continuum fitter & global functions
+    logging.info("Reading exposures and applying RSNR cut.")
+    start_time = time.time()
+
+    local_catalog = np.hstack([_.catrow for _ in spectra_list])
+
+    # local_catalog is not sorted
+    idx_sort = local_catalog.argsort(order=['HPXPIXEL', 'TARGETID'])
+    spectra_list = np.array(spectra_list)[idx_sort]
+    local_catalog = local_catalog[idx_sort]
+    # assert all(np.arange(idx_sort.size) == idx_sort)
+    del idx_sort
+
+    # exposures cannot be saved in tile format
+    unique_pix, s = np.unique(local_catalog['HPXPIXEL'], return_index=True)
+    local_queue = np.split(local_catalog, s[1:])
+    del s, unique_pix
+
+    exposure_spectra_list = []
+    for cat in local_queue:
+        local_specs = qsonic.io.read_onehealpix_file_data_uncoadd(
+            cat, args.input_dir, args.arms, args.skip_resomat
+        )
+
+        for spec in local_specs:
+            spec.set_forest_region(
+                args.wave1, args.wave2, args.forest_w1, args.forest_w2)
+            spec.remove_nonforest_pixels()
+
+        exposure_spectra_list.extend([
+            spec for spec in local_specs
+            if spec.forestwave and spec.rsnr >= args.min_rsnr
+        ])
+
+    if args.coadd_arms != "disable":
+        logging.info("Coadding arms with pure IVAR weights.")
+        for spec in exposure_spectra_list:
+            spec.coadd_arms_forest()
+
+    nspec_all = comm.reduce(len(exposure_spectra_list))
+    etime = (time.time() - start_time) / 60  # min
+    logging.info(f"All {nspec_all} exposures are read in {etime:.1f} mins.")
+
+    # Noise and flux calibration
+    mpi_noise_flux_calibrate(exposure_spectra_list, args, comm, mpi_rank)
+
+    # Mask out
+    apply_masks(maskers, exposure_spectra_list, mpi_rank)
+
+    # Match & assign cont, forest weight
+    for spec in exposure_spectra_list:
+        i = np.nonzero(local_catalog['TARGETID'] == spec.targetid)[0][0]
+        spec.cont_params = spectra_list[i].cont_params
+
+    etime = (time.time() - start_time) / 60  # min
+    logging.info(
+        "Reading, calibrating, masking and matching the continua "
+        f"took {etime:.1f} mins.")
+
+    return exposure_spectra_list
+
+
 def mpi_run_all(comm, mpi_rank, mpi_size):
     args = mpi_parse(get_parser(), comm, mpi_rank,
                      args_logic_fnc=args_logic_fnc_qsonic_fit)
@@ -361,6 +450,10 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
 
     # Continuum fitting
     spectra_list = mpi_continuum_fitting(spectra_list, args, comm, mpi_rank)
+
+    if args.exposures == "after":
+        spectra_list = mpi_read_exposures_after(
+            spectra_list, args, maskers, comm, mpi_rank)
 
     # Save deltas
     logging.info("Saving deltas.")
