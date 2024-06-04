@@ -68,6 +68,17 @@ class TestMathtools(object):
         assert not any(w[:20])
         assert not any(w[40:])
 
+        # test different spectral shapes
+        flux = rng.poisson(sigmas) - sigmas + (np.arange(size) / 25)**2
+        ivar = sigmas**-2
+        w = qsonic.mathtools.get_median_outlier_mask(flux, ivar)
+        assert not any(w)
+
+        flux = 100 + ((1 + np.arange(size)) / 5)**2
+        ivar = flux**-2
+        flux = rng.poisson(flux)
+        assert not any(w)
+
     def test_get_smooth_ivar(self):
         ivar = np.ones(2**10)
         idces = np.array([16, 17, 18, 234, 235, 512, 667, 898, 910, 956])
