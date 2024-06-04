@@ -413,7 +413,8 @@ class DLAMask():
 
     def __init__(
             self, fname, local_targetids=None, comm=None, mpi_rank=0,
-            dla_mask_limit=0.8):
+            dla_mask_limit=0.8
+    ):
         self.dla_mask_limit = dla_mask_limit
 
         catalog = mpi_fnc_bcast(

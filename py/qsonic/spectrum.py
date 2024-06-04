@@ -720,6 +720,16 @@ class Spectrum():
             'SMSCALE': self._smoothing_scale
         }
 
+        for key in set(
+                ['TILEID', 'FIBER', 'PETAL_LOC', 'EXPID', 'NIGHT']
+        ).intersection(self.catrow.dtype.names):
+            hdr_dict[key] = self.catrow[key]
+
+        if 'EXPID' in self.catrow.dtype.names:
+            expid = f"-{self.catrow['EXPID']}"
+        else:
+            expid = ""
+
         for arm, wave_arm in self.forestwave.items():
             if self.mean_snr[arm] == 0:
                 continue
@@ -739,7 +749,7 @@ class Spectrum():
 
             fts_file.write(
                 cols, names=Spectrum._fits_colnames, header=hdr_dict,
-                extname=f"{self.targetid}-{arm}")
+                extname=f"{self.targetid}-{arm}{expid}")
 
     @property
     def z_qso(self):
