@@ -80,10 +80,16 @@ def get_spectra_reader_function(
 ):
     """ Returns a callable object (function) that returns a list of Spectrum
     objects for a given catalog of a single healpix. Essentially, a wrapper
-    for :meth:`read_onehealpix_file_mock` or
-    :meth:`read_onehealpix_file_data_coadd` functions. If for data 'SURVEY'
-    column must be present and sorted when calling the function this returns in
-    the healpix grouping. Tile grouping requires TILEID and PETAL_LOC.
+    for the following functions:
+
+        - :meth:`read_onehealpix_file_mock`,
+        - :meth:`read_onetile_coaddfile_data`,
+        - :meth:`read_onehealpix_file_data_uncoadd`,
+        - :meth:`read_onehealpix_file_data_coadd`.
+
+    If for data, ``SURVEY`` column must be present and sorted when calling the
+    function this returns in the healpix grouping. Tile grouping requires
+    ``TILEID`` and ``PETAL_LOC``.
 
     Arguments
     ---------
@@ -106,7 +112,7 @@ def get_spectra_reader_function(
 
     Returns
     ---------
-    reader_function: Callable
+    readerFunction: Callable
         Call this function with a catalog of quasars in a single healpix.
 
     Raises
