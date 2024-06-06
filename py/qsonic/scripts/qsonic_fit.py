@@ -393,12 +393,14 @@ def mpi_read_exposures_after(spectra_list, args, maskers, comm, mpi_rank):
         spec.cont_params['cont'] = {}
 
         for arm, wave_arm in spec.forestwave.items():
-            if arm not in spec_coadd.forestwave:
+            wave_coadd = spec_coadd.forestwave
+            if arm not in wave_coadd:
                 spec.drop_arm(arm)
                 continue
 
-            j1, j2 = np.searchsorted(
-                spec_coadd.forestwave[arm], wave_arm[[0, -1]])
+            j1 = int((wave_arm[0] - wave_coadd[arm][0]) / spec.dwave + 0.1)
+            j2 = wave_coadd[arm].size - int(
+                (wave_coadd[arm][-1] - wave_arm[-1]) / spec.dwave + 0.1)
             spec.cont_params['cont'][arm] = \
                 spec_coadd.cont_params['cont'][arm][j1:j2].copy()
 
