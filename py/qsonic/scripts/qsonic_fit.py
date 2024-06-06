@@ -95,7 +95,7 @@ def args_logic_fnc_qsonic_fit(args):
     return not condition_msg
 
 
-def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
+def mpi_read_spectra_local_queue(local_queue, args, comm):
     """ Read local spectra for the MPI rank. Set forest and observed wavelength
     range.
 
@@ -108,8 +108,6 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
         Options passed to script.
     comm: MPI.COMM_WORLD
         Communication object for reducing data.
-    mpi_rank: int
-        Rank of the MPI process
 
     Returns
     ---------
@@ -117,7 +115,8 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
         Spectrum objects for the local MPI rank.
     """
     start_time = time.time()
-    logging.info("Reading spectra.")
+    read_mode = "exposures" if args.exposures == "before" else "spectra"
+    logging.info(f"Reading {read_mode}.")
 
     # skip_resomat = args.skip_resomat or not args.mock_analysis
 
@@ -141,13 +140,13 @@ def mpi_read_spectra_local_queue(local_queue, args, comm, mpi_rank):
         ])
 
     if args.coadd_arms == "before":
-        logging.info("Coadding arms.")
+        logging.info("Coadding arms with pure IVAR weights.")
         for spec in spectra_list:
             spec.coadd_arms_forest()
 
     nspec_all = comm.reduce(len(spectra_list))
     etime = (time.time() - start_time) / 60  # min
-    logging.info(f"All {nspec_all} spectra are read in {etime:.1f} mins.")
+    logging.info(f"All {nspec_all} {read_mode} are read in {etime:.1f} mins.")
 
     return spectra_list
 
@@ -253,7 +252,7 @@ def apply_masks(maskers, spectra_list, mpi_rank=0):
     logging.info(f"Masks are applied in {etime:.1f} mins.")
 
 
-def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank=0):
+def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio):
     if not skip_ratio:
         return spectra_list
 
@@ -261,6 +260,54 @@ def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio, mpi_rank=0):
     dforest_wave = lya2 - lya1
     spectra_list = [spec for spec in spectra_list
                     if spec.is_long(dforest_wave, skip_ratio)]
+
+    return spectra_list
+
+
+def mpi_read_calibrate_mask_select_spectra(
+        local_queue, maskers, args, comm, mpi_rank
+):
+    """ Read local spectra for the MPI rank. Set forest and observed wavelength
+    range. Apply noise and flux calibration and maskers. Remove short spectra,
+    and apply minimum forest SNR cut. Calls the following:
+
+        - :func:`mpi_read_spectra_local_queue`,
+        - :func:`mpi_noise_flux_calibrate`,
+        - :func:`apply_masks`,
+        - :func:`remove_short_spectra`.
+
+    Arguments
+    ---------
+    local_queue: list(:external+numpy:py:class:`ndarray <numpy.ndarray>`)
+        Catalog from :func:`qsonic.catalog.mpi_get_local_queue`. Each
+        element is a catalog for one healpix.
+    maskers: list(Masks)
+        Mask objects from `qsonic.masks`.
+    args: argparse.Namespace
+        Options passed to script.
+    comm: MPI.COMM_WORLD
+        Communication object for reducing data.
+    mpi_rank: int
+        Rank of the MPI process
+
+    Returns
+    ---------
+    spectra_list: list(Spectrum)
+        Spectrum objects for the local MPI rank.
+    """
+    spectra_list = mpi_read_spectra_local_queue(local_queue, args, comm)
+
+    mpi_noise_flux_calibrate(spectra_list, args, comm, mpi_rank)
+
+    apply_masks(maskers, spectra_list, mpi_rank)
+
+    # remove from sample if the number of pixels is small
+    spectra_list = remove_short_spectra(
+        spectra_list, args.forest_w1, args.forest_w2, args.skip)
+
+    # Remove spectra with respect to forest snr
+    spectra_list = [spec for spec in spectra_list
+                    if spec.get_effective_meansnr() >= args.min_forestsnr]
 
     return spectra_list
 
@@ -309,21 +356,21 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
     return spectra_list
 
 
-def mpi_read_exposures_after(spectra_list, args, maskers, comm, mpi_rank):
+def mpi_read_exposures_after(spectra_list, maskers, args, comm, mpi_rank):
     """Creates a local catalog from spectra_list and reads exposures. Coadding
     of arms is always done with IVAR only as weights (exposures are not coadded
-    ). RSNR cut is still applied. CONT is copied from the exposure coadded
-    spectra. The extension name in the delta files will be
+    ). RSNR and forest SNR cuts are still applied. CONT is copied from the
+    exposure coadded spectra. The extension name in the delta files will be
     ``TARGETID_ARM_EXPID``.
 
     Arguments
     ---------
     spectra_list: list(Spectrum)
         Spectrum objects for the local MPI rank.
-    args: argparse.Namespace
-        Options passed to script.
     maskers: list(Masks)
         Mask objects from `qsonic.masks`.
+    args: argparse.Namespace
+        Options passed to script.
     comm: MPI.COMM_WORLD
         Communication object for reducing data.
     mpi_rank: int
@@ -353,36 +400,13 @@ def mpi_read_exposures_after(spectra_list, args, maskers, comm, mpi_rank):
     local_queue = np.split(local_catalog, s[1:])
     del s, unique_pix
 
-    exposure_spectra_list = []
-    for cat in local_queue:
-        local_specs = qsonic.io.read_onehealpix_file_data_uncoadd(
-            cat, args.input_dir, args.arms, args.skip_resomat
-        )
-
-        for spec in local_specs:
-            spec.set_forest_region(
-                args.wave1, args.wave2, args.forest_w1, args.forest_w2)
-            spec.remove_nonforest_pixels()
-
-        exposure_spectra_list.extend([
-            spec for spec in local_specs
-            if spec.forestwave and spec.rsnr >= args.min_rsnr
-        ])
-
+    args.exposures = "before"
     if args.coadd_arms != "disable":
-        logging.info("Coadding arms with pure IVAR weights.")
-        for spec in exposure_spectra_list:
-            spec.coadd_arms_forest()
+        args.coadd_arms = "before"
 
-    nspec_all = comm.reduce(len(exposure_spectra_list))
-    etime = (time.time() - start_time) / 60  # min
-    logging.info(f"All {nspec_all} exposures are read in {etime:.1f} mins.")
-
-    # Noise and flux calibration
-    mpi_noise_flux_calibrate(exposure_spectra_list, args, comm, mpi_rank)
-
-    # Mask out
-    apply_masks(maskers, exposure_spectra_list, mpi_rank)
+    exposure_spectra_list = mpi_read_calibrate_mask_select_spectra(
+        local_queue, maskers, args, comm, mpi_rank
+    )
 
     # Match & assign cont, forest weight
     for spec in exposure_spectra_list:
@@ -439,20 +463,9 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # Read masks before data
     maskers = mpi_read_masks(local_queue, args, comm, mpi_rank)
 
-    spectra_list = mpi_read_spectra_local_queue(
-        local_queue, args, comm, mpi_rank)
-
-    mpi_noise_flux_calibrate(spectra_list, args, comm, mpi_rank)
-
-    apply_masks(maskers, spectra_list, mpi_rank)
-
-    # remove from sample if no pixels is small
-    spectra_list = remove_short_spectra(
-        spectra_list, args.forest_w1, args.forest_w2, args.skip, mpi_rank)
-
-    # Remove spectra with respect to forest snr
-    spectra_list = [spec for spec in spectra_list
-                    if spec.get_effective_meansnr() >= args.min_forestsnr]
+    spectra_list = mpi_read_calibrate_mask_select_spectra(
+        local_queue, maskers, args, comm, mpi_rank
+    )
 
     # Create smoothed ivar as intermediate variable
     if args.smoothing_scale > 0:
@@ -464,7 +477,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
 
     if args.exposures == "after":
         spectra_list = mpi_read_exposures_after(
-            spectra_list, args, maskers, comm, mpi_rank)
+            spectra_list, maskers, args, comm, mpi_rank)
 
     # Final cleaning. Especially important if not coadding arms.
     for spec in spectra_list:
