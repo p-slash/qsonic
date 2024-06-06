@@ -303,10 +303,6 @@ def mpi_continuum_fitting(spectra_list, args, comm, mpi_rank):
     # Keep only valid spectra
     spectra_list = valid_spectra
 
-    # Final cleaning. Especially important if not coadding arms.
-    for spec in spectra_list:
-        spec.drop_short_arms(args.forest_w1, args.forest_w2, args.skip)
-
     etime = (time.time() - start_time) / 60  # min
     logging.info(f"Continuum fitting and tweaking took {etime:.1f} mins.")
 
@@ -390,8 +386,21 @@ def mpi_read_exposures_after(spectra_list, args, maskers, comm, mpi_rank):
 
     # Match & assign cont, forest weight
     for spec in exposure_spectra_list:
-        i = np.nonzero(local_catalog['TARGETID'] == spec.targetid)[0][0]
-        spec.cont_params = spectra_list[i].cont_params
+        spec_coadd = spectra_list[
+            np.nonzero(local_catalog['TARGETID'] == spec.targetid)[0][0]
+        ]
+        spec.cont_params = spec_coadd.cont_params.copy()
+        spec.cont_params['cont'] = {}
+
+        for arm, wave_arm in spec.forestwave.items():
+            if arm not in spec_coadd.forestwave:
+                spec.drop_arm(arm)
+                continue
+
+            j1, j2 = np.searchsorted(
+                spec_coadd.forestwave[arm], wave_arm[[0, -1]])
+            spec.cont_params['cont'][arm] = \
+                spec_coadd.cont_params['cont'][arm][j1:j2].copy()
 
     etime = (time.time() - start_time) / 60  # min
     logging.info(
@@ -454,6 +463,10 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     if args.exposures == "after":
         spectra_list = mpi_read_exposures_after(
             spectra_list, args, maskers, comm, mpi_rank)
+
+    # Final cleaning. Especially important if not coadding arms.
+    for spec in spectra_list:
+        spec.drop_short_arms(args.forest_w1, args.forest_w2, args.skip)
 
     # Save deltas
     logging.info("Saving deltas.")
