@@ -326,6 +326,15 @@ class Spectrum():
         self._forestweight = self._forestivar
         self._set_forest_related_parameters()
 
+    def drop_arm(self, arm):
+        self._forestwave.pop(arm, None)
+        self._forestflux.pop(arm, None)
+        self._forestivar.pop(arm, None)
+        self._forestreso.pop(arm, None)
+        self._forestivar_sm.pop(arm, None)
+        self._forestweight.pop(arm, None)
+        self.cont_params['cont'].pop(arm, None)
+
     def drop_short_arms(self, lya1=0, lya2=0, skip_ratio=0):
         """Arms that have less than ``skip_ratio`` pixels are removed from
         forest dictionary.
@@ -342,13 +351,7 @@ class Spectrum():
         short_arms = [arm for arm, ivar in self.forestivar.items()
                       if np.sum(ivar > 0) < npixels_expected]
         for arm in short_arms:
-            self._forestwave.pop(arm, None)
-            self._forestflux.pop(arm, None)
-            self._forestivar.pop(arm, None)
-            self._forestreso.pop(arm, None)
-            self._forestivar_sm.pop(arm, None)
-            self._forestweight.pop(arm, None)
-            self.cont_params['cont'].pop(arm, None)
+            self.drop_arm(arm)
 
     def remove_nonforest_pixels(self):
         """ Remove non-forest pixels from storage.
