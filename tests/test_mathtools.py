@@ -78,30 +78,33 @@ class TestMathtools(object):
         npt.assert_allclose(ivar_sm, ivar)
 
     def test_SubsampleCov_theory(self):
-        subsampler = qsonic.mathtools.SubsampleCov((2, 1), 100)
+        n, m = 300000, 5
+        nsample = 10000
+        subsampler = qsonic.mathtools.SubsampleCov((2, m), nsample)
 
-        randoms = np.random.default_rng().normal(size=100000)
+        randoms = np.random.default_rng(0).normal(loc=1, size=(n, m))
 
-        true_mean = np.mean(randoms)
-        true_var = np.std(randoms)**2
-        var_on_mean = true_var / randoms.size
+        true_mean = np.mean(randoms, axis=0)
+        true_var = np.var(randoms, axis=0)
+        var_on_mean = true_var / randoms.shape[0]
+        rtol = 5 / np.sqrt(nsample - 1)
 
         for r in randoms:
-            xvec = np.empty((2, 1))
+            xvec = np.empty((2, m))
             xvec[0] = r
             xvec[1] = 2 * r
             subsampler.add_measurement(xvec, 1)
 
-        mean, var = subsampler.get_mean_n_var()
-        npt.assert_almost_equal(var[0][0], var_on_mean, decimal=4)
-        npt.assert_almost_equal(var[1][0], 4 * var_on_mean, decimal=4)
+        mean, var = subsampler.get_mean_n_var(bias_correct=True)
+        npt.assert_allclose(mean[0], true_mean)
+        npt.assert_allclose(var[0], var_on_mean, rtol=rtol)
+        npt.assert_allclose(var[1], 4 * var_on_mean, rtol=rtol)
 
-        mean, cov = subsampler.get_mean_n_cov()
-
+        mean, cov = subsampler.get_mean_n_cov(bias_correct=True)
         npt.assert_allclose(mean[0], true_mean)
         npt.assert_allclose(mean[1], 2 * true_mean)
-        npt.assert_almost_equal(cov[0][0], var_on_mean, decimal=4)
-        npt.assert_almost_equal(cov[1][0], 4 * var_on_mean, decimal=4)
+        npt.assert_allclose(cov[0].diagonal(), var_on_mean, rtol=rtol)
+        npt.assert_allclose(cov[1].diagonal(), 4 * var_on_mean, rtol=rtol)
 
     def test_SubsampleCov_shape(self):
         subsampler = qsonic.mathtools.SubsampleCov((3, 10), 20)
