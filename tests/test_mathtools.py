@@ -92,6 +92,10 @@ class TestMathtools(object):
             xvec[1] = 2 * r
             subsampler.add_measurement(xvec, 1)
 
+        mean, var = subsampler.get_mean_n_var()
+        npt.assert_almost_equal(var[0][0], var_on_mean, decimal=4)
+        npt.assert_almost_equal(var[1][0], 4 * var_on_mean, decimal=4)
+
         mean, cov = subsampler.get_mean_n_cov()
 
         npt.assert_allclose(mean[0], true_mean)
