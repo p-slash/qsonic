@@ -499,7 +499,8 @@ class SubsampleCov():
         if not self._is_normalized:
             self._normalize()
 
-        self.mean = np.sum(self.all_measurements * self.all_weights, axis=0)
+        self.mean = np.einsum(
+            'ijk,ik->jk', self.all_measurements, self.all_weights[:, 0, :])
 
         return self.mean
 
