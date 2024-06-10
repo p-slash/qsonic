@@ -426,6 +426,7 @@ class SubsampleCov():
         self.mean = None
         self.covariance = None
         self.variance = None
+        self.xdiff = None
 
     def add_measurement(self, xvec, wvec):
         """ Adds a measurement to the sample.
@@ -454,8 +455,8 @@ class SubsampleCov():
                 "SubsampleCov has already been normalized. "
                 "You cannot add more measurements.")
 
-        self.all_measurements[self._isample] += xvec
-        self.all_weights[self._isample] += wvec
+        self.all_measurements[self._isample, :, :] += xvec
+        self.all_weights[self._isample, 0, :] += wvec
         self._isample = (self._isample + 1) % self.nsamples
 
     def allreduce(self, comm, inplace):
@@ -477,9 +478,12 @@ class SubsampleCov():
         comm.Allreduce(inplace, self.all_weights)
 
     def _normalize(self):
-        self.all_measurements /= self.all_weights + np.finfo(float).eps
-        self.all_weights /= np.sum(
-            self.all_weights, axis=0) + np.finfo(float).eps
+        self.all_measurements = np.divide(
+            self.all_measurements, self.all_weights,
+            out=self.all_measurements, where=self.all_weights != 0)
+        norm = self.all_weights.sum(0)
+        self.all_weights = np.divide(
+            self.all_weights, norm, out=self.all_weights, where=norm != 0)
 
         self._is_normalized = True
 
@@ -504,7 +508,7 @@ class SubsampleCov():
 
         return self.mean
 
-    def _get_xdiff(self, mean_xvec, bias_correct=True):
+    def _get_xdiff(self, mean_xvec, bias_correct=False):
         # remove one measurement, then renormalize
         jack_i = (
             mean_xvec - self.all_measurements * self.all_weights
@@ -528,7 +532,7 @@ class SubsampleCov():
 
         return cov
 
-    def get_mean_n_cov(self, indices=None, blockdim=None, bias_correct=True):
+    def get_mean_n_cov(self, indices=None, blockdim=None, bias_correct=False):
         """ Get the mean and covariance of the mean using delete-one Jackknife.
 
         Also sets :attr:`mean` and :attr:`covariance`.
@@ -544,7 +548,7 @@ class SubsampleCov():
             Data set indices to estimate the covariance.
         blockdim: int, default: None
             Calculate covariance by this block size instead of the full space.
-        bias_correct: bool, default: True
+        bias_correct: bool, default: False
             Jackknife bias correction term for the mean.
 
         Returns
@@ -554,8 +558,9 @@ class SubsampleCov():
         cov: list(:class:`ndarray <numpy.ndarray>`)
             Covariances of the mean.
         """
-        mean_xvec = self.get_mean()
-        self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
+        if self.mean is None:
+            mean_xvec = self.get_mean()
+            self.mean, self.xdiff = self._get_xdiff(mean_xvec, bias_correct)
 
         if indices is None:
             indices = range(self.all_measurements.shape[1])
@@ -565,7 +570,7 @@ class SubsampleCov():
 
         self.covariance = [None] * self.all_measurements.shape[1]
         for jj in indices:
-            x = xdiff[:, jj, :]
+            x = self.xdiff[:, jj, :]
 
             if blockdim is None:
                 cov = (x.T @ x) * (self.nsamples - 1) / self.nsamples
@@ -575,7 +580,7 @@ class SubsampleCov():
 
         return self.mean, self.covariance
 
-    def get_mean_n_var(self, bias_correct=True):
+    def get_mean_n_var(self, bias_correct=False):
         """ Get the mean and variance of themean (i.e. diagonal of the
         covariance) using delete-one Jackknife.
 
@@ -586,7 +591,7 @@ class SubsampleCov():
 
         Arguments
         ---------
-        bias_correct: bool, default: True
+        bias_correct: bool, default: False
             Jackknife bias correction term for the mean.
 
         Returns
@@ -596,10 +601,11 @@ class SubsampleCov():
         var_xvec: :class:`ndarray <numpy.ndarray>`
             Variance of the mean. 1D array
         """
-        mean_xvec = self.get_mean()
-        self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
+        if self.mean is None:
+            mean_xvec = self.get_mean()
+            self.mean, self.xdiff = self._get_xdiff(mean_xvec, bias_correct)
 
-        self.variance = (np.einsum('ijk,ijk->jk', xdiff, xdiff)
+        self.variance = (np.einsum('ijk,ijk->jk', self.xdiff, self.xdiff)
                          * (self.nsamples - 1) / self.nsamples)
 
         return self.mean, self.variance
@@ -614,3 +620,4 @@ class SubsampleCov():
         self.mean = None
         self.covariance = None
         self.variance = None
+        self.xdiff = None
