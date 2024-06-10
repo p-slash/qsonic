@@ -95,12 +95,12 @@ class TestMathtools(object):
             xvec[1] = 2 * r
             subsampler.add_measurement(xvec, 1)
 
-        mean, var = subsampler.get_mean_n_var(bias_correct=True)
+        mean, var = subsampler.get_mean_n_var(bias_correct=False)
         npt.assert_allclose(mean[0], true_mean)
         npt.assert_allclose(var[0], var_on_mean, rtol=rtol)
         npt.assert_allclose(var[1], 4 * var_on_mean, rtol=rtol)
 
-        mean, cov = subsampler.get_mean_n_cov(bias_correct=True)
+        mean, cov = subsampler.get_mean_n_cov(bias_correct=False)
         npt.assert_allclose(mean[0], true_mean)
         npt.assert_allclose(mean[1], 2 * true_mean)
         npt.assert_allclose(cov[0].diagonal(), var_on_mean, rtol=rtol)
