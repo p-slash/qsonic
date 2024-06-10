@@ -513,13 +513,13 @@ class SubsampleCov():
         jack_i = (
             mean_xvec - self.all_measurements * self.all_weights
         ) / (1 - self.all_weights + np.finfo(float).eps)
+        mean_jack = np.mean(jack_i, axis=0)
 
         if bias_correct:
-            mean_jack = np.mean(jack_i, axis=0)
             bias_jack = (self.nsamples - 1) * (mean_jack - mean_xvec)
             mean_xvec -= bias_jack
 
-        xdiff = jack_i - mean_xvec
+        xdiff = jack_i - mean_jack
 
         return mean_xvec, xdiff
 
