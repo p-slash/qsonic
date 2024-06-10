@@ -87,7 +87,7 @@ class TestMathtools(object):
         true_mean = np.mean(randoms, axis=0)
         true_var = np.var(randoms, axis=0)
         var_on_mean = true_var / randoms.shape[0]
-        rtol = 5 / np.sqrt(nsample - 1)
+        rtol = 3.5 / np.sqrt(nsample - 1)
 
         for r in randoms:
             xvec = np.empty((2, m))
