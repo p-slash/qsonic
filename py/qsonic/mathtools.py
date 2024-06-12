@@ -426,6 +426,7 @@ class SubsampleCov():
         self.mean = None
         self.covariance = None
         self.variance = None
+        self.xdiff = None
 
     def add_measurement(self, xvec, wvec):
         """ Adds a measurement to the sample.
@@ -454,8 +455,8 @@ class SubsampleCov():
                 "SubsampleCov has already been normalized. "
                 "You cannot add more measurements.")
 
-        self.all_measurements[self._isample] += xvec
-        self.all_weights[self._isample] += wvec
+        self.all_measurements[self._isample, :, :] += xvec
+        self.all_weights[self._isample, 0, :] += wvec
         self._isample = (self._isample + 1) % self.nsamples
 
     def allreduce(self, comm, inplace):
@@ -477,9 +478,12 @@ class SubsampleCov():
         comm.Allreduce(inplace, self.all_weights)
 
     def _normalize(self):
-        self.all_measurements /= self.all_weights + np.finfo(float).eps
-        self.all_weights /= np.sum(
-            self.all_weights, axis=0) + np.finfo(float).eps
+        self.all_measurements = np.divide(
+            self.all_measurements, self.all_weights,
+            out=self.all_measurements, where=self.all_weights != 0)
+        norm = self.all_weights.sum(0)
+        self.all_weights = np.divide(
+            self.all_weights, norm, out=self.all_weights, where=norm != 0)
 
         self._is_normalized = True
 
@@ -499,7 +503,8 @@ class SubsampleCov():
         if not self._is_normalized:
             self._normalize()
 
-        self.mean = np.sum(self.all_measurements * self.all_weights, axis=0)
+        self.mean = np.einsum(
+            'ijk,ik->jk', self.all_measurements, self.all_weights[:, 0, :])
 
         return self.mean
 
@@ -553,8 +558,9 @@ class SubsampleCov():
         cov: list(:class:`ndarray <numpy.ndarray>`)
             Covariances of the mean.
         """
-        mean_xvec = self.get_mean()
-        self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
+        if self.mean is None:
+            mean_xvec = self.get_mean()
+            self.mean, self.xdiff = self._get_xdiff(mean_xvec, bias_correct)
 
         if indices is None:
             indices = range(self.all_measurements.shape[1])
@@ -564,7 +570,7 @@ class SubsampleCov():
 
         self.covariance = [None] * self.all_measurements.shape[1]
         for jj in indices:
-            x = xdiff[:, jj, :]
+            x = self.xdiff[:, jj, :]
 
             if blockdim is None:
                 cov = (x.T @ x) * (self.nsamples - 1) / self.nsamples
@@ -595,12 +601,12 @@ class SubsampleCov():
         var_xvec: :class:`ndarray <numpy.ndarray>`
             Variance of the mean. 1D array
         """
-        mean_xvec = self.get_mean()
-        self.mean, xdiff = self._get_xdiff(mean_xvec, bias_correct)
+        if self.mean is None:
+            mean_xvec = self.get_mean()
+            self.mean, self.xdiff = self._get_xdiff(mean_xvec, bias_correct)
 
-        self.variance = (
-            np.sum(xdiff**2, axis=0) * (self.nsamples - 1) / self.nsamples
-        )
+        self.variance = (np.einsum('ijk,ijk->jk', self.xdiff, self.xdiff)
+                         * (self.nsamples - 1) / self.nsamples)
 
         return self.mean, self.variance
 
@@ -614,3 +620,4 @@ class SubsampleCov():
         self.mean = None
         self.covariance = None
         self.variance = None
+        self.xdiff = None
