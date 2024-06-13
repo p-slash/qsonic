@@ -1024,6 +1024,11 @@ class Delta():
             np.sqrt(coadd_ivar), coadd_delta + 1) / np.sum(coadd_ivar > 0)
         self.header['MEANSNR'] = self.mean_snr
 
+    def to_flux(self):
+        self.delta = (1 + self.delta) * self.cont
+        self.ivar /= self.cont**2
+        self.weight /= self.cont**2
+
     @property
     def ra(self):
         """float: Right ascension in degrees."""

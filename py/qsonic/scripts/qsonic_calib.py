@@ -79,6 +79,8 @@ def get_parser(add_help=True):
     vargroup.add_argument(
         "--max-snr", help="Maximum SNR of the forest.",
         default=100, type=float)
+    vargroup.add_argument(
+        "--on-flux", help="Calculate on flux instead", action="store_true")
 
     parser = add_wave_region_parser(parser)
 
@@ -225,6 +227,10 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     deltas_list = mpi_read_all_deltas(args, comm, mpi_rank, mpi_size)
     # Flatten this list of lists and remove quasars
     deltas_list = [x for alist in deltas_list for x in alist if _is_kept(x)]
+
+    if args.on_flux:
+        for delta in deltas_list:
+            delta.to_flux()
 
     for delta in deltas_list:
         varfitter.add(delta.wave, delta.delta, delta.ivar)
