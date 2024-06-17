@@ -644,7 +644,7 @@ def read_onetile_coaddfile_data(
 
         fspec = (f"{input_dir}/{tileid}/{lastnight}/"
                  f"coadd-{petal}-{tileid}-thru{lastnight}.fits")
-        data, idx_cat = _read_onehealpix_file(
+        data, idx_cat, _ = _read_onehealpix_file(
             cat_by_petal['TARGETID'], fspec, arms_to_keep, skip_resomat)
 
         if idx_cat.size != cat_by_petal.size:
@@ -690,7 +690,7 @@ def read_onehealpix_file_mock(
     """
     pixnum = catalog_hpx['HPXPIXEL'][0]
     fspec = f"{input_dir}/{pixnum//100}/{pixnum}/spectra-{nside}-{pixnum}.fits"
-    data, idx_cat = _read_onehealpix_file(
+    data, idx_cat, _ = _read_onehealpix_file(
         catalog_hpx['TARGETID'], fspec, arms_to_keep, skip_resomat)
 
     if idx_cat.size != catalog_hpx.size:
