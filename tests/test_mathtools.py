@@ -22,7 +22,7 @@ class TestMathtools(object):
 
     def test_FastCubic1DInterp(self):
         xin, dxp = np.linspace(320., 550., 300, retstep=True)
-        fp = np.power(xin / 100. - 4., 4)
+        fp = np.power(xin / 100. - 4., 3)
 
         fast_interp = qsonic.mathtools.FastCubic1DInterp(
             xin[0], dxp, fp, bc_type='natural')
@@ -41,7 +41,7 @@ class TestMathtools(object):
         ytrue = CubicSpline(
             xin, fp, bc_type='not-a-knot', extrapolate=True)(xarr)
 
-        npt.assert_allclose(yarr, ytrue, rtol=1e-4)
+        npt.assert_allclose(yarr, ytrue)
 
     def test_mypoly1d(self):
         coefs = np.array([5.5, 1.5, 0.7])
