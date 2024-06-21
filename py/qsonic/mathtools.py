@@ -105,30 +105,34 @@ def _spline_cubic_notaknot(fp, dxp):
     """
     y2p = np.empty(fp.size)
     # Solve the submatrix 1:-1
-    A = np.empty((fp.size - 2, 3))
-    A[0, :] = np.array([0, 6, 0])
-    A[1:-1, :] = np.array([1., 4., 1.])
-    A[-1, :] = np.array([0, 6, 0])
+    u = np.empty(fp.size - 2)
+    u[0] = 6
+    u[1:-1] = 4
+    u[-1] = 6
 
     for i in range(1, fp.size - 1):
         y2p[i] = fp[i - 1] - 2 * fp[i] + fp[i + 1]
 
-    for i in range(1, A.shape[0]):
-        p = A[i, 0] / A[i - 1, 1]
-        A[i, 1] -= p * A[i - 1, 2]
+    p = 1.0 / u[0]
+    y2p[2] -= p * y2p[1]
+    for i in range(2, u.size - 1):
+        p = 1.0 / u[i - 1]
+        u[i] -= p
         y2p[i + 1] -= p * y2p[i]
 
-    y2p[-2] /= A[-1, 1]
-    for i in range(A.shape[0] - 2, -1, -1):
-        y2p[i + 1] = (y2p[i + 1] - A[i, 2] * y2p[i + 2]) / A[i, 1]
+    y2p[-2] /= u[-1]
+    for i in range(u.size - 2, 0, -1):
+        y2p[i + 1] = (y2p[i + 1] - y2p[i + 2]) / u[i]
 
+    y2p[1] /= u[0]
     y2p[0] = 2 * y2p[1] - y2p[2]
     y2p[-1] = 2 * y2p[-2] - y2p[-3]
     y2p *= 6.0 / dxp**2
+
     return y2p
 
 
-@njit("f8[:](f8[:], f8[:])")
+@njit("f8[:](f8[:], f8[:] )")
 def mypoly1d(coef, x):
     """ My simple power series polynomial calculator.
 
