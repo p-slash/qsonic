@@ -128,9 +128,9 @@ def _spline_cubic_notaknot(fp, dxp):
     for i in range(1, N - 1):
         y2p[i] = fp[i - 1] - 2 * fp[i] + fp[i + 1]
 
-    for i in range(1, min(N - 3, p.size)):
+    for i in range(1, min(N - 3, p.size + 1)):
         y2p[i + 1] -= p[i - 1] * y2p[i]
-    for i in range(p.size, N - 3):
+    for i in range(p.size + 1, N - 3):
         y2p[i + 1] -= p[-1] * y2p[i]
 
     y2p[-2] /= u[0]
