@@ -147,7 +147,7 @@ def _spline_cubic_notaknot(fp, dxp):
     return y2p
 
 
-@njit("f8[:](f8[:], f8[:] )")
+@njit("f8[:](f8[:], f8[:])")
 def mypoly1d(coef, x):
     """ My simple power series polynomial calculator.
 
