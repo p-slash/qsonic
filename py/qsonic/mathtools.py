@@ -44,8 +44,9 @@ def _fast_eval_interp1d_cubic(x, xp0, dxp, fp, y2p):
 
 
 @njit("f8[:](f8[:], f8)")
-def _spline_cubic(fp, dxp):
-    """ Constructs the second derivative array.
+def _spline_cubic_natural(fp, dxp):
+    """ Constructs the second derivative array with natural boundary
+    conditions.
 
     As coded in Numerical Recipes in C Chaper 3.3, but specialized for equally
     spaced input data.
@@ -77,6 +78,71 @@ def _spline_cubic(fp, dxp):
 
     for ii in range(fp.size - 2, 0, -1):
         y2p[ii] = y2p[ii] * y2p[ii + 1] + u[ii]
+
+    return y2p
+
+
+@njit("f8[:](f8[:], f8)")
+def _spline_cubic_notaknot(fp, dxp):
+    """Constructs the second derivative array with not-a-knot boundary
+    conditions:
+
+    .. math::
+
+        y''_0 - 2 y''_1 + y''_2 = 0
+
+    Arguments
+    ---------
+    fp: ndarray
+        1D data points array to interpolate.
+    dxp: float
+        Spacing of x points.
+
+    Returns
+    -------
+    y2p: ndarray
+        Second derivative array. Same size as ``fp``.
+    """
+    N = fp.size
+    y2p = np.empty(N)
+    # Solve the submatrix 1:-1 using precalculated u and p values
+    u = np.array([
+        6.000000000000000000e+00, 4.000000000000000000e+00,
+        3.750000000000000000e+00, 3.733333333333333393e+00,
+        3.732142857142857206e+00, 3.732057416267942518e+00,
+        3.732051282051282115e+00, 3.732050841635176752e+00,
+        3.732050810014727382e+00, 3.732050807744481613e+00,
+        3.732050807581485330e+00, 3.732050807569782691e+00,
+        3.732050807568942474e+00, 3.732050807568882078e+00,
+        3.732050807568877637e+00, 3.732050807568877193e+00])
+    p = np.array([
+        1.666666666666666574e-01, 2.500000000000000000e-01,
+        2.666666666666666630e-01, 2.678571428571428492e-01,
+        2.679425837320574266e-01, 2.679487179487179405e-01,
+        2.679491583648230812e-01, 2.679491899852724512e-01,
+        2.679491922555185535e-01, 2.679491924185148921e-01,
+        2.679491924302174755e-01, 2.679491924310576922e-01,
+        2.679491924311180329e-01, 2.679491924311223627e-01,
+        2.679491924311226958e-01])
+
+    for i in range(1, N - 1):
+        y2p[i] = fp[i - 1] - 2 * fp[i] + fp[i + 1]
+
+    for i in range(1, min(N - 3, p.size + 1)):
+        y2p[i + 1] -= p[i - 1] * y2p[i]
+    for i in range(p.size + 1, N - 3):
+        y2p[i + 1] -= p[-1] * y2p[i]
+
+    y2p[-2] /= u[0]
+    for i in range(N - 4, u.size - 1, -1):
+        y2p[i + 1] = (y2p[i + 1] - y2p[i + 2]) / u[-1]
+    for i in range(min(N - 4, u.size - 1), 0, -1):
+        y2p[i + 1] = (y2p[i + 1] - y2p[i + 2]) / u[i]
+
+    y2p[1] /= u[0]
+    y2p[0] = 2 * y2p[1] - y2p[2]
+    y2p[-1] = 2 * y2p[-2] - y2p[-3]
+    y2p *= 6.0 / dxp**2
 
     return y2p
 
@@ -309,9 +375,11 @@ class FastLinear1DInterp():
 
 class FastCubic1DInterp():
     """ Fast cubic spline for equally spaced data. Out of domain points
-    are linearly extrapolated without producing any warnings or errors.
+    are extrapolated without producing any warnings or errors.
 
-    Uses :func:`_spline_cubic` and :func:`_fast_eval_interp1d_cubic`.
+    This class supports natural, not-a-knot boundary conditions. Uses
+    :func:`_spline_cubic_natural`, :func:`_spline_cubic_notaknot`, and
+    :func:`_fast_eval_interp1d_cubic`.
 
     Parameters
     ----------
@@ -325,16 +393,29 @@ class FastCubic1DInterp():
         Copy input data, specifically fp.
     ep: :external+numpy:py:class:`ndarray <numpy.ndarray>`, optional
         Error on fp points. Not used! Bookkeeping purposes only.
+    bc_type: str, default: 'not-a-knot'
+        Boundary condition type. Other option is 'natural'. See
+        :external+scipy:py:class:`scipy.interpolate.CubicSpline`.
     """
 
-    def __init__(self, xp0, dxp, fp, copy=False, ep=None):
+    def __init__(
+            self, xp0, dxp, fp, copy=False, ep=None, bc_type='not-a-knot'
+    ):
         self.xp0 = float(xp0)
         self.dxp = float(dxp)
         if copy:
             self.fp = fp.copy()
         else:
             self.fp = fp
-        self._y2p = _spline_cubic(fp, dxp)
+        self._bc_type = bc_type
+
+        if self._bc_type == 'not-a-knot':
+            self._y2p = _spline_cubic_notaknot(fp, dxp)
+        elif self._bc_type == 'natural':
+            self._y2p = _spline_cubic_natural(fp, dxp)
+        else:
+            raise Exception("Unknown bc_type in FastCubic1DInterp.")
+
         self.ep = ep
 
     def __call__(self, x):
@@ -349,7 +430,10 @@ class FastCubic1DInterp():
 
         self.ep = ep
 
-        self._y2p = _spline_cubic(fp, self.dxp)
+        if self._bc_type == 'not-a-knot':
+            self._y2p = _spline_cubic_notaknot(fp, self.dxp)
+        elif self._bc_type == 'natural':
+            self._y2p = _spline_cubic_natural(fp, self.dxp)
 
 
 class SubsampleCov():
