@@ -220,8 +220,8 @@ class Spectrum():
         for arm, wave_arm in self.wave.items():
             self.flux[arm] = flux[arm][idx].copy()
             self.ivar[arm] = ivar[arm][idx].copy()
-            w = (mask[arm][idx] != 0) | np.isnan(self.flux[arm])\
-                | np.isnan(self.ivar[arm])
+            w = (mask[arm][idx] != 0) | np.isnan(self.flux[arm]) \
+                | np.isnan(self.ivar[arm]) | (self.ivar[arm] < 0)
             self.flux[arm][w] = 0
             self.ivar[arm][w] = 0
 
