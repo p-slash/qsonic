@@ -127,8 +127,11 @@ class Spectrum():
         min_wave = np.min([wave[0] for wave in Spectrum._wave.values()])
         max_wave = np.max([wave[-1] for wave in Spectrum._wave.values()])
 
-        nwaves = int((max_wave - min_wave) / Spectrum._dwave + 0.1) + 1
-        coadd_wave = np.linspace(min_wave, max_wave, nwaves)
+        # Z arm in mocks are shifted by 0.4 A, so we need these extra steps
+        # to make sure dwave is preseved.
+        nwaves = round((max_wave - min_wave) / Spectrum._dwave + 0.1)
+        coadd_wave = np.linspace(
+            min_wave, min_wave + nwaves * Spectrum._dwave, nwaves + 1)
         Spectrum._coadd_wave = {'brz': coadd_wave}
 
     @staticmethod
