@@ -67,7 +67,7 @@ def read_dirs_to_dict(directories, nproc):
     with Pool(processes=nproc) as pool:
         deltas = pool.map(qsonic.io.read_deltas, fnames)
 
-    logging.info(f"Coadding deltas.")
+    logging.info("Coadding deltas.")
     forest_dict = {}
     for onelist in deltas:
         for delta in onelist:
@@ -108,7 +108,7 @@ def main():
 
     forest_dict = read_dirs_to_dict(args.input_dirs, args.nproc)
 
-    logging.info(f"Grouping into healpixels.")
+    logging.info("Grouping into healpixels.")
     forest_by_hpx = defaultdict(list)
     for targetid, delta in forest_dict.items():
         hpx = healpy.ang2pix(
