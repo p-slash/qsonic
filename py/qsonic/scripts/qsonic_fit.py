@@ -422,11 +422,24 @@ def mpi_read_exposures_after(spectra_list, maskers, args, comm, mpi_rank):
                 spec.drop_arm(arm)
                 continue
 
-            j1 = int((wave_arm[0] - wave_coadd[arm][0]) / spec.dwave + 0.1)
-            j2 = wave_coadd[arm].size - int(
-                (wave_coadd[arm][-1] - wave_arm[-1]) / spec.dwave + 0.1)
+            i1, i2 = 0, wave_arm.size
+            j1 = int(round((wave_arm[0] - wave_coadd[arm][0]) / spec.dwave))
+            if j1 < 0:
+                i1 = -j1
+                j1 = 0
+
+            j2 = int(round((wave_coadd[arm][-1] - wave_arm[-1]) / spec.dwave))
+            if j2 < 0:
+                i2 += j2
+                j2 = 0
+            j2 = wave_coadd[arm].size - j2
+            spec.slice(arm, i1, i2)
+
             spec.cont_params['cont'][arm] = \
                 spec_coadd.cont_params['cont'][arm][j1:j2].copy()
+
+            if spec.forestwave[arm].size != spec.cont_params['cont'][arm].size:
+                spec.cont_params['valid'] = False
 
     etime = (time.time() - start_time) / 60  # min
     logging.info(
