@@ -282,6 +282,23 @@ class Spectrum():
 
         self.cont_params['x'][0] /= cont_params_weight
 
+    def slice(self, arm, i1, i2):
+        if i1 == 0 and i2 == self._forestwave[arm].size:
+            return
+
+        self._forestwave[arm] = self._forestwave[arm][i1:i2]
+        self._forestflux[arm] = self._forestflux[arm][i1:i2]
+        self._forestivar[arm] = self._forestivar[arm][i1:i2]
+        self._forestivar_sm[arm] = self._forestivar_sm[arm][i1:i2]
+        self._forestweight[arm] = self._forestweight[arm][i1:i2]
+
+        if arm in self._forestreso:
+            self._forestreso[arm] = self._forestreso[arm][:, i1:i2]
+
+        if arm in self.cont_params['cont']:
+            self.cont_params['cont'][arm] = \
+                self.cont_params['cont'][arm][i1:i2]
+
     def set_forest_region(self, w1, w2, lya1, lya2):
         """ Sets slices for the forest region. Masks outliers in each arm
         separately based on moving median statistics
