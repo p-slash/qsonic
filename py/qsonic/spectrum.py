@@ -127,8 +127,11 @@ class Spectrum():
         min_wave = np.min([wave[0] for wave in Spectrum._wave.values()])
         max_wave = np.max([wave[-1] for wave in Spectrum._wave.values()])
 
-        nwaves = int((max_wave - min_wave) / Spectrum._dwave + 0.1) + 1
-        coadd_wave = np.linspace(min_wave, max_wave, nwaves)
+        # Z arm in mocks are shifted by 0.4 A, so we need these extra steps
+        # to make sure dwave is preseved.
+        nwaves = round((max_wave - min_wave) / Spectrum._dwave + 0.1)
+        coadd_wave = np.linspace(
+            min_wave, min_wave + nwaves * Spectrum._dwave, nwaves + 1)
         Spectrum._coadd_wave = {'brz': coadd_wave}
 
     @staticmethod
@@ -220,8 +223,8 @@ class Spectrum():
         for arm, wave_arm in self.wave.items():
             self.flux[arm] = flux[arm][idx].copy()
             self.ivar[arm] = ivar[arm][idx].copy()
-            w = (mask[arm][idx] != 0) | np.isnan(self.flux[arm])\
-                | np.isnan(self.ivar[arm])
+            w = (mask[arm][idx] != 0) | np.isnan(self.flux[arm]) \
+                | np.isnan(self.ivar[arm]) | (self.ivar[arm] < 0)
             self.flux[arm][w] = 0
             self.ivar[arm][w] = 0
 
@@ -281,6 +284,23 @@ class Spectrum():
             self.mean_snr[arm] = np.dot(np.sqrt(ivar_arm), flux_arm) / armpix
 
         self.cont_params['x'][0] /= cont_params_weight
+
+    def slice(self, arm, i1, i2):
+        if i1 == 0 and i2 == self._forestwave[arm].size:
+            return
+
+        self._forestwave[arm] = self._forestwave[arm][i1:i2]
+        self._forestflux[arm] = self._forestflux[arm][i1:i2]
+        self._forestivar[arm] = self._forestivar[arm][i1:i2]
+        self._forestivar_sm[arm] = self._forestivar_sm[arm][i1:i2]
+        self._forestweight[arm] = self._forestweight[arm][i1:i2]
+
+        if arm in self._forestreso:
+            self._forestreso[arm] = self._forestreso[arm][:, i1:i2]
+
+        if arm in self.cont_params['cont']:
+            self.cont_params['cont'][arm] = \
+                self.cont_params['cont'][arm][i1:i2]
 
     def set_forest_region(self, w1, w2, lya1, lya2):
         """ Sets slices for the forest region. Masks outliers in each arm
