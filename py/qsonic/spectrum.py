@@ -2,8 +2,7 @@ import argparse
 
 import numpy as np
 
-from qsonic.mathtools import (
-    _zero_function, _one_function, get_smooth_ivar, get_median_outlier_mask)
+from qsonic.mathtools import _zero_function, _one_function, get_smooth_ivar
 
 
 def add_wave_region_parser(parser=None):
@@ -303,11 +302,11 @@ class Spectrum():
                 self.cont_params['cont'][arm][i1:i2]
 
     def set_forest_region(self, w1, w2, lya1, lya2):
-        """ Sets slices for the forest region. Masks outliers in each arm
-        separately based on moving median statistics
-        (see :func:`qsonic.mathtools.get_median_outlier_mask`). Also calculates
+        """ Sets slices for the forest region. Also calculates
         the mean SNR in the forest and an initial guess for the continuum
-        amplitude.
+        amplitude. This is currently turned off, but it can mask outliers in
+        each arm separately based on moving median statistics
+        (see :func:`qsonic.mathtools.get_median_outlier_mask`).
 
         Arguments
         ---------
@@ -336,11 +335,6 @@ class Spectrum():
             self._forestivar[arm] = self.ivar[arm][ii1:ii2].copy()
             if self.reso:
                 self._forestreso[arm] = self.reso[arm][:, ii1:ii2].copy()
-
-            w = get_median_outlier_mask(
-                self._forestflux[arm], self._forestivar[arm])
-            self._forestflux[arm][w] = 0
-            self._forestivar[arm][w] = 0
 
         self._forestivar_sm = self._forestivar
         self._forestweight = self._forestivar
