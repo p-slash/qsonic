@@ -611,8 +611,10 @@ class Spectrum():
         min_wave = np.min([wave[0] for wave in self.forestwave.values()])
         max_wave = np.max([wave[-1] for wave in self.forestwave.values()])
 
-        nwaves = int((max_wave - min_wave) / self.dwave + 0.1) + 1
-        coadd_wave = np.linspace(min_wave, max_wave, nwaves)
+        nwaves = round((max_wave - min_wave) / self.dwave + 0.1)
+        coadd_wave = np.linspace(
+            min_wave, min_wave + nwaves * self.dwave, nwaves + 1)
+        nwaves += 1
         coadd_flux = np.zeros(nwaves)
         coadd_ivar = np.zeros(nwaves)
         coadd_norm = np.zeros(nwaves)
