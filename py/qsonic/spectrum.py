@@ -605,10 +605,11 @@ class Spectrum():
         min_wave = np.min([wave[0] for wave in self.forestwave.values()])
         max_wave = np.max([wave[-1] for wave in self.forestwave.values()])
 
-        nwaves = round((max_wave - min_wave) / self.dwave + 0.1)
-        coadd_wave = np.linspace(
-            min_wave, min_wave + nwaves * self.dwave, nwaves + 1)
-        nwaves += 1
+        # nwaves = round((max_wave - min_wave) / self.dwave) + 1
+        # coadd_wave = np.linspace(
+        #     min_wave, min_wave + (nwaves - 1) * self.dwave, nwaves)
+        nwaves = int((max_wave - min_wave) / self.dwave + 0.1) + 1
+        coadd_wave = np.linspace(min_wave, max_wave, nwaves)
         coadd_flux = np.zeros(nwaves)
         coadd_ivar = np.zeros(nwaves)
         coadd_norm = np.zeros(nwaves)
@@ -649,7 +650,7 @@ class Spectrum():
             max_ndia = np.max(
                 [reso.shape[0] for reso in self.forestreso.values()])
             coadd_reso = np.zeros((max_ndia, nwaves))
-            coadd_norm *= 0
+            coadd_norm.fill(0)
 
             for arm, reso_arm in self.forestreso.items():
                 weight = self.forestweight[arm].copy()
