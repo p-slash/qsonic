@@ -16,7 +16,7 @@ def _find_append_continuum(
     for spec in specs:
         idx = np.nonzero(common_targetids == spec.targetid)[0]
         if idx.size == 0:
-            return
+            continue
 
         idx = idx[0]
         spec.cont_params['valid'] = True
