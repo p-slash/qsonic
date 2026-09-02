@@ -47,6 +47,7 @@ class PiccaContinuumModel(BaseContinuumModel):
         self.cont_order = cont_order
         self.rfwave0 = rfwave0
         self.denom = denom
+        self.minimizer_name = minimizer
 
         if minimizer == "iminuit":
             self.minimizer = self._iminuit_minimizer
@@ -124,16 +125,20 @@ class PiccaContinuumModel(BaseContinuumModel):
         return cont
 
     def _iminuit_minimizer(self, spec, a0):
-        def _cost(x):
+        def _cost(*x):
             return self._continuum_costfn(
-                x, spec.forestwave, spec.forestflux, spec.forestivar_sm,
+                np.asarray(x), spec.forestwave, spec.forestflux,
+                spec.forestivar_sm,
                 spec.z_qso)
 
         x0 = np.zeros_like(spec.cont_params['x'])
         x0[0] = a0
-        mini = Minuit(_cost, x0)
+        mini = Minuit(_cost, *x0)
         mini.errordef = Minuit.LEAST_SQUARES
         mini.migrad()
+
+        if not mini.valid:
+            return self._scipy_l_bfgs_b_minimizer(spec, a0)
 
         result = {}
 
@@ -222,10 +227,12 @@ class PiccaContinuumModel(BaseContinuumModel):
 
             return a0 / n0
 
-        result = self.minimizer(spec, get_a0())
-        spec.cont_params['valid'] = result['valid']
+        def _set_fit_result(result):
+            spec.cont_params['valid'] = result['valid']
 
-        if spec.cont_params['valid']:
+            if not spec.cont_params['valid']:
+                return
+
             spec.cont_params['cont'] = {}
             for arm, wave_arm in spec.forestwave.items():
                 cont_est = self.get_continuum_model(
@@ -238,6 +245,14 @@ class PiccaContinuumModel(BaseContinuumModel):
                 cont_est *= self.meanflux_interp(wave_arm)
                 # cont_est *= self.flux_stacker(wave_arm)
                 spec.cont_params['cont'][arm] = cont_est
+
+        a0 = get_a0()
+        result = self.minimizer(spec, a0)
+        _set_fit_result(result)
+
+        if (self.minimizer_name == "iminuit" and not spec.cont_params['valid']):
+            result = self._scipy_l_bfgs_b_minimizer(spec, a0)
+            _set_fit_result(result)
 
         spec.set_forest_weight(self.varlss_interp, self.eta_interp)
         # We can further eliminate spectra based chi2
