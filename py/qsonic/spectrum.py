@@ -157,8 +157,10 @@ class Spectrum():
             Spectrum._blinding = "desi_m2"
         elif maxlastnight < 20220801:
             Spectrum._blinding = "desi_y1"
-        else:
+        elif maxlastnight < 20240410:
             Spectrum._blinding = "desi_y3"
+        else:
+            Spectrum._blinding = "desi_dr3"
 
         if Spectrum._blinding != "none":
             Spectrum._fits_colnames[1] = 'DELTA_BLIND'
