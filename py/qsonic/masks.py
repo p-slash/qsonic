@@ -45,6 +45,10 @@ def add_mask_parser(parser=None):
     mask_group.add_argument(
         "--dla-mask",
         help="DLA catalog to mask.")
+    mask_group.add_argument(
+        "--dla-dont-mask-metals",
+        action="store_true",
+        help="Do not mask metals associated with DLAs.")
 
     return parser
 
@@ -467,9 +471,10 @@ class DLAMask():
 
     def __init__(
             self, fname, local_targetids=None, comm=None, mpi_rank=0,
-            dla_mask_limit=0.8
+            dla_mask_limit=0.8, no_mask_associated_metals=False
     ):
         self.dla_mask_limit = dla_mask_limit
+        self.mask_associated_metals = not no_mask_associated_metals
 
         catalog = mpi_fnc_bcast(
             DLAMask._read_catalog, comm, mpi_rank,
@@ -504,7 +509,8 @@ class DLAMask():
         for arm, wave_arm in spec.forestwave.items():
             transmission = DLAMask.get_all_dlas(spec.z_qso, wave_arm, spec_dlas)
             w = transmission < self.dla_mask_limit
-            DLAMask.mask_associated_metals(wave_arm, spec_dlas, w)
+            if self.mask_associated_metals:
+                DLAMask.mask_associated_metals(wave_arm, spec_dlas, w)
             transmission[w] = 1
 
             spec.forestivar[arm][w] = 0
