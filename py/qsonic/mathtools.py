@@ -18,7 +18,7 @@ def _one_function(x):
 def _fast_eval_interp1d_lin(x, xp0, dxp, fp):
     """JIT fast linear interpolation."""
     xx = (x - xp0) / dxp
-    idx = np.clip(xx, 0, fp.size - 1 - 1e-8).astype(np.int_)
+    idx = np.clip(xx, 0, fp.size - 1 - 1e-8).astype(np.int64)
 
     d_idx = xx - idx
     y1, y2 = fp[idx], fp[idx + 1]
@@ -30,7 +30,7 @@ def _fast_eval_interp1d_lin(x, xp0, dxp, fp):
 def _fast_eval_interp1d_cubic(x, xp0, dxp, fp, y2p):
     """JIT fast cubic spline."""
     xx = (x - xp0) / dxp
-    idx = np.clip(xx, 0, fp.size - 1 - 1e-8).astype(np.int_)
+    idx = np.clip(xx, 0, fp.size - 1 - 1e-8).astype(np.int64)
 
     d_idx = xx - idx
     a, b = 1 - d_idx, d_idx
@@ -609,7 +609,7 @@ class SubsampleCov():
 
     def _get_block_covariance(self, x, blockdim):
         nblock = self.ndata // blockdim
-        cov = np.empty((nblock, blockdim, blockdim), dtype=np.float_)
+        cov = np.empty((nblock, blockdim, blockdim), dtype=np.float64)
         for kk in range(nblock):
             y = x[:, kk * blockdim:(kk + 1) * blockdim]
             cov[kk] = (y.T @ y) * (self.nsamples - 1) / self.nsamples
