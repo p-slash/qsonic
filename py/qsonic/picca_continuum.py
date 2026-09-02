@@ -683,7 +683,7 @@ class PiccaContinuumFitter():
 
 @njit("f8[:, :](i8[:], f8[:], f8[:], i8)")
 def _fast_weighted_vector_bincount(x, delta, var, minlength):
-    xvec = np.zeros((4, minlength), dtype=np.float_)
+    xvec = np.zeros((4, minlength), dtype=np.float64)
     y = delta**2
     y2 = y**2
 
