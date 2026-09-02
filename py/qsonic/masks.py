@@ -243,6 +243,43 @@ class DLAMask():
     accepted_zcolnames = ["Z_DLA", "Z"]
     """list(str): Column names for the DLA redshift."""
 
+    metals_dict = {
+        "OVI(1032)": 1031.91,
+        "CII(1037)": 1036.79,
+        "OVI(1038)": 1037.61,
+        "OI(1039)": 1039.23,
+        "SIV(1063)": 1062.66,
+        "FeII(1063)": 1063.02,
+        "FeII(1082)": 1081.87,
+        "NII(1084)": 1083.99,
+        "FeII(1097)": 1096.88,
+        "NI(1134)": 1134.41,
+        "FeII(1143)": 1143.23,
+        "FeII(1145)": 1144.94,
+        "SiII(1193)": 1193.28,
+        "SiII(1190)": 1190.42,
+        "NI(1200)": 1200.00,
+        "SiIII(1207)": 1206.52,
+        "SII(1251)": 1250.584,
+        "SII(1254)": 1253.811,
+        "SiII(1260)": 1260.42,
+        "OI(1302)": 1302.17,
+        "SiII(1304)": 1304.37,
+        "NiII(1317)": 1317.217,
+        "CII(1335)" : 1334.5323,
+        "SiIV(1394)": 1393.76,
+        "SiIV(1403)": 1402.77,
+        "SiII(1527)": 1526.71,
+        "CIV(1548)": 1548.20,
+        "CIV(1551)": 1550.77,
+    }
+    metal_lines = np.array(list(metals_dict.values()))
+    metal_dArf = 2.0
+    """float: Rest-frame wavelength range for metal lines in A."""
+    metal_lines_range = np.array([
+        metal_lines - metal_dArf, metal_lines + metal_dArf
+    ])
+
     @staticmethod
     def H_tepper_garcia(a, u):
         """ Tepper-Garcia H function.
@@ -351,11 +388,13 @@ class DLAMask():
         return np.exp(-tau)
 
     @staticmethod
-    def get_all_dlas(wave, spec_dlas):
+    def get_all_dlas(z_qso, wave, spec_dlas):
         """Normalized flux from all DLAs in a sightline.
 
         Arguments
         ---------
+        z_qso: float
+            QSO redshift.
         wave: :external+numpy:py:class:`ndarray <numpy.ndarray>`
             Wavelength array in A.
         spec_dlas: :external+numpy:py:class:`ndarray <numpy.ndarray>`
@@ -370,7 +409,22 @@ class DLAMask():
         for z_dla, nhi in spec_dlas[['Z_DLA', 'NHI']]:
             transmission *= DLAMask.get_dla_flux(wave, z_dla, nhi)
 
+        # Turn off DLA correction for l_rf > l_lya
+        transmission[np.searchsorted(
+            wave, (1.0 + z_qso) * DLAMask.wave_lya_A):
+        ] = 1
+
         return transmission
+
+    @staticmethod
+    def mask_associated_metals(wave, spec_dlas, mask_inplace):
+        for z_dla in spec_dlas['Z_DLA']:
+            mask_idx_ranges = np.searchsorted(
+                wave, (1.0 + z_dla) * DLAMask.metal_lines_range
+            ).T
+
+            for idx1, idx2 in mask_idx_ranges:
+                mask_inplace[idx1:idx2] = 1
 
     @staticmethod
     def _read_catalog(fname):
@@ -448,12 +502,9 @@ class DLAMask():
         idx = w[0]
         spec_dlas = self.split_catalog[idx]
         for arm, wave_arm in spec.forestwave.items():
-            transmission = DLAMask.get_all_dlas(wave_arm, spec_dlas)
-            # Turn off DLA correction for l_rf > l_lya
-            transmission[np.searchsorted(
-                wave_arm, (1 + spec.z_qso) * DLAMask.wave_lya_A):
-            ] = 1
+            transmission = DLAMask.get_all_dlas(spec.z_qso, wave_arm, spec_dlas)
             w = transmission < self.dla_mask_limit
+            DLAMask.mask_associated_metals(wave_arm, spec_dlas, w)
             transmission[w] = 1
 
             spec.forestivar[arm][w] = 0
