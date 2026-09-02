@@ -124,14 +124,14 @@ class PiccaContinuumModel(BaseContinuumModel):
         return cont
 
     def _iminuit_minimizer(self, spec, a0):
-        def _cost(x):
+        def _cost(*x):
             return self._continuum_costfn(
-                x, spec.forestwave, spec.forestflux, spec.forestivar_sm,
-                spec.z_qso)
+                np.asarray(x), spec.forestwave, spec.forestflux,
+                spec.forestivar_sm, spec.z_qso)
 
         x0 = np.zeros_like(spec.cont_params['x'])
         x0[0] = a0
-        mini = Minuit(_cost, x0)
+        mini = Minuit(_cost, *x0)
         mini.errordef = Minuit.LEAST_SQUARES
         mini.migrad()
 

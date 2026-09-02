@@ -290,7 +290,7 @@ def _read(filename):
     catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog. No checks are performed.
     """
-    logging.info(f'Reading catalogue from {filename}')
+    logging.info(f'Reading catalog from {filename}')
     fitsfile = fitsio.FITS(filename)
     extnames = [hdu.get_extname() for hdu in fitsfile]
     cat_hdu = _accepted_extnames.intersection(extnames)
@@ -374,7 +374,7 @@ def _prime_catalog(
     else:
         sort_order = ["HPXPIXEL", 'TARGETID']
 
-    # Filter all the objects in the catalogue not belonging to the specified
+    # Filter all the objects in the catalog not belonging to the specified
     # surveys.
     if 'SURVEY' in colnames and keep_surveys is not None:
         w = np.isin(catalog["SURVEY"], keep_surveys)
@@ -385,7 +385,7 @@ def _prime_catalog(
             f"There are {w.sum()} quasars in given surveys {keep_surveys}.")
 
     if catalog.size == 0:
-        raise Exception("Empty quasar catalogue.")
+        raise Exception("Empty quasar catalog.")
 
     catalog = _add_healpix(catalog, n_side, colnames)
     catalog.sort(order=sort_order)
