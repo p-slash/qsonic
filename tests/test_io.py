@@ -136,7 +136,7 @@ def my_setup_fits(tmp_path, setup_data):
 
     # return sorted data truth
     # Sort the generated catalog first.
-    sort_idx = np.argsort(cat_by_survey, order="TARGETID")
+    sort_idx = np.argsort(cat_by_survey, order="TARGETID", stable=True)
     cat_by_survey = cat_by_survey[sort_idx]
     for key in ['flux', 'ivar', 'mask']:
         for arm in xarms:
@@ -154,7 +154,7 @@ def my_setup_fits_spectra(tmp_path, setup_data):
     cat_by_survey['HPXPIXEL'] = pixnum
     cat_by_survey['TARGETID'][:3] = cat_by_survey['TARGETID'][0]
     cat_by_survey['TARGETID'][3:] = cat_by_survey['TARGETID'][3]
-    cat_by_survey['EXPID'][:3] = np.arange(3)
+    cat_by_survey['EXPID'][:3] = 11 + np.arange(3)
     cat_by_survey['EXPID'][3:] = np.arange(2)
     xarms = data['wave'].keys()
 
@@ -179,7 +179,7 @@ def my_setup_fits_spectra(tmp_path, setup_data):
 
     # return sorted data truth
     # Sort the generated catalog first.
-    sort_idx = np.argsort(cat_by_survey, order="TARGETID")
+    sort_idx = np.argsort(cat_by_survey, order="TARGETID", stable=True)
     cat_by_survey = cat_by_survey[sort_idx]
     for key in ['flux', 'ivar', 'mask']:
         for arm in xarms:

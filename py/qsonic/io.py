@@ -404,7 +404,7 @@ def _read_onehealpix_file(
 
     idx_fbr = np.nonzero(np.isin(fbrmap['TARGETID'], targetids_by_survey))[0]
     targetids_fbr = fbrmap['TARGETID'][idx_fbr]
-    idx_fbr = idx_fbr[targetids_fbr.argsort()]
+    idx_fbr = idx_fbr[targetids_fbr.argsort(stable=True)]
 
     data = {
         'wave': {},

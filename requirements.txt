@@ -1,8 +1,8 @@
-numpy~=1.26.0
-numba~=0.58.1
-scipy~=1.12.0
-astropy~=6.0.0
-healpy~=1.16.0
-fitsio~=1.4.0
-iminuit~=2.18.0
+numpy>=2.0.0
+numba>=0.60.0
+scipy>=1.13.0
+astropy>=7.0.0
+healpy>=1.18.1
+fitsio>=1.2.7
+iminuit>=2.26.0
 mpi4py
