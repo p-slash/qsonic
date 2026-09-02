@@ -3,6 +3,6 @@ numba~=0.58.1
 scipy~=1.12.0
 astropy~=6.0.0
 healpy~=1.16.0
-fitsio~=1.1.9
+fitsio~=1.4.0
 iminuit~=2.18.0
 mpi4py
