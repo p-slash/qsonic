@@ -213,7 +213,8 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
         # Read catalog
         dlamasker = qsonic.masks.DLAMask(
             args.dla_mask, local_targetids, comm, mpi_rank,
-            dla_mask_limit=0.8)
+            dla_mask_limit=0.8,
+            no_mask_associated_metals=args.dla_dont_mask_metals)
 
         maskers.append(dlamasker)
 
