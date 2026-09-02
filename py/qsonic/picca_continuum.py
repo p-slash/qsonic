@@ -1099,8 +1099,12 @@ class VarLSSFitter():
                     f"{self.waveobs[iwave]:.2f}. "
                     f"Reason: {e}. Extrapolating.")
             else:
-                fit_results[iwave] = pfit
-                std_results[iwave] = np.sqrt(np.diag(pcov))
+                if initial_guess.ndim == 1:
+                    fit_results[iwave] = pfit[0]
+                    std_results[iwave] = np.sqrt(pcov[0, 0])
+                else:
+                    fit_results[iwave] = pfit
+                    std_results[iwave] = np.sqrt(np.diag(pcov))
 
         invalid_ratio = nfails / fit_results.shape[0]
         if invalid_ratio > 0.4:
