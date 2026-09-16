@@ -249,7 +249,7 @@ class DLAMask():
 
     metals_dict = {
         "OVI(1032)": 1031.91,
-        # "CII(1037)": 1036.79,
+        "CII(1037)": 1036.79,
         "OVI(1038)": 1037.61,
         "OI(1039)": 1039.23,
         "SIV(1063)": 1062.66,
@@ -278,7 +278,7 @@ class DLAMask():
         "CIV(1551)": 1550.77,
     }
     metal_lines = np.array(list(metals_dict.values()))
-    metal_dArf = 2.0
+    metal_dArf = 1.5
     """float: Rest-frame wavelength range for metal lines in A."""
     metal_lines_range = np.array([
         metal_lines - metal_dArf, metal_lines + metal_dArf
