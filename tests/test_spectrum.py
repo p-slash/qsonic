@@ -97,16 +97,17 @@ class TestSpectrum(object):
 
         dforest_wave = 1180. - 1050.
         skip_ratio = 0.5
+        skip_min_pixels = 0
 
         spec = spectra_list[0]
-        assert (not spec.is_long(dforest_wave, skip_ratio))
+        assert (not spec.is_long(dforest_wave, skip_ratio, skip_min_pixels))
 
         spec.set_forest_region(3600., 6000., 1000., 2000.)
-        assert (spec.is_long(dforest_wave, skip_ratio))
+        assert (spec.is_long(dforest_wave, skip_ratio, skip_min_pixels))
 
         spec._forestivar = {}
         spec.set_forest_region(3600., 6000., 1120., 1130.)
-        assert (not spec.is_long(dforest_wave, skip_ratio))
+        assert (not spec.is_long(dforest_wave, skip_ratio, skip_min_pixels))
 
     def test_coadd_arms_forest(self, setup_data):
         cat_by_survey, _, data = setup_data(1)
