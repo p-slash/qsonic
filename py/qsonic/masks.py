@@ -270,7 +270,7 @@ class DLAMask():
         "OI(1302)": 1302.17,
         "SiII(1304)": 1304.37,
         # "NiII(1317)": 1317.217,
-        "CII(1335)" : 1334.5323,
+        "CII(1335)": 1334.5323,
         "SiIV(1394)": 1393.76,
         "SiIV(1403)": 1402.77,
         "SiII(1527)": 1526.71,
@@ -507,7 +507,8 @@ class DLAMask():
         idx = w[0]
         spec_dlas = self.split_catalog[idx]
         for arm, wave_arm in spec.forestwave.items():
-            transmission = DLAMask.get_all_dlas(spec.z_qso, wave_arm, spec_dlas)
+            transmission = DLAMask.get_all_dlas(
+                spec.z_qso, wave_arm, spec_dlas)
             w = transmission < self.dla_mask_limit
             if self.mask_associated_metals:
                 DLAMask.mask_associated_metals(wave_arm, spec_dlas, w)
