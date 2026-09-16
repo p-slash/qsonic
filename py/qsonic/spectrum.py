@@ -415,7 +415,7 @@ class Spectrum():
 
         return msnr_eff / norm
 
-    def is_long(self, dforest_wave, skip_ratio):
+    def is_long(self, dforest_wave, skip_ratio, skip_min_pixels):
         """Determine if spectrum is long enough to be accepted.
 
         The condition is :meth:`get_real_size` > ``skip_ratio * npixels``,
@@ -431,13 +431,17 @@ class Spectrum():
         skip_ratio: float
             Minimum ratio that needs to be present and unmasked to keep the
             spectrum.
+        skip_min_pixels: int
+            Minimum number of pixels that need to be present and unmasked to
+            keep the spectrum.
 
         Returns
         -------
         bool
         """
-        npixels = (1 + self.z_qso) * dforest_wave / self.dwave
-        return self.get_real_size() > skip_ratio * npixels
+        npixels = skip_ratio * (1 + self.z_qso) * dforest_wave / self.dwave
+        realsize = self.get_real_size()
+        return realsize >= npixels and realsize >= skip_min_pixels
 
     def set_smooth_forestivar(self, smoothing_size=16.):
         """ Set :attr:`forestivar_sm` to smoothed inverse variance. Before this

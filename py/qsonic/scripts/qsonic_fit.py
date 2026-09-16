@@ -49,6 +49,9 @@ def get_parser(add_help=True):
     analysis_group.add_argument(
         "--skip", type=qsonic.io._float_range(0, 1), default=0.2,
         help="Skip short spectra lower than given ratio.")
+    analysis_group.add_argument(
+        "--skip-min-pixels", type=int, default=50,
+        help="Skip short spectra with less than given number of pixels.")
 
     parser = qsonic.spectrum.add_wave_region_parser(parser)
     parser = qsonic.masks.add_mask_parser(parser)
@@ -253,14 +256,16 @@ def apply_masks(maskers, spectra_list, mpi_rank=0):
     logging.info(f"Masks are applied in {etime:.1f} mins.")
 
 
-def remove_short_spectra(spectra_list, lya1, lya2, skip_ratio):
-    if not skip_ratio:
+
+def remove_short_spectra(
+        spectra_list, dforest_wave, skip_ratio, skip_min_pixels
+):
+    if (skip_ratio <= 0) and (skip_min_pixels <= 0):
         return spectra_list
 
     logging.info("Removing short spectra.")
-    dforest_wave = lya2 - lya1
     spectra_list = [spec for spec in spectra_list
-                    if spec.is_long(dforest_wave, skip_ratio)]
+                    if spec.is_long(dforest_wave, skip_ratio, skip_min_pixels)]
 
     return spectra_list
 
@@ -304,7 +309,8 @@ def mpi_read_calibrate_mask_select_spectra(
 
     # remove from sample if the number of pixels is small
     spectra_list = remove_short_spectra(
-        spectra_list, args.forest_w1, args.forest_w2, args.skip)
+        spectra_list, args.forest_w2 - args.forest_w1,
+        args.skip, args.skip_min_pixels)
 
     # Remove spectra with respect to forest snr
     spectra_list = [spec for spec in spectra_list
