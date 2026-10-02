@@ -81,6 +81,11 @@ def add_picca_continuum_parser(parser=None):
         "--rfdwave", type=float, default=0.8,
         help="Rest-frame wave steps. Complies with forest limits")
     cont_group.add_argument(
+        "--stack-dA", help="Delta A for stacking.", default=0.8)
+    cont_group.add_argument(
+        "--eta-varlss", type=float, default=1.0,
+        help="Fudge scaling of the varlss contribution only used at the end.")
+    cont_group.add_argument(
         "--minimizer", default="iminuit", choices=["iminuit", "l_bfgs_b"],
         help="Minimizer to fit the continuum.")
 
@@ -123,13 +128,15 @@ class PiccaContinuumFitter():
     meanflux_interp: FastLinear1DInterp
         Interpolator for mean flux. If fiducial is not set, this equals to 1.
     flux_stacker: FluxStacker
-        Stacks flux. Set up with 8 A wavelength bin size.
+        Stacks flux. Set up with args.stack_dA wavelength bin size.
     varlss_fitter: VarLSSFitter or None
         None if fiducials are set for var_lss.
     varlss_interp: FastLinear1DInterp or FastCubic1DInterp
         Cubic spline for var_lss if fitting. Linear if from file.
     eta_interp: FastCubic1DInterp
         Interpolator for eta. Returns one if fiducial var_lss is set.
+    eta_varlss: float
+        Fudge scaling of the varlss contribution.
     niterations: int
         Number of iterations from ``args.num_iterations``.
     cont_order: int
@@ -254,6 +261,7 @@ class PiccaContinuumFitter():
         self.fit_eta = args.var_fit_eta
         self.normalize_stacked_flux = args.normalize_stacked_flux
         self.eta_calib_ivar = args.eta_calib_ivar
+        self.eta_varlss = args.eta_varlss
 
         # We first decide how many bins will approximately satisfy
         # rest-frame wavelength spacing. Then we create wavelength edges, and
@@ -270,7 +278,8 @@ class PiccaContinuumFitter():
             ep=np.zeros(self.nbins))
 
         self.flux_stacker = FluxStacker(
-            args.wave1, args.wave2, 8., self.rfwave, self.dwrf, comm=self.comm)
+            args.wave1, args.wave2, args.stack_dA, self.rfwave, self.dwrf,
+            comm=self.comm)
 
         self._set_meanflux_varlss_interps(args)
 
@@ -481,6 +490,24 @@ class PiccaContinuumFitter():
 
         logging.info(text)
 
+    def _recalculate_weights_and_stacked_flux(self, spectra_list):
+        """Recalculates weights and stacked flux.
+
+        Arguments
+        ---------
+        spectra_list: list(Spectrum)
+            Spectrum objects.
+        """
+        self.flux_stacker.reset()
+        for spec in valid_spectra(spectra_list):
+            spec.set_forest_weight(self.varlss_interp, self.eta_interp,
+                                   self.eta_varlss)
+        
+        self.model.stack_spectra(
+            valid_spectra(spectra_list), self.flux_stacker)
+
+        self.flux_stacker.calculate()
+
     def _normalize_flux(self, spectra_list):
         """Multiplies continuum estimates with stacked values in order to
         normalize flux in the observed grid to be 1 if
@@ -569,6 +596,7 @@ class PiccaContinuumFitter():
         if not has_converged:
             logging.warning("Iteration has NOT converged.")
 
+        self._recalculate_weights_and_stacked_flux(spectra_list)
         self._normalize_flux(spectra_list)
         self._eta_calibate_ivar(spectra_list)
 
@@ -618,6 +646,14 @@ class PiccaContinuumFitter():
              self.flux_stacker.std_flux_rf],
             names=['lambda_rf', 'stacked_flux_rf', 'e_stacked_flux_rf'],
             extname=f'STACKED_FLUX_RF{suff}')
+
+        if suff == '':
+            fattr.write(
+                [np.log10(self.flux_stacker.waveobs),
+                 self.flux_stacker.stacked_flux,
+                 self.flux_stacker.weights],
+                names=['LOGLAM', 'STACK', 'WEIGHT'],
+                extname=f'STACK_DELTAS')
 
         if self.varlss_fitter is None:
             return
