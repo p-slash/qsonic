@@ -471,7 +471,8 @@ class Spectrum():
         self._forestweight = self._forestivar_sm
 
     def set_forest_weight(
-            self, varlss_interp=_zero_function, eta_interp=_one_function
+            self, varlss_interp=_zero_function, eta_interp=_one_function,
+            eta_varlss=1.0
     ):
         """ Sets :attr:`forestweight` for a given var_lss and eta correction.
         Always uses :attr:`forestivar_sm`, which is not actually smoothed if
@@ -489,6 +490,8 @@ class Spectrum():
             LSS variance interpolator.
         eta_interp: Callable[[ndarray], ndarray], default: 1
             eta interpolator.
+        eta_varlss: float, default: 1.0
+            Fudge scaling of the varlss contribution.
         """
         if not self.cont_params['valid'] or not self.cont_params['cont']:
             self._forestweight = self._forestivar_sm
@@ -497,7 +500,7 @@ class Spectrum():
         self._forestweight = {}
         for arm, wave_arm in self.forestwave.items():
             cont_est = self.cont_params['cont'][arm]
-            var_lss = varlss_interp(wave_arm) * cont_est**2
+            var_lss = eta_varlss * varlss_interp(wave_arm) * cont_est**2
             eta = eta_interp(wave_arm)
             ivar_arm = self.forestivar_sm[arm]
             self._forestweight[arm] = ivar_arm / (eta + ivar_arm * var_lss)
