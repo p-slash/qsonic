@@ -1320,7 +1320,7 @@ class FluxStacker():
         if dwobs is None:
             if Spectrum._coadd_wave is None:
                 Spectrum._set_coadd_wave()
-            waveobs = Spectrum._set_coadd_wave['brz']
+            waveobs = Spectrum._coadd_wave['brz']
             i1, i2 = np.searchsorted(waveobs, [w1obs - 0.1, w2obs + 0.1])
             self.waveobs = waveobs[i1:i2]
             self.dwobs = self.waveobs[1] - self.waveobs[0]
