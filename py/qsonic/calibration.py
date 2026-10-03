@@ -38,6 +38,13 @@ def add_calibration_parser(parser=None):
 
     return parser
 
+def _read_lambda(data):
+    if 'LAMBDA' in data.dtype.names:
+        return data['LAMBDA']
+    elif 'LOGLAM' in data.dtype.names:
+        return 10**data['LOGLAM']
+    else:
+        return data['lambda']
 
 class NoiseCalibrator():
     """ Noise calibration object.
@@ -47,8 +54,8 @@ class NoiseCalibrator():
     where i is IVAR.
 
     FITS file must have 'VAR_FUNC' extension. This extension must have columns
-    for 'lambda' and 'eta'. Wavelength array must be linearly and equally
-    spaced. Uses cubic spline.
+    for 'LAMBDA' or 'LOGLAM' and 'ETA'. Wavelength array must be linearly and
+    equally spaced. Uses cubic spline.
 
     Parameters
     ----------
@@ -71,8 +78,8 @@ class NoiseCalibrator():
     def _read(self, fname):
         with fitsio.FITS(fname) as fts:
             data = fts['VAR_FUNC'].read()
-
-        waves = data['lambda']
+    
+        waves = _read_lambda(data)
         waves_0 = waves[0]
         dwave = waves[1] - waves[0]
 
@@ -81,10 +88,10 @@ class NoiseCalibrator():
                 "Failed to construct noise calibration from "
                 f"{fname}::wave is not equally spaced.")
 
-        var_lss = np.array(data['var_lss'], dtype='d')
+        var_lss = np.array(data['VAR_LSS'], dtype='d')
         varlss_interp = FastCubic1DInterp(waves_0, dwave, var_lss)
 
-        eta = np.array(data['eta'], dtype='d')
+        eta = np.array(data['ETA'], dtype='d')
         eta[eta == 0] = 1
         eta_interp = FastCubic1DInterp(waves_0, dwave, eta)
 
@@ -145,9 +152,10 @@ class FluxCalibrator():
 
     where i is IVAR and s is the stacked flux.
 
-    FITS file must have 'STACKED_FLUX' extension. This extension must have
-    columns for 'lambda' and 'stacked_flux'. Wavelength array must be linearly
-    and equally spaced. Uses linear interpolation.
+    FITS file must have 'STACKED_FLUX' or 'STACK_DELTAS' extension. This
+    extension must have columns for 'LAMBDA' or 'LOGLAM' and 'STACKED_FLUX' or
+    'STACK'. Wavelength array must be linearly and equally spaced. Uses linear
+    interpolation.
 
     Parameters
     ----------
@@ -164,9 +172,15 @@ class FluxCalibrator():
 
     def _read(self, fname):
         with fitsio.FITS(fname) as fts:
-            data = fts['STACKED_FLUX'].read()
+            if 'STACKED_FLUX' in fts:
+                data = fts['STACKED_FLUX'].read()
+            elif 'STACK_DELTAS' in fts:
+                data = fts['STACK_DELTAS'].read()
+            else:
+                raise Exception(
+                    f"Failed to read STACKED_FLUX from {fname}.")
 
-        waves = data['lambda']
+        waves = _read_lambda(data)
         waves_0 = waves[0]
         dwave = waves[1] - waves[0]
 
@@ -175,7 +189,14 @@ class FluxCalibrator():
                 "Failed to construct flux calibration from "
                 f"{fname}::wave is not equally spaced.")
 
-        stacked_flux = np.array(data['stacked_flux'], dtype='d')
+        if 'STACKED_FLUX' in data.dtype.names:
+            stacked_flux = np.array(data['STACKED_FLUX'], dtype='d')
+        elif 'STACK' in data.dtype.names:
+            stacked_flux = np.array(data['STACK'], dtype='d')
+        else:
+            raise Exception(
+                f"Failed to read stacked flux from {fname}.")
+
         stacked_flux[stacked_flux == 0] = 1
 
         return FastLinear1DInterp(waves_0, dwave, stacked_flux)

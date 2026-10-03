@@ -638,18 +638,18 @@ class PiccaContinuumFitter():
         """
         fattr.write(
             [self.rfwave, self.meancont_interp.fp, self.meancont_interp.ep],
-            names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
+            names=['LAMBDA_RF', 'MEAN_CONT', 'E_MEAN_CONT'],
             extname=f'CONT{suff}')
 
         fattr.write(
             [self.flux_stacker.waveobs, self.flux_stacker.stacked_flux],
-            names=['lambda', 'stacked_flux'],
+            names=['LAMBDA', 'STACKED_FLUX'],
             extname=f'STACKED_FLUX{suff}')
 
         fattr.write(
             [self.rfwave, self.flux_stacker.stacked_flux_rf,
              self.flux_stacker.std_flux_rf],
-            names=['lambda_rf', 'stacked_flux_rf', 'e_stacked_flux_rf'],
+            names=['LAMBDA_RF', 'STACKED_FLUX_RF', 'E_STACKED_FLUX_RF'],
             extname=f'STACKED_FLUX_RF{suff}')
 
         if suff == '':
@@ -667,7 +667,7 @@ class PiccaContinuumFitter():
             [self.varlss_fitter.waveobs,
              self.varlss_interp.fp, self.varlss_interp.ep,
              self.eta_interp.fp, self.eta_interp.ep],
-            names=['lambda', 'var_lss', 'e_var_lss', 'eta', 'e_eta'],
+            names=['LAMBDA', 'VAR_LSS', 'E_VAR_LSS', 'ETA', 'E_ETA'],
             extname=f'VAR_FUNC{suff}')
 
     def save_contchi2_catalog(self, spectra_list):
