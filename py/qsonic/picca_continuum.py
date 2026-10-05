@@ -658,7 +658,12 @@ class PiccaContinuumFitter():
                  self.flux_stacker.stacked_flux,
                  self.flux_stacker.weights],
                 names=['LOGLAM', 'STACK', 'WEIGHT'],
-                extname=f'STACK_DELTAS')
+                header={'FITORDER': self.cont_order},
+                extname='STACK_DELTAS')
+            fattr.write(
+                [], names=[],
+                header={'FITORDER': self.cont_order},
+                extname='FIT_METADATA')
 
         if self.varlss_fitter is None:
             return
