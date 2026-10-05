@@ -17,14 +17,14 @@ def my_setup_attributes(tmp_path):
         stacked_flux = 5. * np.ones(wavelength.size)
         fts.write(
             [wavelength, stacked_flux],
-            names=['lambda', 'stacked_flux'],
+            names=['LAMBDA', 'STACKED_FLUX'],
             extname='STACKED_FLUX')
 
         wavelength = np.linspace(3600, 9800, 50)
         ones_array = np.ones(wavelength.size)
         fts.write(
             [wavelength, ones_array, ones_array, ones_array * 2, ones_array],
-            names=['lambda', 'var_lss', 'e_var_lss', 'eta', 'e_eta'],
+            names=['LAMBDA', 'VAR_LSS', 'E_VAR_LSS', 'ETA', 'E_ETA'],
             extname='VAR_FUNC')
 
     yield fname
