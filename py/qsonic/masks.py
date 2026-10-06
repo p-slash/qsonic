@@ -213,13 +213,13 @@ class BALMask():
             catalog = catalog[w]
             catalog.sort(order='TARGETID')
 
-            # Group BAL catalog into targetids
-            self.unique_targetids, s = np.unique(
-                catalog['TARGETID'], return_index=True)
-            self.split_catalog = np.split(catalog, s[1:])
+            # Check BAL catalog for duplicate targetids
+            unique_targetids = np.unique(catalog['TARGETID'])
+            if len(unique_targetids) != catalog.size:
+                raise KeyError("BAL catalog has duplicate TARGETIDs.")
+            self.catalog = catalog
         else:
-            self.unique_targetids = None
-            self.split_catalog = None
+            self.catalog = None
             BALMask.check_catalog(local_queue[0])
 
     def apply(self, spec):
@@ -231,13 +231,13 @@ class BALMask():
         spec: Spectrum
             Spectrum object to mask.
         """
-        if self.unique_targetids is None:
+        if self.catalog is None:
             balrow = spec.catrow
         else:
-            w = np.nonzero(self.unique_targetids == spec.targetid)[0]
+            w = np.nonzero(self.catalog['TARGETID'] == spec.targetid)[0]
             if w.size == 0:
                 return
-            balrow = self.split_catalog[w[0]]
+            balrow = self.catalog[w[0]]
 
         min_velocities = np.concatenate(
             (balrow['VMIN_CIV_450'], balrow['VMIN_CIV_2000']))
