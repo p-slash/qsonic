@@ -201,11 +201,11 @@ def mpi_read_masks(local_queue, args, comm, mpi_rank):
         maskers.append(skymasker)
 
     # BAL mask
-    if args.bal_mask:
-        logging.info("Checking BAL mask.")
-        qsonic.masks.BALMask.check_catalog(local_queue[0])
-
-        maskers.append(qsonic.masks.BALMask)
+    if args.bal_mask or args.bal_mask_catalog:
+        logging.info("Setting up BAL mask.")
+        balmasker = qsonic.masks.BALMask(local_queue, args.bal_mask_catalog,
+                                         comm, mpi_rank)
+        maskers.append(balmasker)
 
     # DLA mask
     if args.dla_mask:

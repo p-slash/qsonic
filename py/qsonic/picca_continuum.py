@@ -12,7 +12,7 @@ from scipy.special import legendre
 from mpi4py import MPI
 
 from qsonic import QsonicException
-from qsonic.spectrum import valid_spectra
+from qsonic.spectrum import Spectrum, valid_spectra
 from qsonic.mpi_utils import mpi_fnc_bcast, MPISaver
 from qsonic.mathtools import (
     block_covariance_of_square,
@@ -81,6 +81,11 @@ def add_picca_continuum_parser(parser=None):
         "--rfdwave", type=float, default=0.8,
         help="Rest-frame wave steps. Complies with forest limits")
     cont_group.add_argument(
+        "--stack-dA", help="Delta A for stacking.", default=None)
+    cont_group.add_argument(
+        "--eta-varlss", type=float, default=1.0,
+        help="Fudge scaling of the varlss contribution only used at the end.")
+    cont_group.add_argument(
         "--minimizer", default="iminuit", choices=["iminuit", "l_bfgs_b"],
         help="Minimizer to fit the continuum.")
 
@@ -123,13 +128,15 @@ class PiccaContinuumFitter():
     meanflux_interp: FastLinear1DInterp
         Interpolator for mean flux. If fiducial is not set, this equals to 1.
     flux_stacker: FluxStacker
-        Stacks flux. Set up with 8 A wavelength bin size.
+        Stacks flux. Set up with args.stack_dA wavelength bin size.
     varlss_fitter: VarLSSFitter or None
         None if fiducials are set for var_lss.
     varlss_interp: FastLinear1DInterp or FastCubic1DInterp
         Cubic spline for var_lss if fitting. Linear if from file.
     eta_interp: FastCubic1DInterp
         Interpolator for eta. Returns one if fiducial var_lss is set.
+    eta_varlss: float
+        Fudge scaling of the varlss contribution.
     niterations: int
         Number of iterations from ``args.num_iterations``.
     cont_order: int
@@ -254,6 +261,7 @@ class PiccaContinuumFitter():
         self.fit_eta = args.var_fit_eta
         self.normalize_stacked_flux = args.normalize_stacked_flux
         self.eta_calib_ivar = args.eta_calib_ivar
+        self.eta_varlss = args.eta_varlss
 
         # We first decide how many bins will approximately satisfy
         # rest-frame wavelength spacing. Then we create wavelength edges, and
@@ -270,7 +278,8 @@ class PiccaContinuumFitter():
             ep=np.zeros(self.nbins))
 
         self.flux_stacker = FluxStacker(
-            args.wave1, args.wave2, 8., self.rfwave, self.dwrf, comm=self.comm)
+            args.wave1, args.wave2, args.stack_dA, self.rfwave, self.dwrf,
+            comm=self.comm)
 
         self._set_meanflux_varlss_interps(args)
 
@@ -481,6 +490,29 @@ class PiccaContinuumFitter():
 
         logging.info(text)
 
+    def _recalculate_weights_and_stacked_flux(self, spectra_list):
+        """Recalculates weights and stacked flux if eta_varlss is not 1.0.
+
+        Arguments
+        ---------
+        spectra_list: list(Spectrum)
+            Spectrum objects.
+        """
+        if np.isclose(self.eta_varlss, 1.0):
+            return
+        logging.info("Recalculating weights and stacked flux using "
+                     f"eta_varlss={self.eta_varlss}.")
+
+        self.flux_stacker.reset()
+        for spec in valid_spectra(spectra_list):
+            spec.set_forest_weight(self.varlss_interp, self.eta_interp,
+                                   self.eta_varlss)
+        
+        self.model.stack_spectra(
+            valid_spectra(spectra_list), self.flux_stacker)
+
+        self.flux_stacker.calculate()
+
     def _normalize_flux(self, spectra_list):
         """Multiplies continuum estimates with stacked values in order to
         normalize flux in the observed grid to be 1 if
@@ -569,6 +601,7 @@ class PiccaContinuumFitter():
         if not has_converged:
             logging.warning("Iteration has NOT converged.")
 
+        self._recalculate_weights_and_stacked_flux(spectra_list)
         self._normalize_flux(spectra_list)
         self._eta_calibate_ivar(spectra_list)
 
@@ -605,19 +638,32 @@ class PiccaContinuumFitter():
         """
         fattr.write(
             [self.rfwave, self.meancont_interp.fp, self.meancont_interp.ep],
-            names=['lambda_rf', 'mean_cont', 'e_mean_cont'],
+            names=['LAMBDA_RF', 'MEAN_CONT', 'E_MEAN_CONT'],
             extname=f'CONT{suff}')
 
         fattr.write(
             [self.flux_stacker.waveobs, self.flux_stacker.stacked_flux],
-            names=['lambda', 'stacked_flux'],
+            names=['LAMBDA', 'STACKED_FLUX'],
             extname=f'STACKED_FLUX{suff}')
 
         fattr.write(
             [self.rfwave, self.flux_stacker.stacked_flux_rf,
              self.flux_stacker.std_flux_rf],
-            names=['lambda_rf', 'stacked_flux_rf', 'e_stacked_flux_rf'],
+            names=['LAMBDA_RF', 'STACKED_FLUX_RF', 'E_STACKED_FLUX_RF'],
             extname=f'STACKED_FLUX_RF{suff}')
+
+        if suff == '':
+            fattr.write(
+                [np.log10(self.flux_stacker.waveobs),
+                 self.flux_stacker.stacked_flux,
+                 self.flux_stacker.weights],
+                names=['LOGLAM', 'STACK', 'WEIGHT'],
+                header={'FITORDER': self.cont_order},
+                extname='STACK_DELTAS')
+            fattr.write(
+                [], names=[],
+                header={'FITORDER': self.cont_order},
+                extname='FIT_METADATA')
 
         if self.varlss_fitter is None:
             return
@@ -626,7 +672,7 @@ class PiccaContinuumFitter():
             [self.varlss_fitter.waveobs,
              self.varlss_interp.fp, self.varlss_interp.ep,
              self.eta_interp.fp, self.eta_interp.ep],
-            names=['lambda', 'var_lss', 'e_var_lss', 'eta', 'e_eta'],
+            names=['LAMBDA', 'VAR_LSS', 'E_VAR_LSS', 'ETA', 'E_ETA'],
             extname=f'VAR_FUNC{suff}')
 
     def save_contchi2_catalog(self, spectra_list):
@@ -1274,13 +1320,23 @@ class FluxStacker():
     """
 
     def __init__(self, w1obs, w2obs, dwobs, waverf, dwrf, comm=None):
-        # Set up wavelength and inverse variance bins
-        self.nwbins = int(round((w2obs - w1obs) / dwobs))
-        wave_edges, self.dwobs = np.linspace(
-            w1obs, w2obs, self.nwbins + 1, retstep=True)
-        self.waveobs = (wave_edges[1:] + wave_edges[:-1]) / 2
-
         self.comm = comm
+
+        if dwobs is None:
+            if Spectrum._coadd_wave is None:
+                Spectrum._set_coadd_wave()
+            waveobs = Spectrum._coadd_wave['brz']
+            i1, i2 = np.searchsorted(waveobs, [w1obs - 0.1, w2obs + 0.1])
+            self.waveobs = waveobs[i1:i2]
+            self.dwobs = self.waveobs[1] - self.waveobs[0]
+            self.nwbins = self.waveobs.size
+            assert np.isclose(Spectrum._dwave, self.dwobs)
+        else:
+            # Set up wavelength and inverse variance bins
+            self.nwbins = int(round((w2obs - w1obs) / dwobs))
+            wave_edges, self.dwobs = np.linspace(
+                w1obs, w2obs, self.nwbins + 1, retstep=True)
+            self.waveobs = (wave_edges[1:] + wave_edges[:-1]) / 2
 
         self._interp = FastLinear1DInterp(
             self.waveobs[0], self.dwobs,

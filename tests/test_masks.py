@@ -1,6 +1,8 @@
 import os
 import pytest
 
+import fitsio
+import numpy as np
 import numpy.testing as npt
 
 import qsonic.masks
@@ -35,6 +37,36 @@ def test_skymask(tmp_path, setup_data):
         w |= (wave_arm >= 1142 * (1 + z_qso)) & (wave_arm < 1150 * (1 + z_qso))
         npt.assert_equal(spec.forestivar[arm][w], 0)
         npt.assert_equal(spec.forestivar[arm][~w], 1)
+
+
+def test_balmask_setup_filters_and_attaches_catalog(tmp_path, setup_data):
+    cat_by_survey, _, data = setup_data(3)
+    spectra_list = qsonic.spectrum.generate_spectra_list_from_data(
+        cat_by_survey, data)
+
+    bal_dtype = [
+        ('TARGETID', 'i8'),
+        ('VMIN_CIV_450', 'f8', 3),
+        ('VMAX_CIV_450', 'f8', 3),
+        ('VMIN_CIV_2000', 'f8', 2),
+        ('VMAX_CIV_2000', 'f8', 2)
+    ]
+    catalog = np.array([
+        (0, [20., 30., 40.], [25., 35., 45.], [200., 300.], [300., 400.]),
+        (0, [25., 35., 45.], [400., 500., 550.], [400., 500.], [500., 600.]),
+        (0, [10., 15., 20.], [100., 150., 200.], [100., 150.], [150., 200.]),
+        (0, [25., 35., 45.], [250., 350., 450.], [250., 350.], [350., 450.])
+    ], dtype=bal_dtype)
+    catalog['TARGETID'][:3] = cat_by_survey['TARGETID']
+    catalog['TARGETID'][3] = 333
+    fnamebal = tmp_path / "bal_catalog.fits"
+    with fitsio.FITS(fnamebal, 'rw', clobber=True) as fts:
+        fts.write(catalog, extname='ZCATALOG')
+
+    balmask = qsonic.masks.BALMask([cat_by_survey], fname=fnamebal)
+    for spec in spectra_list:
+        balmask.apply(spec)
+    os.remove(fnamebal)
 
 
 if __name__ == '__main__':
