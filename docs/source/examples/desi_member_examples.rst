@@ -1,6 +1,10 @@
 Examples for DESI members
 =========================
 
+Picca to QSOnic translator
+------------------------------
+QSOnic comes with a picca ini file translator script called ``picca2qsonic``. Usage: ``picca2qsonic <picca_ini_file> -o submit-qsonic.sh``. This will translate the picca ini file to a SLURM script that can be submitted or run on an interactive node. It should be treated as a starting point for your own SLURM script, and you may need to modify it to suit your needs.
+
 Following examples use unpublished data and for DESI members only. Set ``OUTPUT_FOLDER`` to your own destination in all examples.
 
 Y1 no syst. mocks
