@@ -23,6 +23,10 @@ QSOnic
 
 **QSOnic** is an MPI-parallelized, highly optimized quasar continuum fitting package for DESI built on the same algorithm as `picca <https://github.com/igmhub/picca>`_, but *faster*. It also provides an efficient API to read DESI quasar spectra. If you use this software, please cite the article in the Journal of Open Source Software (JOSS).
 
+Picca to QSOnic translator
+------------------------------
+QSOnic comes with a picca ini file translator script called ``picca2qsonic``. Usage: ``picca2qsonic <picca_ini_file> -o submit-qsonic.sh``. This will translate the picca ini file to a SLURM script that can be submitted or run on an interactive node. It should be treated as a starting point for your own SLURM script, and you may need to modify it to suit your needs.
+
 The key differences
 -------------------
 - You can use any desired input continuum from another continuum prediction method as input continuum model.
