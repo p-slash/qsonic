@@ -144,14 +144,23 @@ def convert_picca_ini_to_qsonic(ini_path, out_path=None, **overrides):
         else:
             notes.append(f"correction '{ctype}' not translated")
 
-    if cfg.getboolean("expected flux", "force stack delta to zero", fallback=False):
+    ef_type = get("expected flux", "type")
+    is_dr16 = bool(ef_type) and ef_type.startswith("Dr16")
+    if ef_type == "TrueContinuum":
+        if mock:
+            lines.append("--true-continuum")
+        else:
+            notes.append("expected flux type 'TrueContinuum' requires mock data "
+                         "(--true-continuum needs --mock-analysis); not translated")
+    # picca's Dr16* expected flux stacks to zero unless told otherwise
+    if cfg.getboolean("expected flux", "force stack delta to zero", fallback=is_dr16):
         lines.append("--normalize-stacked-flux")
 
     if opt["fiducial_meanflux"]:
         lines.append(f"--fiducial-meanflux {opt['fiducial_meanflux']}")
 
-    if get("expected flux", "type") not in (None, "Dr16FixedFudgeExpectedFlux"):
-        notes.append(f"expected flux type '{get('expected flux', 'type')}' not translated")
+    if ef_type not in (None, "TrueContinuum") and not is_dr16:
+        notes.append(f"expected flux type '{ef_type}' not translated")
     for section in ("general", "data", "expected flux"):
         for key in cfg.options(section) if cfg.has_section(section) else []:
             if (section, key) not in IGNORED and not _is_used(section, key):
