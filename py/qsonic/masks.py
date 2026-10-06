@@ -1,5 +1,6 @@
 """ Masking module with classes for sky, BAL and DLA."""
 import argparse
+import warnings
 
 from astropy.io.ascii import read as asread
 import numpy as np
@@ -7,6 +8,7 @@ from numpy.lib.recfunctions import rename_fields
 import fitsio
 
 from qsonic import QsonicException
+from qsonic.catalog import _accepted_extnames, _check_required_columns
 from qsonic.mpi_utils import mpi_fnc_bcast
 
 
@@ -42,6 +44,9 @@ def add_mask_parser(parser=None):
     mask_group.add_argument(
         "--bal-mask", action="store_true",
         help="Mask BALs (assumes it is in catalog).")
+    mask_group.add_argument(
+        "--bal-mask-catalog", default=None,
+        help="BAL catalog to mask to override the default.")
     mask_group.add_argument(
         "--dla-mask",
         help="DLA catalog to mask.")
@@ -112,8 +117,8 @@ class SkyMask():
 class BALMask():
     """ BAL masking object.
 
-    Does not need construction. Assumes BAL related columns are present in the
-    catalog.
+    If catalog filename is not provided, assumes BAL related columns are
+    present in the quasar catalog.
     """
     lines = np.array([
         ("lCIV", 1549),
@@ -139,25 +144,85 @@ class BALMask():
     wavelengths in A."""
 
     expected_columns = [
+        'TARGETID',
         'VMIN_CIV_450', 'VMAX_CIV_450',
         'VMIN_CIV_2000', 'VMAX_CIV_2000'
     ]
     """list(str): Columns needed in catalog to mask wavelength ranges."""
+    expected_extnames = _accepted_extnames | set(['BALCAT', 'BAL_CAT'])
+    """list(str): Expected extension names in the FITS file."""
 
     @staticmethod
-    def check_catalog(catalog):
-        """ Asserts if the required columns are present in the catalog.
+    def check_columns(column_names):
+        """ Asserts if the required columns are present in column_names.
 
         Arguments
         ----------
-        catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        column_names: list(str)
         """
-        if not all(col in catalog.dtype.names
-                   for col in BALMask.expected_columns):
-            raise QsonicException("Input catalog is missing BAL columns.")
+        try:
+            s = [set([_]) for _ in BALMask.expected_columns]
+            _check_required_columns(s, column_names)
+        except Exception as e:
+            raise QsonicException(
+                "Input catalog is missing BAL columns.") from e
 
     @staticmethod
-    def apply(spec):
+    def _read_catalog(fname):
+        """Read and return BAL catalog.
+
+        Should be run on master. If error occurs, returns None.
+
+        Arguments
+        ---------
+        fname: str
+            FITS filename to read.
+
+        Returns
+        -------
+        catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
+        """
+        fts = fitsio.FITS(fname)
+        extnames = [hdu.get_extname() for hdu in fts]
+        cat_hdu = _accepted_extnames.intersection(extnames)
+        if not cat_hdu:
+            cat_hdu = fts[1]
+            warnings.warn(
+                "BAL catalog HDU not found by hduname. Using extension 1.",
+                RuntimeWarning)
+        else:
+            cat_hdu = fts[cat_hdu.pop()]
+
+        BALMask.check_columns(cat_hdu.get_colnames())
+        catalog = cat_hdu.read(columns=BALMask.expected_columns)
+
+        fts.close()
+
+        return catalog
+
+    def __init__(self, local_queue, fname=None, comm=None, mpi_rank=0):
+        if fname:
+            catalog = mpi_fnc_bcast(
+                BALMask._read_catalog, comm, mpi_rank,
+                f"Error loading BALMask from file {fname}.",
+                fname)
+            local_targetids = np.concatenate(
+                [cat['TARGETID'] for cat in local_queue])
+
+            w = np.isin(catalog['TARGETID'], local_targetids)
+            catalog = catalog[w]
+            catalog.sort(order='TARGETID')
+
+            # Group BAL catalog into targetids
+            self.unique_targetids, s = np.unique(
+                catalog['TARGETID'], return_index=True)
+            self.split_catalog = np.split(catalog, s[1:])
+        else:
+            self.unique_targetids = None
+            self.split_catalog = None
+            BALMask.check_catalog(local_queue[0])
+
+    def apply(self, spec):
         """ Apply the mask by setting **only** ``spec.forestivar`` and
         ``spec.forestflux`` to zero.
 
@@ -166,10 +231,18 @@ class BALMask():
         spec: Spectrum
             Spectrum object to mask.
         """
+        if self.unique_targetids is None:
+            balrow = spec.catrow
+        else:
+            w = np.nonzero(self.unique_targetids == spec.targetid)[0]
+            if w.size == 0:
+                return
+            balrow = self.split_catalog[w[0]]
+
         min_velocities = np.concatenate(
-            (spec.catrow['VMIN_CIV_450'], spec.catrow['VMIN_CIV_2000']))
+            (balrow['VMIN_CIV_450'], balrow['VMIN_CIV_2000']))
         max_velocities = np.concatenate(
-            (spec.catrow['VMAX_CIV_450'], spec.catrow['VMAX_CIV_2000']))
+            (balrow['VMAX_CIV_450'], balrow['VMAX_CIV_2000']))
         w = (min_velocities > 0) & (max_velocities > 0)
         min_velocities = min_velocities[w]
         max_velocities = max_velocities[w]
