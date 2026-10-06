@@ -193,7 +193,7 @@ def _is_used(section, key):
     return (section, key) in _USED
 
 
-def main():
+def get_parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("ini")
     p.add_argument("-o", "--output", help="output .sh (default: stdout)")
@@ -201,7 +201,11 @@ def main():
     p.add_argument("--time")
     p.add_argument("--environment", help="shell line(s) to set up the environment")
     p.add_argument("--fiducial-meanflux", help="option to use Turner24 fiducial mean flux file", action="store_true")
-    a = p.parse_args()
+    return p
+
+
+def main():
+    a = get_parser().parse_args()
     ov = {k: v for k, v in (("job_name", a.job_name), ("time", a.time),
                  ("environment", a.environment), ("fiducial_meanflux", a.fiducial_meanflux)) if v}
     text = convert_picca_ini_to_qsonic(a.ini, a.output, **ov)
