@@ -40,7 +40,7 @@ _all_columns = [
 
 def read_quasar_catalog(
         filename, is_mock=False, is_tile=False, keep_surveys=None,
-        zmin=0, zmax=100.0
+        zmin=0, zmax=100.0, nside=None
 ):
     """ Returns a quasar catalog object (ndarray).
 
@@ -49,8 +49,9 @@ def read_quasar_catalog(
     2. SURVEY or PETAL_LOC (if applicable),
     3. TARGETID.
     BAL info included if available. It is required for BAL masking.
-    If 'HPXPIXEL' column is not present, n_side is assumed 16 for mocks, 64 for
-    data.
+    If 'HPXPIXEL' column is not present, nside is used to derive it.
+    If nside is None, it is assumed 16 for mocks, 64 for data.
+    If nside is not None, it is used to overwrite 'HPXPIXEL'.
 
     Arguments
     ----------
@@ -67,24 +68,29 @@ def read_quasar_catalog(
         Minimum quasar redshift
     zmax: float, default: 100
         Maximum quasar redshift
-
+    nside: int, default: None
+        Healpix nside. If None, it is assumed 16 for mocks, 64 for data.
+        If not None, it is used to overwrite 'HPXPIXEL'.
     Returns
     ----------
     catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Sorted catalog.
     """
-    n_side = 16 if is_mock else 64
+    overwrite_hpxpixel = nside is not None
+    if nside is None:
+        nside = 16 if is_mock else 64
     catalog = _read(filename)
     catalog = _validate_adjust_column_names(catalog, is_mock, is_tile)
     catalog = _prime_catalog(
-        catalog, n_side, keep_surveys, zmin, zmax, is_tile)
+        catalog, nside, keep_surveys, zmin, zmax, is_tile,
+        overwrite_hpxpixel)
 
     return catalog
 
 
 def mpi_read_quasar_catalog(
         filename, comm=None, mpi_rank=0, is_mock=False, is_tile=False,
-        keep_surveys=None, zmin=0, zmax=100
+        keep_surveys=None, zmin=0, zmax=100, nside=None
 ):
     """ Returns the same quasar catalog object on all MPI ranks.
 
@@ -111,6 +117,9 @@ def mpi_read_quasar_catalog(
         Minimum quasar redshift
     zmax: float, default: 100
         Maximum quasar redshift
+    nside: int, default: None
+        Healpix nside. If None, it is assumed 16 for mocks, 64 for data.
+        If not None, it is used to overwrite 'HPXPIXEL'.
 
     Returns
     ----------
@@ -125,14 +134,14 @@ def mpi_read_quasar_catalog(
     catalog = mpi_fnc_bcast(
         read_quasar_catalog,
         comm, mpi_rank, "Error while reading catalog.",
-        filename, is_mock, is_tile, keep_surveys, zmin, zmax)
+        filename, is_mock, is_tile, keep_surveys, zmin, zmax, nside)
 
     return catalog
 
 
 def mpi_get_local_queue(
         filename, comm=None, mpi_rank=0, mpi_size=1, is_mock=False,
-        is_tile=False, keep_surveys=None, zmin=0, zmax=100.0
+        is_tile=False, keep_surveys=None, zmin=0, zmax=100.0, nside=None
 ):
     """Reads catalog on master and scatter a list of catalogs to every
     mpi_rank. If in tile format, sort key is 'TILEID'.
@@ -158,6 +167,9 @@ def mpi_get_local_queue(
         Minimum quasar redshift
     zmax: float, default: 100
         Maximum quasar redshift
+    nside: int, default: None
+        Healpix nside. If None, it is assumed 16 for mocks, 64 for data.
+        If not None, it is used to overwrite 'HPXPIXEL'.
 
     Returns
     ----------
@@ -170,7 +182,7 @@ def mpi_get_local_queue(
     if mpi_rank == 0:
         try:
             catalog = read_quasar_catalog(
-                filename, is_mock, is_tile, keep_surveys, zmin, zmax)
+                filename, is_mock, is_tile, keep_surveys, zmin, zmax, nside)
             status = True
         except Exception as e:
             logging.exception(e)
@@ -310,34 +322,8 @@ def _read(filename):
     return catalog
 
 
-def _add_healpix(catalog, n_side, keep_columns):
-    """ Add 'HPXPIXEL' column to catalog if not present.
-
-    Arguments
-    ----------
-    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        Catalog.
-    n_side: int
-        Healpix nside.
-    keep_columns: list(str)
-        List of surveys to subselect.
-
-    Returns
-    ----------
-    catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
-        'HPXPIXEL' calculated and added catalog.
-    """
-    if 'HPXPIXEL' not in keep_columns:
-        pixnum = ang2pix(
-            n_side, catalog['RA'], catalog['DEC'], lonlat=True, nest=True)
-        catalog = append_fields(
-            catalog, 'HPXPIXEL', pixnum, dtypes=int, usemask=False)
-
-    return catalog
-
-
 def _prime_catalog(
-        catalog, n_side, keep_surveys, zmin, zmax, is_tile
+        catalog, nside, keep_surveys, zmin, zmax, is_tile, overwrite_hpxpixel
 ):
     """ Returns quasar catalog object. It is sorted in the following order:
     sort_key (HPXPIXEL), SURVEY (if applicable), TARGETID
@@ -346,7 +332,7 @@ def _prime_catalog(
     ----------
     catalog: :external+numpy:py:class:`ndarray <numpy.ndarray>`
         Catalog.
-    n_side: int
+    nside: int
         Healpix nside.
     keep_surveys: list(str)
         List of surveys to subselect.
@@ -356,6 +342,8 @@ def _prime_catalog(
         Maximum quasar redshift
     is_tile: bool
         If the catalog is for tiles. Sort oder will be TILEID, PETAL_LOC.
+    overwrite_hpxpixel: bool
+        If True, overwrite 'HPXPIXEL' column with the given nside.
 
     Returns
     ----------
@@ -387,7 +375,15 @@ def _prime_catalog(
     if catalog.size == 0:
         raise Exception("Empty quasar catalog.")
 
-    catalog = _add_healpix(catalog, n_side, colnames)
+    if 'HPXPIXEL' not in colnames or overwrite_hpxpixel:
+        pixnum = ang2pix(
+            nside, catalog['RA'], catalog['DEC'], lonlat=True, nest=True)
+        if 'HPXPIXEL' not in colnames:
+            catalog = append_fields(
+                catalog, 'HPXPIXEL', pixnum, dtypes=int, usemask=False)
+        else:
+            catalog['HPXPIXEL'] = pixnum
+
     catalog.sort(order=sort_order)
 
     return catalog
