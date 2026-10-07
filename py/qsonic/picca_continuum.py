@@ -11,6 +11,7 @@ from scipy.special import legendre
 
 from mpi4py import MPI
 
+import qsonic.utils
 from qsonic import QsonicException
 from qsonic.spectrum import Spectrum, valid_spectra
 from qsonic.mpi_utils import mpi_fnc_bcast, MPISaver
@@ -185,7 +186,7 @@ class PiccaContinuumFitter():
             with fitsio.FITS(fname) as fts:
                 data = fts['STATS'].read()
 
-            waves = data['LAMBDA']
+            waves = qsonic.utils.get_lambda(data)
             waves_0 = waves[0]
             dwave = waves[1] - waves[0]
             nsize = waves.size
@@ -195,7 +196,7 @@ class PiccaContinuumFitter():
                     "Failed to construct fiducial mean flux or varlss from "
                     f"{fname}::LAMBDA is not equally spaced.")
 
-            data = np.array(data[col2read], dtype='d')
+            data = qsonic.utils.get_data_case_insensitive(data, col2read)
 
             return FastLinear1DInterp(waves_0, dwave, data, ep=np.zeros(nsize))
 

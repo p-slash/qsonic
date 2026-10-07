@@ -16,6 +16,7 @@ Modules
    mpi_utils
    picca_continuum
    spectrum
+   utils
 
 Scripts
 -------

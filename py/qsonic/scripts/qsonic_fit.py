@@ -13,25 +13,10 @@ import qsonic.io
 import qsonic.spectrum
 import qsonic.masks
 from qsonic.mpi_utils import mpi_parse
+from qsonic.utils import float_range
 from qsonic.picca_continuum import (
     PiccaContinuumFitter, add_picca_continuum_parser)
 
-
-def float_range(f1, f2):
-    # Define the function with default arguments
-    def float_range_checker(arg):
-        """New Type function for argparse - a float within predefined range.
-        """
-        try:
-            f = float(arg)
-        except ValueError:
-            raise argparse.ArgumentTypeError("must be a floating point number")
-        if f < f1 or f > f2:
-            raise argparse.ArgumentTypeError(f"must be in range [{f1}--{f2}]")
-        return f
-
-    # Return function handle to checking function
-    return float_range_checker
 
 
 def get_parser(add_help=True):
