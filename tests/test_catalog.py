@@ -84,7 +84,7 @@ class TestCatalog(object):
             dtype=cat_dtype)
         catalog1 = qsonic.catalog._prime_catalog(
             input_catalog.copy(), nside, keep_surveys, zmin, zmax,
-            is_tile=False)
+            is_tile=False, overwrite_hpxpixel=False)
         npt.assert_array_equal(catalog1, expected_catalog)
 
         # Sort order HPXPIXEL, TARGETID
@@ -100,7 +100,7 @@ class TestCatalog(object):
             dtype=input_catalog.dtype)
         catalog1 = qsonic.catalog._prime_catalog(
             input_catalog.copy(), nside, keep_surveys, zmin, zmax,
-            is_tile=False)
+            is_tile=False, overwrite_hpxpixel=False)
         npt.assert_array_equal(catalog1, expected_catalog)
 
     @pytest.mark.skip(reason="needs update with new function.")

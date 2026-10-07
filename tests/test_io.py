@@ -9,6 +9,22 @@ import numpy.testing as npt
 import qsonic.io
 
 
+def test_find_nside_for_mock_file(tmp_path):
+    (tmp_path / "spectra-16-5.fits").touch()
+    (tmp_path / "spectra-16-15.fits").touch()
+    fname, nside = qsonic.io._find_nside_for_mock_file(
+        str(tmp_path), "spectra", 5)
+    assert fname.endswith("spectra-16-5.fits")
+    assert nside == 16
+
+    with pytest.raises(Exception):
+        qsonic.io._find_nside_for_mock_file(str(tmp_path), "truth", 5)
+
+    (tmp_path / "spectra-64-5.fits").touch()
+    with pytest.raises(Exception):
+        qsonic.io._find_nside_for_mock_file(str(tmp_path), "spectra", 5)
+
+
 class TestIOParsers(object):
     def test_add_io_parser(self):
         parser = argparse.ArgumentParser()
