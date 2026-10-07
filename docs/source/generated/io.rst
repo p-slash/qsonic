@@ -5,7 +5,7 @@
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: _float_range, _read_imagehdu, _read_resoimage, add_io_parser
+   :exclude-members: _read_imagehdu, _read_resoimage, add_io_parser
 
 Arguments
 ---------
