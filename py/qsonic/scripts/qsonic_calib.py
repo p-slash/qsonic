@@ -246,14 +246,14 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     mpi_saver.write([
         varfitter.waveobs, fit_results[:, 0], std_results[:, 0],
         fit_results[:, 1], std_results[:, 1]],
-        names=['lambda', 'var_lss', 'e_var_lss', 'eta', 'e_eta'],
+        names=['LAMBDA', 'VAR_LSS', 'E_VAR_LSS', 'ETA', 'E_ETA'],
         extname="VAR_FUNC"
     )
 
     waveobs, stacked_flux = mpi_stack_fluxes(args, comm, deltas_list)
     mpi_saver.write(
         [waveobs, stacked_flux],
-        names=["lambda", "stacked_flux"],
+        names=["LAMBDA", "STACKED_FLUX"],
         extname="STACKED_FLUX")
 
     mpi_saver.close()
