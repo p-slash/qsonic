@@ -17,6 +17,23 @@ from qsonic.picca_continuum import (
     PiccaContinuumFitter, add_picca_continuum_parser)
 
 
+def float_range(f1, f2):
+    # Define the function with default arguments
+    def float_range_checker(arg):
+        """New Type function for argparse - a float within predefined range.
+        """
+        try:
+            f = float(arg)
+        except ValueError:
+            raise argparse.ArgumentTypeError("must be a floating point number")
+        if f < f1 or f > f2:
+            raise argparse.ArgumentTypeError(f"must be in range [{f1}--{f2}]")
+        return f
+
+    # Return function handle to checking function
+    return float_range_checker
+
+
 def get_parser(add_help=True):
     """Constructs the parser needed for the script.
 
@@ -47,7 +64,7 @@ def get_parser(add_help=True):
         "--min-forestsnr", type=float, default=0,
         help="Minium SNR <F/sigma> within the forest.")
     analysis_group.add_argument(
-        "--skip", type=qsonic.io._float_range(0, 1), default=0.2,
+        "--skip", type=float_range(0, 1), default=0.2,
         help="Skip short spectra lower than given ratio.")
     analysis_group.add_argument(
         "--skip-min-pixels", type=int, default=50,
@@ -125,7 +142,8 @@ def mpi_read_spectra_local_queue(local_queue, args, comm):
 
     readerFunction = qsonic.io.get_spectra_reader_function(
         args.input_dir, args.arms, args.mock_analysis, args.skip_resomat,
-        args.true_continuum, args.tile_format, args.exposures == "before")
+        args.true_continuum, args.tile_format, args.exposures == "before",
+        args.nside)
 
     spectra_list = []
     # Each process reads its own list
@@ -470,7 +488,7 @@ def mpi_run_all(comm, mpi_rank, mpi_size):
     # read catalog
     local_queue = qsonic.catalog.mpi_get_local_queue(
         args.catalog, comm, mpi_rank, mpi_size, args.mock_analysis,
-        args.tile_format, args.keep_surveys, zmin_qso, zmax_qso)
+        args.tile_format, args.keep_surveys, zmin_qso, zmax_qso, args.nside)
 
     # Blinding
     if args.mock_analysis:
