@@ -4,6 +4,7 @@ import argparse
 import fitsio
 import numpy as np
 
+import qsonic.utils
 from qsonic.mathtools import (
     FastCubic1DInterp, FastLinear1DInterp, _one_function)
 from qsonic.mpi_utils import mpi_fnc_bcast
@@ -38,13 +39,7 @@ def add_calibration_parser(parser=None):
 
     return parser
 
-def _read_lambda(data):
-    if 'LAMBDA' in data.dtype.names:
-        return data['LAMBDA']
-    elif 'LOGLAM' in data.dtype.names:
-        return 10**data['LOGLAM']
-    else:
-        return data['lambda']
+
 
 class NoiseCalibrator():
     """ Noise calibration object.
@@ -79,7 +74,7 @@ class NoiseCalibrator():
         with fitsio.FITS(fname) as fts:
             data = fts['VAR_FUNC'].read()
     
-        waves = _read_lambda(data)
+        waves = qsonic.utils.get_lambda(data)
         waves_0 = waves[0]
         dwave = waves[1] - waves[0]
 
@@ -88,10 +83,10 @@ class NoiseCalibrator():
                 "Failed to construct noise calibration from "
                 f"{fname}::wave is not equally spaced.")
 
-        var_lss = np.array(data['VAR_LSS'], dtype='d')
+        var_lss = qsonic.utils.get_data_case_insensitive(data, 'VAR_LSS')
         varlss_interp = FastCubic1DInterp(waves_0, dwave, var_lss)
 
-        eta = np.array(data['ETA'], dtype='d')
+        eta = qsonic.utils.get_data_case_insensitive(data, 'ETA')
         eta[eta == 0] = 1
         eta_interp = FastCubic1DInterp(waves_0, dwave, eta)
 
@@ -177,10 +172,9 @@ class FluxCalibrator():
             elif 'STACK_DELTAS' in fts:
                 data = fts['STACK_DELTAS'].read()
             else:
-                raise Exception(
-                    f"Failed to read STACKED_FLUX from {fname}.")
+                raise KeyError(f"Failed to read STACKED_FLUX from {fname}.")
 
-        waves = _read_lambda(data)
+        waves = qsonic.utils.get_lambda(data)
         waves_0 = waves[0]
         dwave = waves[1] - waves[0]
 
@@ -189,14 +183,8 @@ class FluxCalibrator():
                 "Failed to construct flux calibration from "
                 f"{fname}::wave is not equally spaced.")
 
-        if 'STACKED_FLUX' in data.dtype.names:
-            stacked_flux = np.array(data['STACKED_FLUX'], dtype='d')
-        elif 'STACK' in data.dtype.names:
-            stacked_flux = np.array(data['STACK'], dtype='d')
-        else:
-            raise Exception(
-                f"Failed to read stacked flux from {fname}.")
-
+        stacked_flux = qsonic.utils.get_data_full_fallback(
+            data, ['STACKED_FLUX', 'STACK'])
         stacked_flux[stacked_flux == 0] = 1
 
         return FastLinear1DInterp(waves_0, dwave, stacked_flux)
