@@ -142,8 +142,7 @@ def mpi_read_spectra_local_queue(local_queue, args, comm):
 
     readerFunction = qsonic.io.get_spectra_reader_function(
         args.input_dir, args.arms, args.mock_analysis, args.skip_resomat,
-        args.true_continuum, args.tile_format, args.exposures == "before",
-        args.nside)
+        args.true_continuum, args.tile_format, args.exposures == "before")
 
     spectra_list = []
     # Each process reads its own list
