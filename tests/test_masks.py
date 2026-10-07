@@ -3,6 +3,7 @@ import pytest
 
 import fitsio
 import numpy as np
+from numpy.lib.recfunctions import merge_arrays
 import numpy.testing as npt
 
 import qsonic.masks
@@ -67,6 +68,26 @@ def test_balmask_setup_filters_and_attaches_catalog(tmp_path, setup_data):
     for spec in spectra_list:
         balmask.apply(spec)
     os.remove(fnamebal)
+
+    bal_dtype = [
+        ('VMIN_CIV_450', 'f8', 3),
+        ('VMAX_CIV_450', 'f8', 3),
+        ('VMIN_CIV_2000', 'f8', 2),
+        ('VMAX_CIV_2000', 'f8', 2)
+    ]
+    catalog = np.array([
+        ([20., 30., 40.], [25., 35., 45.], [200., 300.], [300., 400.]),
+        ([25., 35., 45.], [400., 500., 550.], [400., 500.], [500., 600.]),
+        ([10., 15., 20.], [100., 150., 200.], [100., 150.], [150., 200.]),
+    ], dtype=bal_dtype)
+
+    cat_by_survey = merge_arrays(
+        (cat_by_survey, catalog), flatten=True, usemask=False)
+    spectra_list = qsonic.spectrum.generate_spectra_list_from_data(
+        cat_by_survey, data)
+    balmask = qsonic.masks.BALMask([cat_by_survey])
+    for spec in spectra_list:
+        balmask.apply(spec)
 
 
 if __name__ == '__main__':
