@@ -220,7 +220,7 @@ class BALMask():
             self.catalog = catalog
         else:
             self.catalog = None
-            BALMask.check_catalog(local_queue[0])
+            BALMask.check_columns(local_queue[0].dtype.names)
 
     def apply(self, spec):
         """ Apply the mask by setting **only** ``spec.forestivar`` and

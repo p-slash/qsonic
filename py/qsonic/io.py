@@ -3,6 +3,7 @@ imported without a need for MPI."""
 
 import argparse
 import functools
+import glob
 import warnings
 
 import fitsio
@@ -42,7 +43,7 @@ def add_io_parser(parser=None):
         help="Read tile coadd-*.fits files in tiles/cumulative directory.")
     ingroup.add_argument(
         "--mock-analysis", action="store_true",
-        help="Input folder is mock. Uses nside=16")
+        help="Input folder is mock.")
     ingroup.add_argument(
         "--keep-surveys", nargs='+', default=['main'],
         help="Surveys to keep.")
@@ -52,6 +53,12 @@ def add_io_parser(parser=None):
     ingroup.add_argument(
         "--arms", default=['B', 'R'], choices=['B', 'R', 'Z'], nargs='+',
         help="Arms to read.")
+    ingroup.add_argument(
+        "--nside", type=int, default=None,
+        help="Healpix nside. If not None, catalog HPXPIXEL column is "
+        "overwritten with the given nside. If HPXPIXEL column is not present "
+        "in the catalog and nside is None, nside defaults to 16 for mocks and "
+        "64 for data.")
 
     outgroup = parser.add_argument_group('Output options')
     outgroup.add_argument(
@@ -658,11 +665,27 @@ def read_onetile_coaddfile_data(
     return spectra_list
 
 
+def _find_nside_for_mock_file(directory, prefix, pixnum):
+    """Find the single file ``{prefix}-{nside}-{pixnum}.fits`` in directory,
+    where nside is unknown.
+    Raises an exception if there is not exactly one match.
+    Returns the filename of the match, and nside.
+    """
+    matches = glob.glob(f"{directory}/{prefix}-*-{pixnum}.fits")
+    if len(matches) != 1:
+        raise Exception(
+            f"Expected exactly one {prefix}-*-{pixnum}.fits file in "
+            f"{directory}, found {len(matches)}.")
+    nside = int(matches[0].split('-')[-2])
+    return matches[0], nside
+
+
 def read_onehealpix_file_mock(
         catalog_hpx, input_dir, arms_to_keep, skip_resomat,
-        read_true_continuum, nside=16
+        read_true_continuum
 ):
-    """ Read a single FITS file for mocks.
+    """ Read a single FITS file for mocks. Assumes there is only one file that
+    matches the pattern ``spectra-{nside}-{pixnum}.fits`` in the directory.
 
     Arguments
     ---------
@@ -676,8 +699,6 @@ def read_onehealpix_file_mock(
         If true, do not read resomat.
     read_true_continuum: bool
         If true, reads the true continuum for mock analysis.
-    nside: int, default: 16
-        NSIDE for healpix.
 
     Returns
     ---------
@@ -689,7 +710,8 @@ def read_onehealpix_file_mock(
         If number of quasars in the healpix file does not match the catalog.
     """
     pixnum = catalog_hpx['HPXPIXEL'][0]
-    fspec = f"{input_dir}/{pixnum//100}/{pixnum}/spectra-{nside}-{pixnum}.fits"
+    pixdir = f"{input_dir}/{pixnum//100}/{pixnum}"
+    fspec, nside = _find_nside_for_mock_file(pixdir, "spectra", pixnum)
     data, idx_cat, _ = _read_onehealpix_file(
         catalog_hpx['TARGETID'], fspec, arms_to_keep, skip_resomat)
 
@@ -709,20 +731,3 @@ def read_onehealpix_file_mock(
             data['reso'][arm] = np.array(fitsfile[f'{arm}_RESOLUTION'].read())
 
     return qsonic.spectrum.generate_spectra_list_from_data(catalog_hpx, data)
-
-
-def _float_range(f1, f2):
-    # Define the function with default arguments
-    def float_range_checker(arg):
-        """New Type function for argparse - a float within predefined range.
-        """
-        try:
-            f = float(arg)
-        except ValueError:
-            raise argparse.ArgumentTypeError("must be a floating point number")
-        if f < f1 or f > f2:
-            raise argparse.ArgumentTypeError(f"must be in range [{f1}--{f2}]")
-        return f
-
-    # Return function handle to checking function
-    return float_range_checker
