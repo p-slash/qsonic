@@ -6,14 +6,6 @@ from scipy.ndimage import median_filter
 from qsonic import QsonicException
 
 
-def _zero_function(x):
-    return 0
-
-
-def _one_function(x):
-    return 1
-
-
 @njit("f8[:](f8[:], f8, f8, f8[:])")
 def _fast_eval_interp1d_lin(x, xp0, dxp, fp):
     """JIT fast linear interpolation."""
