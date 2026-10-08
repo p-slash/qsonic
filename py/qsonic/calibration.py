@@ -5,8 +5,7 @@ import fitsio
 import numpy as np
 
 import qsonic.utils
-from qsonic.mathtools import (
-    FastCubic1DInterp, FastLinear1DInterp, _one_function)
+from qsonic.mathtools import FastCubic1DInterp, FastLinear1DInterp
 from qsonic.mpi_utils import mpi_fnc_bcast
 
 
@@ -38,7 +37,6 @@ def add_calibration_parser(parser=None):
         "--flux-calibration", help="Flux calibration file.")
 
     return parser
-
 
 
 class NoiseCalibrator():
@@ -73,7 +71,7 @@ class NoiseCalibrator():
     def _read(self, fname):
         with fitsio.FITS(fname) as fts:
             data = fts['VAR_FUNC'].read()
-    
+
         waves = qsonic.utils.get_lambda(data)
         waves_0 = waves[0]
         dwave = waves[1] - waves[0]
@@ -105,7 +103,7 @@ class NoiseCalibrator():
             self.varlss_interp = None
 
         if no_eta:
-            self.eta_interp = _one_function
+            self.eta_interp = lambda x: 1.0
 
     def apply(self, spectra_list):
         """ Apply the noise calibration by **only** scaling
