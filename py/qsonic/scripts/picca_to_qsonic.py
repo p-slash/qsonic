@@ -171,14 +171,15 @@ def convert_picca_ini_to_qsonic(ini_path, out_path=None, **overrides):
 
     body = f"{opt['srun']} \\\n" + " \\\n".join(lines)
     env = f"\n{opt['environment']}\n" if opt["environment"] else ""
-    text = HEADER.format(**{**opt, "environment": env}) + "\n" + body + "\n\n"
-    text += "".join(f"# NOTE: {n}\n" for n in notes) + ("\n" if notes else "")
+    hdr = HEADER.format(**{**opt, "environment": env})
+    apendix = "".join(f"# NOTE: {n}\n" for n in notes) + ("\n" if notes else "")
+    text = hdr + "\n" + body + "\n\n" + apendix
     if out_path:
         with open(out_path, "w") as fh:
             fh.write(text)
         import os
         os.chmod(out_path, 0o755)
-    return text
+    return hdr, body, apendix, text
 
 
 _USED = {
@@ -208,9 +209,12 @@ def main():
     a = get_parser().parse_args()
     ov = {k: v for k, v in (("job_name", a.job_name), ("time", a.time),
                  ("environment", a.environment), ("fiducial_meanflux", a.fiducial_meanflux)) if v}
-    text = convert_picca_ini_to_qsonic(a.ini, a.output, **ov)
     if not a.output:
-        print(text, end="")
+        warnings.filterwarnings("ignore")
+
+    hdr, body, apendix, text = convert_picca_ini_to_qsonic(a.ini, a.output, **ov)
+    if not a.output:
+        print(body, end="")
 
 
 if __name__ == "__main__":
