@@ -2,7 +2,7 @@ import argparse
 
 import numpy as np
 
-from qsonic.mathtools import _zero_function, _one_function, get_smooth_ivar
+from qsonic.mathtools import get_smooth_ivar
 
 
 def add_wave_region_parser(parser=None):
@@ -471,7 +471,7 @@ class Spectrum():
         self._forestweight = self._forestivar_sm
 
     def set_forest_weight(
-            self, varlss_interp=_zero_function, eta_interp=_one_function,
+            self, varlss_interp=lambda x: 0, eta_interp=lambda x: 1,
             eta_varlss=1.0
     ):
         """ Sets :attr:`forestweight` for a given var_lss and eta correction.
@@ -596,7 +596,7 @@ class Spectrum():
         self.ivar = {'brz': coadd_ivar}
 
     def coadd_arms_forest(
-            self, varlss_interp=_zero_function, eta_interp=_one_function
+            self, varlss_interp=lambda x: 0, eta_interp=lambda x: 1
     ):
         """ Coadds different arms using :attr:`forestweight`. Interpolators are
         needed to reset :attr:`forestweight`.
