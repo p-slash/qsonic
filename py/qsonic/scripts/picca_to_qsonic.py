@@ -22,7 +22,8 @@ TURNER24_MEANFLUX = (
 )
 DEFAULTS = dict(
     account="desi", qos="regular", time="2:00:00", job_name="qsonic-Lya",
-    environment="# conda activate qsonic_env", fiducial_meanflux=None, out_subdir="Delta",
+    environment="source /global/cfs/projectdirs/desi/science/lya/scripts/activate_qsonic.sh",
+    fiducial_meanflux=None, out_subdir="Delta",
     nprocs="128", srun="srun -N 1 -n {nprocs} -c 2 qsonic-fit",
     path_from="/global/cfs", path_to="/dvs_ro/cfs",
     rfdwave="0.4", skip="0.0", num_iterations="20", smoothing_scale="0",
