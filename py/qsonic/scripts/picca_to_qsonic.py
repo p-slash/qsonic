@@ -2,6 +2,7 @@
 """Translate a picca delta-extraction .ini file into a qsonic SLURM shell script."""
 import argparse
 import configparser
+import os
 import warnings
 
 HEADER = """#!/bin/bash -l
@@ -21,8 +22,9 @@ TURNER24_MEANFLUX = (
 )
 DEFAULTS = dict(
     account="desi", qos="regular", time="2:00:00", job_name="qsonic-Lya",
-    environment="# conda activate qsonic_env", fiducial_meanflux=None,
-    srun="srun -N 1 -n 128 -c 2 qsonic-fit",
+    environment="source /global/cfs/projectdirs/desi/science/lya/scripts/activate_qsonic.sh",
+    fiducial_meanflux=None, out_subdir="Delta",
+    nprocs="128", srun="srun -N 1 -n {nprocs} -c 2 qsonic-fit",
     path_from="/global/cfs", path_to="/dvs_ro/cfs",
     rfdwave="0.4", skip="0.0", num_iterations="20", smoothing_scale="0",
     cont_order="1", arms="B R", coadd_arms="before",
@@ -31,8 +33,8 @@ DEFAULTS = dict(
 
 # picca keys that are intentionally dropped or have no qsonic counterpart
 IGNORED = {
-    ("general", "out dir"), ("general", "overwrite"),
-    ("data", "type"), ("data", "wave solution"), ("data", "delta lambda"),
+    ("general", "overwrite"),
+    ("data", "type"), ("data", "wave solution"),
     ("expected flux", "type"), ("expected flux", "limit var lss"),
     ("expected flux", "fudge value"), ("expected flux", "iter out prefix"),
     ("expected flux", "force stack delta to zero"),
@@ -67,13 +69,13 @@ def convert_picca_ini_to_qsonic(ini_path, out_path=None, **overrides):
     out_path : str, optional
         If given, the script is written there (and made executable).
     **overrides
-        Any key of DEFAULTS (e.g. job_name, time, arms, path_from=None to
-        disable path rewriting).
+        Any key of DEFAULTS (e.g. job_name, time, arms, out_subdir,
+        path_from=None to disable path rewriting).
 
     Returns
     -------
-    str
-        The script text.
+    tuple of str
+        (header, body, appendix, full script text).
     """
     opt = {**DEFAULTS, **overrides}
     if overrides.get("fiducial_meanflux") is True:
@@ -98,14 +100,18 @@ def convert_picca_ini_to_qsonic(ini_path, out_path=None, **overrides):
     catalog = get("data", "catalogue")
 
     lines = []
-    first = ["-i " + path(get("data", "input directory").rstrip("/")) + " -o .", "--skip-resomat"]
-    if mock:
-        first[-1] += " --mock-analysis"
-    lines += first
+    lines.append("-i " + path(get("data", "input directory").rstrip("/")))
+    # output directory is kept as written in the picca ini (no path rewrite)
+    out_dir = (get("general", "out dir") or ".").rstrip("/")
+    if opt["out_subdir"]:
+        out_dir += "/" + opt["out_subdir"].strip("/")
+    lines.append("-o " + out_dir)
+    lines.append("--skip-resomat" + (" --mock-analysis" if mock else ""))
     if catalog:
         lines.append(f"--catalog {path(catalog)}")
+    rfdwave = _f(get("data", "delta lambda")) if get("data", "delta lambda") else opt["rfdwave"]
     lines.append(
-        f"--rfdwave {opt['rfdwave']} --skip {opt['skip']} --skip-min-pixels "
+        f"--rfdwave {rfdwave} --skip {opt['skip']} --skip-min-pixels "
         f"{get('data', 'minimum number pixels in forest') or 150}")
     lines.append(f"--num-iterations {opt['num_iterations']} --smoothing-scale {opt['smoothing_scale']}")
     lines.append(f"--cont-order {opt['cont_order']}")
@@ -169,24 +175,26 @@ def convert_picca_ini_to_qsonic(ini_path, out_path=None, **overrides):
     for n in notes:
         warnings.warn(f"picca->qsonic: {n}")
 
-    body = f"{opt['srun']} \\\n" + " \\\n".join(lines)
+    nprocs = get("general", "num processors") or opt["nprocs"]
+    srun = opt["srun"].format(nprocs=nprocs)
+    body = f"{srun} \\\n" + " \\\n".join(lines)
     env = f"\n{opt['environment']}\n" if opt["environment"] else ""
-    text = HEADER.format(**{**opt, "environment": env}) + "\n" + body + "\n\n"
-    text += "".join(f"# NOTE: {n}\n" for n in notes) + ("\n" if notes else "")
+    hdr = HEADER.format(**{**opt, "environment": env})
+    apendix = "".join(f"# NOTE: {n}\n" for n in notes) + ("\n" if notes else "")
+    text = hdr + "\n" + body + "\n\n" + apendix
     if out_path:
         with open(out_path, "w") as fh:
             fh.write(text)
-        import os
         os.chmod(out_path, 0o755)
-    return text
+    return hdr, body, apendix, text
 
 
 _USED = {
     ("data", k) for k in (
         "input directory", "catalogue", "lambda min", "lambda max",
         "lambda min rest frame", "lambda max rest frame",
-        "minimum number pixels in forest")
-} | {("expected flux", "var lss mod")}
+        "minimum number pixels in forest", "delta lambda")
+} | {("expected flux", "var lss mod"), ("general", "out dir"), ("general", "num processors")}
 
 
 def _is_used(section, key):
@@ -199,6 +207,7 @@ def get_parser():
     p.add_argument("-o", "--output", help="output .sh (default: stdout)")
     p.add_argument("--job-name")
     p.add_argument("--time")
+    p.add_argument("--out-subdir", help="subdirectory appended to the picca 'out dir' for -o (default: Delta; pass \"\" for none)")
     p.add_argument("--environment", help="shell line(s) to set up the environment")
     p.add_argument("--fiducial-meanflux", help="option to use Turner24 fiducial mean flux file", action="store_true")
     return p
@@ -208,9 +217,14 @@ def main():
     a = get_parser().parse_args()
     ov = {k: v for k, v in (("job_name", a.job_name), ("time", a.time),
                  ("environment", a.environment), ("fiducial_meanflux", a.fiducial_meanflux)) if v}
-    text = convert_picca_ini_to_qsonic(a.ini, a.output, **ov)
+    if a.out_subdir is not None:
+        ov["out_subdir"] = a.out_subdir
     if not a.output:
-        print(text, end="")
+        warnings.filterwarnings("ignore")
+
+    hdr, body, apendix, text = convert_picca_ini_to_qsonic(a.ini, a.output, **ov)
+    if not a.output:
+        print(body, end="")
 
 
 if __name__ == "__main__":
