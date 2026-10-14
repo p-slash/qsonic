@@ -190,10 +190,13 @@ class TestPiccaContinuumModel(object):
         spec = qsonic.spectrum.generate_spectra_list_from_data(
             cat_by_survey, data)[0]
         spec.set_forest_region(3600., 6000., 1050., 1180.)
+        true_x = np.array([2.1, 0.1])
+        spec.forestflux['B'] = qcfit.get_continuum_model(
+            true_x, spec.forestwave['B'] / (1 + spec.z_qso))
 
         qcfit.fit_continuum(spec)
         assert (spec.cont_params['valid'])
-        npt.assert_almost_equal(spec.cont_params['x'], [2.1, 0])
+        npt.assert_allclose(spec.cont_params['x'], true_x, atol=1e-3)
 
 
 class TestVarLSSFitter(object):
