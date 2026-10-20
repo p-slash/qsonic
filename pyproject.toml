@@ -1,3 +1,41 @@
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "qsonic"
+dynamic = ["dependencies", "version", "readme"]
+description = "Quasar continuum fitter for DESI"
+requires-python = ">=3.7"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Naim Goksel Karacayli", email = "doting-ballade-0t@icloud.com" }
+]
+
+[project.urls]
+Homepage = "https://qsonic.readthedocs.io/"
+Documentation = "https://qsonic.readthedocs.io/"
+Source = "https://github.com/p-slash/qsonic"
+Issues = "https://github.com/p-slash/qsonic/issues"
+
+[tool.setuptools.packages.find]
+where = ["py"]
+namespaces = true
+
+[tool.setuptools.dynamic]
+version = {attr = "qsonic.__version__"}
+readme = {file = "README.rst"}
+dependencies = {file = "requirements.txt"}
+
+[project.optional-dependencies]
+dev = ["pytest", "flake8", "bump2version"]
+doc = ["sphinx", "sphinx-argparse", "sphinx-rtd-theme"]
+pub = ["build", "twine"]
+all = ["qsonic[dev, doc, pub]"]
+
+[project.scripts]
+qsonic-fit = "qsonic.scripts.qsonic_fit:main"
+qsonic-calib = "qsonic.scripts.qsonic_calib:main"
+qsonic-coadd = "qsonic.scripts.qsonic_coadd_deltas:main"
+picca2qsonic = "qsonic.scripts.picca_to_qsonic:main"
